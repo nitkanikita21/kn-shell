@@ -27,6 +27,9 @@ object Grayscale {
     /** `#eeeeee` — primary text and icons. */
     val Foreground = Color.hex(0xEEEEEE)
 
+    /** Text/icon colour to use on [Accent] (dark, since the accent is light). */
+    val OnAccent = Color.hex(0x141414)
+
     // Short aliases for code written against Catppuccin-ish names.
     val Base get() = Background
     val Text get() = Foreground
