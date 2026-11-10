@@ -130,6 +130,12 @@ internal data class SliderThemeElement(
 /** Text selection colours inside a label. */
 internal data class SelectionElement(val background: Color, val color: Color) : ModifierElement
 
+/** Per-corner radius, with independent horizontal/vertical radii (elliptical corners). */
+data class Corner(val horizontal: Int, val vertical: Int = horizontal)
+
+/** Standalone corner radius declarations (independent of a background). */
+internal data class RadiusElement(val declarations: String) : ModifierElement
+
 /**
  * Immutable chain of widget decorations, applied when the node is updated.
  *
@@ -222,6 +228,39 @@ fun Modifier.minHeight(px: Int): Modifier = with(MinSizeElement(null, px))
 
 /** Both minimums. */
 fun Modifier.minSize(width: Int, height: Int): Modifier = with(MinSizeElement(width, height))
+
+/** Corner radius in CSS pixels, independent of any background. */
+fun Modifier.radius(px: Int): Modifier = with(RadiusElement("border-radius: ${px}px;"))
+
+/**
+ * Elliptical corners: [horizontal] radius on the x axis, [vertical] on the y axis
+ * (`border-radius: h v`). A pill of height 30 is `radius(horizontal = 999, vertical = 15)`;
+ * a perfect circle is `radius(size / 2)`.
+ */
+fun Modifier.radius(horizontal: Int, vertical: Int): Modifier =
+    with(RadiusElement("border-radius: ${horizontal}px ${vertical}px;"))
+
+/** Per-corner radii, clockwise: top-left, top-right, bottom-right, bottom-left. */
+fun Modifier.radius(topLeft: Int, topRight: Int, bottomRight: Int, bottomLeft: Int): Modifier =
+    with(
+        RadiusElement(
+            "border-top-left-radius: ${topLeft}px; " +
+                "border-top-right-radius: ${topRight}px; " +
+                "border-bottom-right-radius: ${bottomRight}px; " +
+                "border-bottom-left-radius: ${bottomLeft}px;",
+        ),
+    )
+
+/** Per-corner radii with independent horizontal/vertical radii (elliptical corners). */
+fun Modifier.radius(topLeft: Corner, topRight: Corner, bottomRight: Corner, bottomLeft: Corner): Modifier =
+    with(
+        RadiusElement(
+            "border-top-left-radius: ${topLeft.horizontal}px ${topLeft.vertical}px; " +
+                "border-top-right-radius: ${topRight.horizontal}px ${topRight.vertical}px; " +
+                "border-bottom-right-radius: ${bottomRight.horizontal}px ${bottomRight.vertical}px; " +
+                "border-bottom-left-radius: ${bottomLeft.horizontal}px ${bottomLeft.vertical}px;",
+        ),
+    )
 
 /**
  * Styles the GtkScale sub-nodes with typed parameters instead of rawStyle strings.
@@ -368,6 +407,8 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             }
 
             is OpacityElement -> opacity = element.value
+
+            is RadiusElement -> rules += "" to element.declarations
 
             is StateBackgroundElement ->
                 rules += element.selector to "background-color: ${element.color.toCss()}; background-image: none;"

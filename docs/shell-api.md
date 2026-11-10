@@ -242,6 +242,10 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `padding(horizontal, vertical)` / `padding(all)` | CSS padding |
 | `margin(horizontal, vertical)` | GTK start/end and top/bottom margins |
 | `background(color, radius, shadow, borderWidth, borderColor, transitionMs)` | CSS background, radius, optional shadow/border, CSS transition |
+| `radius(px)` | all corners: `border-radius: Npx` (circle: `size / 2`, pill: `height / 2`) |
+| `radius(horizontal, vertical)` | elliptical corners: `border-radius: Hpx Vpx` |
+| `radius(topLeft, topRight, bottomRight, bottomLeft)` | per-corner radii (clockwise) |
+| `radius(Corner(h, v), …)` | per-corner elliptical radii (`Corner(10, 4)`) |
 | `hoverBackground(color)` | `:hover` background rule |
 | `pressedBackground(color)` / `checkedBackground(color)` / `disabledBackground(color)` | `:active` / `:checked` / `:disabled` background rules |
 | `hoverTextColor(color)` / `checkedTextColor(color)` | text colour for `:hover` / `:checked` |
@@ -255,6 +259,19 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `centerVertically()` | vertical `GTK_ALIGN_CENTER` |
 | `opacity(value)` | `gtk_widget_set_opacity` |
 | `rawStyle(selector, declarations)` | escape hatch: arbitrary CSS scoped to the widget |
+
+### Radius examples
+
+```kotlin
+Box(Modifier.size(40, 40).background(color).radius(20))              // circle
+Box(Modifier.size(120, 28).background(color).radius(14))             // pill
+Box(Modifier.background(color).radius(horizontal = 16, vertical = 6)) // elliptical
+Box(Modifier.background(color).radius(topLeft = 12, topRight = 0, bottomRight = 12, bottomLeft = 0))
+Box(Modifier.background(color).radius(Corner(10, 4), Corner(10), Corner(2), Corner(2)))
+```
+
+Later modifiers win on order as usual: `background(color, radius = 8)` overrides an earlier
+`radius(12)` when placed after it.
 
 ## Extending
 
