@@ -75,7 +75,7 @@ enum class Easing {
     InOutCubic,
 }
 
-private fun Easing.transform(t: Float): Float = when (this) {
+internal fun Easing.eased(t: Float): Float = when (this) {
     Easing.Linear -> t
     Easing.OutCubic -> {
         val p = 1f - t
@@ -120,7 +120,7 @@ fun animateFloatAsState(
                 if (startNanos == 0L) startNanos = nanos
                 val elapsedMs = (nanos - startNanos) / 1_000_000f
                 progress = (elapsedMs / durationMs).coerceIn(0f, 1f)
-                value.value = start + (targetValue - start) * easing.transform(progress)
+                value.value = start + (targetValue - start) * easing.eased(progress)
             }
         }
         value.value = targetValue

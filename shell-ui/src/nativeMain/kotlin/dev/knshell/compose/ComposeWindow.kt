@@ -85,6 +85,9 @@ class GLibFrameClock : MonotonicFrameClock {
         Snapshot.sendApplyNotifications()
 
         val nanos = start.elapsedNow().inWholeNanoseconds
+        // Opt-in size behaviours tween on the node level; they do not register frame
+        // waiters, so tick them regardless of whether Compose animations are running.
+        SizeBehaviorRegistry.tick(nanos)
         if (waiters.isEmpty()) return
         val pending = waiters.toList()
         waiters.clear()

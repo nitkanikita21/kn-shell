@@ -353,6 +353,9 @@ private object InlineStyleId {
  * exactly the CSS its modifiers describe, without touching a global stylesheet.
  */
 internal class InlineStyle(private val widget: CPointer<GtkWidget>) {
+    /** Opt-in size tween used by [Modifier.behavior]; see [SizeAnimator]. */
+    internal val sizeAnimator = SizeAnimator()
+
     private var provider: CPointer<GtkCssProvider>? = null
     private var className: String? = null
     private var lastCss: String? = null
@@ -406,6 +409,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var hexpand: Boolean? = null
     var vexpand: Boolean? = null
     var halign: UInt? = null
+    var behavior: BehaviorElement? = null
     var valign: UInt? = null
     val rules = mutableListOf<Pair<String, String>>()
 
@@ -540,6 +544,8 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is SelectionElement ->
                 rules += " selection" to "background-color: ${element.background.toCss()}; color: ${element.color.toCss()};"
 
+            is BehaviorElement -> behavior = element
+
             is RawStyleElement -> rules += element.selector to element.declarations
         }
     }
@@ -550,7 +556,13 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     gtk_widget_set_margin_bottom(widget, marginVertical)
 
     if (width != null || height != null) {
-        gtk_widget_set_size_request(widget, width ?: -1, height ?: -1)
+        val behavior = behavior
+        if (behavior != null) {
+            inlineStyle.sizeAnimator.animate(widget, width, height, behavior.durationMs, behavior.easing)
+        } else {
+            inlineStyle.sizeAnimator.cancel()
+            gtk_widget_set_size_request(widget, width ?: -1, height ?: -1)
+        }
     }
     opacity?.let { gtk_widget_set_opacity(widget, it.toDouble()) }
     hexpand?.let { gtk_widget_set_hexpand(widget, if (it) 1 else 0) }

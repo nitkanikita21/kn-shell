@@ -113,6 +113,23 @@ sliding between fixed slots: `x = lerp(oldIndex, newIndex, t)`).
 Tip: colours can also be left to GTK's `transitionMs`; use the shared `t` for geometry and
 let the CSS transition handle colour, which avoids one CSS update per frame.
 
+### Opt-in size behavior (`Behavior on width`)
+
+Attach `behavior(...)` to the widget you want, exactly like QML `Behavior on width`:
+
+```kotlin
+Box(
+    Modifier
+        .behavior(durationMs = 180, easing = Easing.OutCubic)
+        .size(if (active) 34 else 24, 24),
+)
+```
+
+From then on every change of `size()`, `width()` or `height()` in that chain is tweened on
+the widget node (plain GTK calls, no Compose recomposition). The first application snaps to
+the initial value; removing the widget cancels its tween. Colours are better handled by
+`transition(ms)` / `transitionMs` (native GTK transitions).
+
 ## The bar itself
 
 ```kotlin

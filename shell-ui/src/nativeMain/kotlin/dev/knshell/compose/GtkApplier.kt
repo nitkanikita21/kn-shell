@@ -34,9 +34,16 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
         repeat(count) {
             if (index < children.size) {
                 val child = children.removeAt(index)
+                child.cancelAnimations()
                 detachChild(child.widget)
             }
         }
+    }
+
+    /** Stops any in-flight tween; called before the widget leaves the tree. */
+    internal fun cancelAnimations() {
+        inlineStyle.sizeAnimator.cancel()
+        children.forEach { it.cancelAnimations() }
     }
 
     open fun moveChild(from: Int, to: Int, count: Int) {
@@ -50,6 +57,7 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
     }
 
     open fun clear() {
+        children.forEach { it.cancelAnimations() }
         children.forEach { detachChild(it.widget) }
         children.clear()
     }
