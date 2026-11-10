@@ -49,7 +49,13 @@ import kn.gtk.gtk_drawing_area_new
 import kn.gtk.gtk_drawing_area_set_content_height
 import kn.gtk.gtk_drawing_area_set_content_width
 import kn.gtk.gtk_drawing_area_set_draw_func
+import kn.gtk.PangoEllipsizeMode
 import kn.gtk.gtk_label_new
+import kn.gtk.gtk_label_set_ellipsize
+import kn.gtk.gtk_label_set_lines
+import kn.gtk.gtk_label_set_markup
+import kn.gtk.gtk_label_set_wrap
+import kn.gtk.gtk_label_set_xalign
 import kn.gtk.gtk_label_set_label
 import kn.gtk.gtk_range_set_value
 import kn.gtk.gtk_scale_new_with_range
@@ -140,8 +146,41 @@ class GtkCenterBoxNode : GtkNode(gtk_center_box_new()!!) {
 }
 
 class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
+    private var lastText: String = ""
+
     fun setText(text: String) {
+        lastText = text
         gtk_label_set_label(widget.reinterpret<GtkLabel>(), text)
+    }
+
+    /** Pango markup: `<b>`, `<i>`, `<u>`, `<s>`, `<span foreground="#…">`, `<big>`, … */
+    fun setMarkup(markup: String) {
+        lastText = markup
+        gtk_label_set_markup(widget.reinterpret<GtkLabel>(), markup)
+    }
+
+    /** Re-applies the last text with the requested markup mode. */
+    fun refreshText(markup: Boolean) {
+        if (markup) setMarkup(lastText) else setText(lastText)
+    }
+
+    fun setWrap(wrap: Boolean) {
+        gtk_label_set_wrap(widget.reinterpret<GtkLabel>(), if (wrap) 1 else 0)
+    }
+
+    fun setEllipsize(enabled: Boolean) {
+        val mode = if (enabled) PangoEllipsizeMode.PANGO_ELLIPSIZE_END else PangoEllipsizeMode.PANGO_ELLIPSIZE_NONE
+        gtk_label_set_ellipsize(widget.reinterpret<GtkLabel>(), mode)
+    }
+
+    /** Horizontal text alignment inside the label: 0 = left, 0.5 = center, 1 = right. */
+    fun setXAlign(align: Float) {
+        gtk_label_set_xalign(widget.reinterpret<GtkLabel>(), align)
+    }
+
+    /** Maximum number of lines (-1 = unlimited, needs wrapping). */
+    fun setLines(lines: Int) {
+        gtk_label_set_lines(widget.reinterpret<GtkLabel>(), lines)
     }
 }
 
@@ -382,15 +421,42 @@ fun CenterBox(modifier: Modifier = Modifier, start: @Composable () -> Unit, cent
     }
 }
 
+/**
+ * A text label.
+ *
+ * [markup] enables Pango markup (`<b>bold</b>`, `<i>`, `<u>`, `<s>`,
+ * `<span foreground="#ff0000">`, `<big>`, `<small>`, …); [wrap] allows multi-line text,
+ * [ellipsize] truncates it with an ellipsis when the width is constrained, [align] is the
+ * horizontal text alignment inside the label (0 = left, 0.5 = center, 1 = right).
+ */
 @Composable
-fun Label(text: String, modifier: Modifier = Modifier) {
+fun Label(
+    text: String,
+    modifier: Modifier = Modifier,
+    markup: Boolean = false,
+    wrap: Boolean = false,
+    ellipsize: Boolean = false,
+    align: Float = 0.5f,
+    maxLines: Int = -1,
+) {
     ComposeNode<GtkLabelNode, GtkApplier>(
         factory = { GtkLabelNode().plain() },
         update = {
-            set(text) { value -> setText(value) }
+            set(text) { value -> if (markup) setMarkup(value) else setText(value) }
+            set(markup) { rich -> refreshText(rich) }
+            set(wrap) { value -> setWrap(value) }
+            set(ellipsize) { value -> setEllipsize(value) }
+            set(align) { value -> setXAlign(value) }
+            set(maxLines) { value -> setLines(value) }
             set(modifier) { value -> applyModifier(value) }
         },
     )
+}
+
+/** Convenience wrapper for [Label] with Pango [markup] enabled. */
+@Composable
+fun Markup(markup: String, modifier: Modifier = Modifier) {
+    Label(markup, modifier, markup = true)
 }
 
 @Composable

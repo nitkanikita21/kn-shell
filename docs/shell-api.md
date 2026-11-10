@@ -331,6 +331,37 @@ moves; only the chip inside its slot animates (`Modifier.centerHorizontally()` k
 centered). This also removes the parent-layout jitter caused by several simultaneous width
 animations.
 
+### Text formatting
+
+Whole-label styling uses modifiers (`fontSize`, `fontFamily`, `bold`, `italic`,
+`underline`, `strikethrough`, `fontWeight`, `letterSpacing`, `textColor`). Beyond that,
+`Label` exposes the GTK text options:
+
+```kotlin
+Label(
+    text = longTitle,
+    modifier = Modifier.fontSize(13).textColor(Grayscale.Foreground),
+    wrap = true,          // allow multiple lines
+    ellipsize = true,     // truncate with "…" when the width is constrained
+    align = 0f,           // 0 = left, 0.5 = center, 1 = right
+    maxLines = 2,         // -1 = unlimited (needs wrap)
+)
+```
+
+For mixed inline styles in one label use Pango markup (`markup = true`, or the `Markup`
+helper):
+
+```kotlin
+Markup("<b>CPU</b> <span foreground='#e06c75'>54°C</span>  <i>fan</i> 720rpm")
+```
+
+Supported markup includes `<b>`, `<i>`, `<u>`, `<s>`, `<big>`, `<small>`, `<tt>`,
+`<span foreground=… background=… size=… font_family=…>`. CSS modifiers still apply to the
+whole label; GTK CSS has no `line-height` — use Pango `<span>` where needed.
+
+Numbers: `dev.knshell.ui` has `Float.format(decimals)`, `.whole()`, `.percent(decimals)`
+(Kotlin/Native has no `String.format`).
+
 ## Extending
 
 **Rust service.** Follow the pattern in `rust-core/src/lib.rs`: a `#[derive(uniffi::Record)]`
