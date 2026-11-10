@@ -27,6 +27,7 @@ import kn.gtk.GTK_ALIGN_CENTER
 import kn.gtk.GTK_ALIGN_FILL
 import kn.gtk.GtkOverlay
 import kn.gtk.gtk_overlay_add_overlay
+import kn.gtk.gtk_overlay_remove_overlay
 import kn.gtk.gtk_overlay_new
 import kn.gtk.gtk_overlay_set_child
 import kn.gtk.gtk_widget_set_halign
@@ -37,6 +38,9 @@ import kn.gtk.gtk_button_new
 import kn.gtk.gtk_button_new_with_label
 import kn.gtk.gtk_button_set_child
 import kn.gtk.gtk_button_set_label
+import kn.gtk.gtk_center_box_get_center_widget
+import kn.gtk.gtk_center_box_get_end_widget
+import kn.gtk.gtk_center_box_get_start_widget
 import kn.gtk.gtk_center_box_new
 import kn.gtk.gtk_center_box_set_center_widget
 import kn.gtk.gtk_center_box_set_end_widget
@@ -107,7 +111,9 @@ class GtkOverlayNode : GtkNode(gtk_overlay_new()!!) {
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {
-        // Static overlays only.
+        // Overlay children can be conditional (`if (active) Text(...)`): without this the
+        // removed label stays in the overlay and the next one is added on top of it.
+        gtk_overlay_remove_overlay(widget.reinterpret<GtkOverlay>(), child)
     }
 }
 
@@ -125,7 +131,11 @@ class GtkCenterBoxNode : GtkNode(gtk_center_box_new()!!) {
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {
-        // Static bar layout: no dynamic removal needed.
+        // Slots are dynamic: remove the matching region so conditional content does not leak.
+        val box = widget.reinterpret<GtkCenterBox>()
+        if (gtk_center_box_get_start_widget(box) == child) gtk_center_box_set_start_widget(box, null)
+        if (gtk_center_box_get_center_widget(box) == child) gtk_center_box_set_center_widget(box, null)
+        if (gtk_center_box_get_end_widget(box) == child) gtk_center_box_set_end_widget(box, null)
     }
 }
 
