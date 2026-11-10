@@ -558,7 +558,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     if (width != null || height != null) {
         val behavior = behavior
         if (behavior != null) {
-            inlineStyle.sizeAnimator.animate(widget, width, height, behavior.durationMs, behavior.easing)
+            inlineStyle.sizeAnimator.animate(widget, width, height, behavior.durationMs, behavior.easing, behavior.axis)
         } else {
             inlineStyle.sizeAnimator.cancel()
             gtk_widget_set_size_request(widget, width ?: -1, height ?: -1)

@@ -30,11 +30,30 @@ import kotlin.math.roundToInt
  * Limits: only the size request is animated (width/height); the first application snaps to
  * the initial value; colours are better served by [transition] (native GTK transitions).
  */
-internal data class BehaviorElement(val durationMs: Int, val easing: Easing) : ModifierElement
+/** Which axis a [BehaviorElement] animates. */
+internal enum class BehaviorAxis { Width, Height, Both }
 
-/** Opt-in `Behavior on width/height`; see [BehaviorElement] for semantics. */
+internal data class BehaviorElement(
+    val durationMs: Int,
+    val easing: Easing,
+    val axis: BehaviorAxis,
+) : ModifierElement
+
+/** Opt-in `Behavior on width`: later `width()`/`size()` width changes are tweened. */
+fun Modifier.widthBehavior(durationMs: Int = 180, easing: Easing = Easing.OutCubic): Modifier =
+    with(BehaviorElement(durationMs, easing, BehaviorAxis.Width))
+
+/** Opt-in `Behavior on height`: later `height()`/`size()` height changes are tweened. */
+fun Modifier.heightBehavior(durationMs: Int = 180, easing: Easing = Easing.OutCubic): Modifier =
+    with(BehaviorElement(durationMs, easing, BehaviorAxis.Height))
+
+/** Opt-in `Behavior on size`: both width and height changes are tweened. */
+fun Modifier.sizeBehavior(durationMs: Int = 180, easing: Easing = Easing.OutCubic): Modifier =
+    with(BehaviorElement(durationMs, easing, BehaviorAxis.Both))
+
+/** Back-compat alias for [sizeBehavior]. Prefer the explicit names. */
 fun Modifier.behavior(durationMs: Int = 180, easing: Easing = Easing.OutCubic): Modifier =
-    with(BehaviorElement(durationMs, easing))
+    sizeBehavior(durationMs, easing)
 
 /** Per-widget size tween driven by [SizeBehaviorRegistry] on the shared frame clock. */
 internal class SizeAnimator {
@@ -61,6 +80,7 @@ internal class SizeAnimator {
         height: Int?,
         durationMs: Int,
         easing: Easing,
+        axis: BehaviorAxis,
     ) {
         this.widget = widget
         this.durationMs = durationMs.coerceAtLeast(1)
@@ -80,15 +100,31 @@ internal class SizeAnimator {
             return
         }
 
-        if (targetW == targetWidth && targetH == targetHeight) return
+        val animateWidth = axis != BehaviorAxis.Height
+        val animateHeight = axis != BehaviorAxis.Width
+
+        // Dimensions that are not animated change instantly.
+        if (!animateWidth) currentWidth = targetW
+        if (!animateHeight) currentHeight = targetH
+
+        val widthChanged = animateWidth && targetW != targetWidth
+        val heightChanged = animateHeight && targetH != targetHeight
+
+        targetWidth = targetW
+        targetHeight = targetH
+
+        if (!widthChanged && !heightChanged) {
+            // No new target for the animated axis; an existing tween keeps running.
+            apply()
+            return
+        }
 
         fromWidth = currentWidth
         fromHeight = currentHeight
-        targetWidth = targetW
-        targetHeight = targetH
         pendingStart = true
         running = true
         SizeBehaviorRegistry.add(this)
+        apply()
     }
 
     fun cancel() {

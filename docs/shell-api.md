@@ -259,7 +259,7 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `selection(color, background)` | text-selection colours inside a label |
 | `slider(troughColor, troughHeight, highlightColor, knobColor, knobSize)` | typed styling of `GtkScale` trough/highlight/knob |
 | `size(w, h)` / `width(w)` / `height(h)` | `gtk_widget_set_size_request` |
-| `behavior(durationMs, easing)` | opt-in QML-like Behavior: tweens later `size()`/`width()`/`height()` changes |
+| `widthBehavior(ms, easing)` / `heightBehavior(...)` / `sizeBehavior(...)` | opt-in QML-like Behavior: tweens later width / height / both changes |
 | `fillMaxWidth()` | `hexpand` + horizontal `GTK_ALIGN_FILL` |
 | `centerVertically()` | vertical `GTK_ALIGN_CENTER` |
 | `centerHorizontally()` | horizontal `GTK_ALIGN_CENTER` |

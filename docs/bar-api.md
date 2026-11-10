@@ -115,12 +115,13 @@ let the CSS transition handle colour, which avoids one CSS update per frame.
 
 ### Opt-in size behavior (`Behavior on width`)
 
-Attach `behavior(...)` to the widget you want, exactly like QML `Behavior on width`:
+Attach `widthBehavior(...)` (or `heightBehavior` / `sizeBehavior`) to the widget you want,
+exactly like QML `Behavior on width`:
 
 ```kotlin
 Box(
     Modifier
-        .behavior(durationMs = 180, easing = Easing.OutCubic)
+        .widthBehavior(durationMs = 180, easing = Easing.OutCubic)
         .size(if (active) 34 else 24, 24),
 )
 ```
