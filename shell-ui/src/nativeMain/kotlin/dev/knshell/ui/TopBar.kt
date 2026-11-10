@@ -12,7 +12,6 @@ import androidx.compose.runtime.setValue
 import dev.knshell.animation.animateFloatAsState
 import dev.knshell.compose.Button
 import dev.knshell.compose.Canvas
-import dev.knshell.compose.DebugWidgets
 import dev.knshell.compose.CenterBox
 import dev.knshell.compose.Label
 import dev.knshell.compose.Row
@@ -21,7 +20,6 @@ import dev.knshell.core.MediaState
 import dev.knshell.core.SystemStats
 import dev.knshell.core.WorkspaceInfo
 import dev.knshell.services.ShellServices
-import kotlinx.cinterop.toKString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -51,8 +49,6 @@ import kotlin.random.Random
  * reliably shared with those collectors in this custom (non-Compose-UI) applier setup.
  * A process-global state holder keeps producers and the UI on the same state objects.
  */
-internal val UI_DEBUG: Boolean = platform.posix.getenv("KN_SHELL_DEBUG_UI")?.toKString() == "1"
-
 internal object BarState {
     val volume = mutableStateOf(0)
     val media = mutableStateOf(MediaState("", "", false, "", false))
@@ -70,20 +66,6 @@ fun TopBar() {
     val clock by BarState.clock
 
     LaunchedEffect(Unit) {
-        launch {
-            // Self-test hook: click the active workspace chip programmatically to verify the
-            // GTK signal -> Compose callback -> Rust -> hyprctl chain without a mouse.
-            if (platform.posix.getenv("KN_SHELL_SELFTEST")?.toKString() == "1") {
-                delay(4_000)
-                val target = workspaces.firstOrNull { it.active } ?: workspaces.firstOrNull()
-                if (target != null) {
-                    val registered = DebugWidgets.click(target.name)
-                    println("[selftest] programmatic click on workspace chip \"${target.name}\" registered=$registered")
-                } else {
-                    println("[selftest] no workspaces to click")
-                }
-            }
-        }
         launch { ShellServices.volume.collect { BarState.volume.value = it } }
         launch { ShellServices.media.collect { BarState.media.value = it } }
         launch {
@@ -187,9 +169,8 @@ fun TopBar() {
                     Label(clock.second, cssClass = "clock-colon", opacity = colonOpacity)
                     Label(clock.third, cssClass = "clock-time")
                 }
-                Button("\uF011", cssClass = "module power") {
-                    println("[bar] power button pressed (not implemented in the MVP)")
-                }
+                // Placeholder for the power menu; intentionally a no-op in the MVP.
+                Button("\uF011", cssClass = "module power") { }
             }
         },
     )

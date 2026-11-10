@@ -39,7 +39,6 @@ import kn.gtk.gtk_range_set_value
 import kn.gtk.gtk_scale_new_with_range
 import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_queue_draw
-import kn.gtk.gtk_widget_activate
 import kn.gtk.gtk_widget_remove_css_class
 import kn.gtk.gtk_widget_set_opacity
 import kn.gtk.gtk_widget_set_size_request
@@ -193,9 +192,6 @@ class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area_new()!!)
     /** Draw callback supplied by the composable; re-read on every GTK frame. */
     var drawFn: ((CPointer<cairo_t>, Int, Int) -> Unit)? = null
 
-    /** Diagnostics: how many times GTK asked this area to draw. */
-    var drawCalls: Int = 0
-
     // Retained for the lifetime of the widget: the draw function receives this
     // StableRef as user_data, so it must never be collected.
     @Suppress("unused")
@@ -208,7 +204,6 @@ class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area_new()!!)
         val self = selfRef
         val draw = staticCFunction { _: CPointer<GtkDrawingArea>?, cr: CPointer<cairo_t>?, w: Int, h: Int, data: COpaquePointer? ->
             val node = data?.asStableRef<GtkCanvasNode>()?.get()
-            node?.drawCalls = (node?.drawCalls ?: 0) + 1
             if (cr != null && node != null) {
                 node.drawFn?.invoke(cr, w, h)
             }
@@ -219,22 +214,6 @@ class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area_new()!!)
 
     fun requestRedraw() {
         gtk_widget_queue_draw(widget)
-    }
-}
-
-/** Debug-only registry used by the self-test to click workspace chips programmatically. */
-object DebugWidgets {
-    private val byText = mutableMapOf<String, CPointer<GtkWidget>>()
-
-    fun register(text: String, widget: CPointer<GtkWidget>) {
-        byText[text] = widget
-    }
-
-    /** Emits the `clicked` signal (gtk_widget_activate) on the widget with this label. */
-    fun click(text: String): Boolean {
-        val widget = byText[text] ?: return false
-        gtk_widget_activate(widget)
-        return true
     }
 }
 
@@ -326,7 +305,6 @@ fun Button(
         factory = {
             val node = GtkButtonNode(text)
             cssClass?.let { gtk_widget_add_css_class(node.widget, it) }
-            if (cssClass == "ws") DebugWidgets.register(text, node.widget)
             node
         },
         update = {

@@ -199,17 +199,11 @@ pub fn focus_workspace(name: String) {
         .args(["dispatch", &lua])
         .output()
     {
-        Ok(output) => {
-            eprintln!(
-                "[rust/workspaces] focus_workspace(name={name:?}) lua={lua:?} status={:?} stdout={:?} stderr={:?}",
-                output.status,
-                String::from_utf8_lossy(&output.stdout).trim(),
-                String::from_utf8_lossy(&output.stderr).trim()
-            );
-            if output.status.success() {
-                return;
-            }
-        }
+        Ok(output) if output.status.success() => return,
+        Ok(output) => eprintln!(
+            "[rust/workspaces] modern dispatch failed ({}); trying legacy syntax",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ),
         Err(error) => eprintln!("[rust/workspaces] failed to run hyprctl: {error}"),
     }
 
