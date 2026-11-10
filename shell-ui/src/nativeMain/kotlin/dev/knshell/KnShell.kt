@@ -11,8 +11,13 @@ import dev.knshell.compose.fillMaxWidth
 import dev.knshell.compose.fontFamily
 import dev.knshell.compose.fontSize
 import dev.knshell.compose.height
+import dev.knshell.shell.BarAnchor
+import dev.knshell.shell.BarWindowSpec
+import dev.knshell.shell.ExclusiveZone
+import dev.knshell.shell.Margins
 import dev.knshell.shell.Shell
 import dev.knshell.shell.WindowSpec
+import dev.knshell.ui.TestBar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
@@ -41,7 +46,7 @@ fun startKnShell() {
                         background = Color.hex(0x1E1E2E),
                     ),
                 ) {
-                    ShellSurface()
+                    TestBar()
                 }
             }
         }
@@ -49,28 +54,17 @@ fun startKnShell() {
         else -> {
             println("[shell] panel mode (layer-shell top bar)")
             Shell.run {
-                barWindow {
-                    ShellSurface()
-                }
+                barWindow(
+                    BarWindowSpec(
+                        title = "My Bar",
+                        height = 24,
+                        anchors = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
+                        margins = Margins(top = 4, left = 10, right = 10, bottom = 4),
+                        exclusiveZone = ExclusiveZone.Auto,
+                        namespace = "my-bar",
+                    ),
+                ) { TestBar() }
             }
         }
     }
-}
-
-/**
- * Empty top-level surface: three regions, theme-less font, no modules.
- * Replace the slot lambdas with your own `Row { … }` content.
- */
-@Composable
-private fun ShellSurface() {
-    CenterBox(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(40)
-            .fontFamily("JetBrainsMono Nerd Font")
-            .fontSize(13),
-        start = {},
-        center = {},
-        end = {},
-    )
 }

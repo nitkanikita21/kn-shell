@@ -39,11 +39,24 @@ import kn.gtk.gtk_label_new
 import kn.gtk.gtk_label_set_label
 import kn.gtk.gtk_range_set_value
 import kn.gtk.gtk_scale_new_with_range
+import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_queue_draw
 
 // ---------------------------------------------------------------------------
 // GTK widget nodes
 // ---------------------------------------------------------------------------
+
+/**
+ * Marks a freshly created node as "plain".
+ *
+ * [PLAIN_CLASS] is the only hook of [PLAIN_CSS]: every DSL widget carries it, so the
+ * theme never paints a background, border, shadow, padding or state highlight and the
+ * whole visual definition comes from the [Modifier] DSL.
+ */
+private fun <T : GtkNode> T.plain(): T {
+    gtk_widget_add_css_class(widget, PLAIN_CLASS)
+    return this
+}
 
 open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
     override fun attachChild(child: CPointer<GtkWidget>) {
@@ -239,7 +252,7 @@ private fun gtkBox(
                     if (vertical) GtkOrientation.GTK_ORIENTATION_VERTICAL else GtkOrientation.GTK_ORIENTATION_HORIZONTAL,
                     spacing,
                 )!!,
-            )
+            ).plain()
         },
         update = {
             set(modifier) { value -> applyModifier(value) }
@@ -275,7 +288,7 @@ fun Box(modifier: Modifier = Modifier, content: @Composable () -> Unit = {}) {
         factory = {
             GtkBoxNode(
                 gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!,
-            )
+            ).plain()
         },
         update = {
             set(modifier) { value -> applyModifier(value) }
@@ -288,7 +301,7 @@ fun Box(modifier: Modifier = Modifier, content: @Composable () -> Unit = {}) {
 @Composable
 fun CenterBox(modifier: Modifier = Modifier, start: @Composable () -> Unit, center: @Composable () -> Unit, end: @Composable () -> Unit) {
     ComposeNode<GtkCenterBoxNode, GtkApplier>(
-        factory = { GtkCenterBoxNode() },
+        factory = { GtkCenterBoxNode().plain() },
         update = {
             set(modifier) { value -> applyModifier(value) }
         },
@@ -302,7 +315,7 @@ fun CenterBox(modifier: Modifier = Modifier, start: @Composable () -> Unit, cent
 @Composable
 fun Label(text: String, modifier: Modifier = Modifier) {
     ComposeNode<GtkLabelNode, GtkApplier>(
-        factory = { GtkLabelNode() },
+        factory = { GtkLabelNode().plain() },
         update = {
             set(text) { value -> setText(value) }
             set(modifier) { value -> applyModifier(value) }
@@ -313,7 +326,7 @@ fun Label(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun Button(text: String, modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     ComposeNode<GtkButtonNode, GtkApplier>(
-        factory = { GtkButtonNode(text) },
+        factory = { GtkButtonNode(text).plain() },
         update = {
             set(text) { value -> setText(value) }
             set(onClick) { value -> this.onClick = value }
@@ -326,7 +339,7 @@ fun Button(text: String, modifier: Modifier = Modifier, onClick: () -> Unit = {}
 @Composable
 fun Button(modifier: Modifier = Modifier, onClick: () -> Unit = {}, content: @Composable () -> Unit) {
     ComposeNode<GtkButtonContainerNode, GtkApplier>(
-        factory = { GtkButtonContainerNode() },
+        factory = { GtkButtonContainerNode().plain() },
         update = {
             set(onClick) { value -> this.onClick = value }
             set(modifier) { value -> applyModifier(value) }
@@ -339,7 +352,7 @@ fun Button(modifier: Modifier = Modifier, onClick: () -> Unit = {}, content: @Co
 @Composable
 fun Canvas(width: Int, height: Int, modifier: Modifier = Modifier, onDraw: (CPointer<cairo_t>, Int, Int) -> Unit) {
     ComposeNode<GtkCanvasNode, GtkApplier>(
-        factory = { GtkCanvasNode(width, height) },
+        factory = { GtkCanvasNode(width, height).plain() },
         update = {
             set(onDraw) { value ->
                 drawFn = value
@@ -360,7 +373,7 @@ fun Slider(
     onValueChange: (Float) -> Unit,
 ) {
     ComposeNode<GtkSliderNode, GtkApplier>(
-        factory = { GtkSliderNode(min, max, step) },
+        factory = { GtkSliderNode(min, max, step).plain() },
         update = {
             set(value) { newValue -> setValue(newValue) }
             set(onValueChange) { fn -> onChange = fn }

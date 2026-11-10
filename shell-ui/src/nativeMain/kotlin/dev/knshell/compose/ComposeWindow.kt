@@ -23,6 +23,7 @@ import kotlin.coroutines.CoroutineContext
 import kotlin.time.TimeSource
 import kn.gtk.g_idle_add
 import kn.gtk.g_timeout_add
+import kn.gtk.gdk_display_get_default
 
 /**
  * Runs coroutine work on the GLib main loop thread (the thread that owns GTK).
@@ -149,6 +150,15 @@ fun runComposeWindow(
 ) {
     val runtime = ShellRuntime.instance()
     runtime.installCss(css)
+
+    // ShellRuntime.instance() has initialised GTK by now: register the kn-plain reset on
+    // the default display. Without a display (headless) there is nothing to style.
+    val defaultDisplay = gdk_display_get_default()
+    if (defaultDisplay != null) {
+        installPlainReset(defaultDisplay)
+    } else {
+        println("[shell-ui] no default GdkDisplay — kn-plain reset not installed")
+    }
 
     // Reuse the exact layer-shell geometry the previous implementation hard-coded.
     val barSpec: BarWindowSpec? = when {

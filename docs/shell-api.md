@@ -189,6 +189,30 @@ fun Volume() {
 }
 ```
 
+### Plain widgets (reset)
+
+Every widget created by the DSL — `Row`, `Column`, `Box`, `CenterBox`, `Label`, `Button`,
+`Canvas`, `Slider` — carries the `kn-plain` class. A single global stylesheet at provider
+priority **650** strips Adwaita's defaults: backgrounds, borders, box-shadow, outline and
+focus ring, padding, margins, min-width/min-height, text shadows, transitions, colour and
+font overrides, the `:hover/:active/:checked/:focus/:focus-visible/:disabled/:backdrop`
+button states and the `GtkScale` `trough`/`highlight`/`slider` sub-nodes.
+
+It is the GTK analogue of an HTML CSS reset: a widget paints only what your Modifier says.
+Per-widget modifier CSS is registered at priority **700** (above the reset), so
+`Modifier.background(...)`, `textColor(...)`, `fontSize(...)` always win.
+
+Consequences:
+
+* buttons have no default padding, min-size, hover background or focus ring — set them yourself;
+* the `GtkScale` slider/trough are invisible until styled; use `rawStyle(" trough", ...)`,
+  `rawStyle(" highlight", ...)`, `rawStyle(" slider", ...)`;
+* the focus ring is gone — re-add one with `rawStyle(":focus-visible", "outline: ...")` if the
+  widget must stay keyboard-visible.
+
+The reset is installed once after `gtk_init()`, by both `Shell.run` and the legacy
+`runComposeWindow`. Implementation: `compose/Reset.kt`.
+
 ### Modifier reference (`dev.knshell.compose`)
 
 | Modifier | Effect |

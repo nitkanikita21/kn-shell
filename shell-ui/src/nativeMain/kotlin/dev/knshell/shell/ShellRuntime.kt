@@ -13,6 +13,7 @@ import dev.knshell.compose.GtkApplier
 import dev.knshell.compose.GtkBoxNode
 import dev.knshell.compose.GtkNode
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.installPlainReset
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -108,6 +109,16 @@ internal class ShellRuntime private constructor() {
         gtk_init()
         installCss(DEFAULT_CSS)
         installCss(RUNTIME_CSS)
+        // Widgets created by the Kotlin DSL must be visually plain: the reset stylesheet
+        // (class-scoped, priority 600) is installed once, after the application sheet so
+        // its class rules win over the element rules above. Per-widget inline styles stay
+        // at priority 700 and therefore still override the reset.
+        val display: CPointer<GdkDisplay>? = gdk_display_get_default()
+        if (display != null) {
+            installPlainReset(display)
+        } else {
+            println("[shell-runtime] no default GdkDisplay — kn-plain reset not installed")
+        }
         frameClock.startTicker()
         scope.launch { recomposer.runRecomposeAndApplyChanges() }
         println("[shell-runtime] GTK initialised — one GLib loop, one dispatcher, one Recomposer")

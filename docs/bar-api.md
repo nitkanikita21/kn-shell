@@ -116,4 +116,8 @@ Canvas(24, 24) { cr, width, height -> /* cairo drawing */ }
 A completely empty `CenterBox` (no modules) falls back to GTK's default surface height;
 the layer surface sizes to the content as soon as modules are added.
 
+All DSL widgets are **plain by default**: Adwaita backgrounds, borders, paddings, minimum
+sizes, focus rings and checked states are stripped by a global reset (see "Plain widgets"
+in [shell-api.md](shell-api.md)); only your Modifier styles paint anything.
+
 Windows, services and actions are documented in [shell-api.md](shell-api.md).
