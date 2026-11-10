@@ -186,11 +186,26 @@ pub fn toggle_play_pause() {
 }
 
 /// Switches the focused Hyprland workspace (click on a workspace chip in the bar).
+///
+/// Hyprland >= 0.5x evaluates dispatchers as Lua (`hl.dsp.focus({ workspace = "..." })`);
+/// older releases use the legacy `dispatch workspace <name>` form. We try the modern
+/// spelling first and fall back to the legacy one.
 #[uniffi::export]
 pub fn focus_workspace(name: String) {
-    let _ = std::process::Command::new("hyprctl")
-        .args(["dispatch", "workspace", &name])
-        .status();
+    let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
+    let lua = format!("hl.dsp.focus({{ workspace = \"{escaped}\" }})");
+
+    let modern_ok = std::process::Command::new("hyprctl")
+        .args(["dispatch", &lua])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+
+    if !modern_ok {
+        let _ = std::process::Command::new("hyprctl")
+            .args(["dispatch", "workspace", &name])
+            .status();
+    }
 }
 
 /// Sets the volume of the default sink (0-150 %).

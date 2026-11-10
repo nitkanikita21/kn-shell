@@ -210,6 +210,8 @@ committed.
 * Only `linuxX64` is configured.
 * The audio service polls `pactl` every 500 ms (no event subscription yet).
 * MPRIS support is polling-based (700 ms) and uses the first available player.
+* Hyprland ≥ 0.5x evaluates dispatchers as Lua (`hl.dsp.focus({ workspace = "…" })`);
+  `focus_workspace` uses that spelling and falls back to the legacy `dispatch workspace` form on older releases.
 * The privileged-sandbox environment made a nested Hyprland impossible (aquamarine's DRM backend
   cannot open a seat); testing therefore uses `KN_SHELL_MODE=windowed` or a temporary headless
   monitor.
