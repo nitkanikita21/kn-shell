@@ -1,5 +1,14 @@
 #!/bin/sh
 
+# KN Shell bootstrap: when a repository-local toolchain is present (isolated builds,
+# sandboxes where ~/.gradle / ~/.konan / ~/.cargo are read-only), use it automatically
+# so that a plain `./gradlew run` works without any extra setup.
+_kn_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -f "$_kn_dir/.tools/env.sh" ]; then
+    # shellcheck disable=SC1091
+    . "$_kn_dir/.tools/env.sh"
+fi
+
 #
 # Copyright © 2015-2021 the original authors.
 #

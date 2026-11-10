@@ -335,8 +335,6 @@ button.ws.ws-active label {
 
 scale.mini-slider {
     min-width: 64px;
-    min-height: 12px;
-    padding: 0 2px;
     background: transparent;
     border: none;
 }
@@ -353,11 +351,9 @@ scale.mini-slider highlight {
 }
 
 scale.mini-slider slider {
-    min-width: 10px;
-    min-height: 10px;
     background-color: #cdd6f4;
-    border-radius: 50%;
     border: none;
     box-shadow: none;
+    padding: 0;
 }
 """

@@ -78,6 +78,11 @@ source .tools/env.sh   # JAVA_HOME, GRADLE_USER_HOME, KONAN_DATA_DIR, CARGO_HOME
 
 In a normal environment skip that and use your global toolchains.
 
+In *this* checkout the bootstrap is automatic: `gradlew` sources `.tools/env.sh` when it exists,
+so a plain `./gradlew run` works without any manual setup (this also pins JDK 21 and makes
+`rustup` visible to Gobley). On a fresh clone without `.tools/`, install the prerequisites above
+(`rustup` is mandatory for Gobley).
+
 ---
 
 ## Build & run
