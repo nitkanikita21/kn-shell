@@ -149,6 +149,9 @@ internal data class TransitionElement(val ms: Int) : ModifierElement
 /** CSS linear-gradient background. */
 internal data class LinearGradientElement(val stops: List<Color>, val angleDeg: Float) : ModifierElement
 
+/** CSS linear-gradient with explicit stop positions (0..1) — lets the sheen move. */
+internal data class GradientStopsElement(val stops: List<Pair<Color, Float>>, val angleDeg: Float) : ModifierElement
+
 /** CSS radial-gradient background. */
 internal data class RadialGradientElement(val stops: List<Color>) : ModifierElement
 
@@ -245,6 +248,15 @@ fun Modifier.transition(ms: Int): Modifier = with(TransitionElement(ms))
  */
 fun Modifier.gradient(vararg stops: Color, angleDeg: Float = 90f): Modifier =
     with(LinearGradientElement(stops.toList(), angleDeg))
+
+/**
+ * Linear gradient with explicit stop positions: `color to position` where position is 0..1.
+ * Recompute the stops from an animated phase to get a moving highlight band.
+ */
+fun Modifier.gradientStops(
+    vararg stops: Pair<Color, Float>,
+    angleDeg: Float = 90f,
+): Modifier = with(GradientStopsElement(stops.toList(), angleDeg))
 
 /** Radial gradient background (native GTK CSS). */
 fun Modifier.radialGradient(vararg stops: Color): Modifier =
@@ -596,6 +608,12 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is FontWeightElement -> rules += "" to "font-weight: ${element.weight};"
 
             is LetterSpacingElement -> rules += "" to "letter-spacing: ${element.px}px;"
+
+            is GradientStopsElement -> rules += "" to
+                "background-image: linear-gradient(${element.angleDeg}deg, " +
+                    element.stops.joinToString(", ") { (color, position) ->
+                        "${color.toCss()} ${position * 100f}%"
+                    } + ");"
 
             is LinearGradientElement -> rules += "" to
                 "background-image: linear-gradient(${element.angleDeg}deg, ${element.stops.joinToString(", ") { it.toCss() }});"
