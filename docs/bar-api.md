@@ -1,73 +1,109 @@
-# Writing bar modules with the kit
+# Writing a bar module
 
-The bar API lives in `dev.knshell.ui.kit`. A bar is a declarative tree:
-[`Bar`](../shell-ui/src/nativeMain/kotlin/dev/knshell/ui/kit/Components.kt) owns the
-three-region layout and the service subscriptions; everything inside it is a normal
-Compose composable built from the kit primitives. The runtime, windows, services and
-actions are documented in [`shell-api.md`](shell-api.md).
+KN Shell ships the mechanics of a bar, **not** ready-made modules: there is no music pill,
+no workspace strip and no clock in the library. Everything visible is composed from small
+primitives, a theme and the Modifier DSL. This page shows the pieces.
 
-## A minimal custom bar
+## Primitives — `dev.knshell.ui.primitives`
+
+| API | What it is |
+| --- | --- |
+| `Bar(theme, start, center, end)` | three-region layout (`GtkCenterBox`); subscribes to the shell services, maintains `BarState`, applies the theme font |
+| `Pill(theme, color, spacing, onClick, content)` | rounded, padded, shadowed container; `onClick` makes it clickable without changing its look |
+| `Space(width, height)` / `HSpace(w)` / `VSpace(h)` / `Spacer(modifier)` | empty boxes used for spacing |
+| `Icon(glyph, size = 13, color = null)` | Nerd Font glyph |
+| `Text(text, theme, color, size)` | themed label |
+
+`BarState` (same package) exposes the reactive snapshots that `Bar` keeps up to date:
+`workspaces`, `media`, `volume`, `stats`, `clock` — all Compose state, safe to read in a composable.
+
+## Style — `dev.knshell.ui.style`
+
+`BarTheme` holds colours and metrics (`BarTheme.Mocha`, `BarTheme.Default`, `copy(...)` to
+re-skin), and `Modifier.pill(...)`, `Modifier.chip(...)`, `Modifier.pillText(...)` are the
+style helpers on top of the generic Modifier DSL (`dev.knshell.compose`):
+`padding`, `margin`, `background(color, radius, shadow, borderWidth, borderColor, transitionMs)`,
+`hoverBackground`, `textColor`, `fontSize`, `fontFamily`, `bold`, `size/width/height`,
+`fillMaxWidth`, `centerVertically`, `opacity`, `rawStyle(selector, css)`.
+
+## Example: a clock module
 
 ```kotlin
-package dev.knshell.ui
-
-import androidx.compose.runtime.Composable
-import dev.knshell.shell.Shell
-import dev.knshell.ui.kit.*
-
 @Composable
-fun MyBar() {
-    val theme = BarTheme.Mocha
-
-    Bar(
-        theme = theme,
-        start = {
-            Pill(theme = theme) {
-                Icon("\uF001", size = 14)
-                ValueText("my module", theme, color = theme.mauve, size = 12)
-            }
-        },
-        center = {
-            WorkspaceStrip(theme)
-        },
-        end = {
-            MetricPill("\uF2DB", 42, theme.blue, theme)
-            ClockPill(theme)
-            PowerPill(theme) { Shell.Hyprland.spawn("wlogout") }
-        },
-    )
-}
-```
-
-Mount it exactly like the built-in bar:
-
-```kotlin
-fun main() {
-    Shell.run {
-        barWindow { MyBar() }
+fun ClockPill(theme: BarTheme = BarTheme.Mocha) {
+    val (date, colon, minutes) = BarState.clock.value
+    Pill(theme) {
+        Icon("\uF017")
+        Space(6)
+        Text(date, theme)
+        Text(colon, theme, color = theme.flamingo)
+        Text(minutes, theme, color = theme.flamingo)
     }
 }
 ```
 
-## What the kit gives you
+## Example: a volume module with a slider
 
-| Piece | Purpose |
-| --- | --- |
-| `BarTheme` / `BarTheme.Mocha` | colours, radius, pill padding and font metrics |
-| `Modifier.pill()` | padded, rounded, shadowed, transitioned background |
-| `Modifier.chip(active, …)` | active/inactive workspace chip style |
-| `Modifier.pillText()` | themed text colour + size + bold |
-| `Bar(start, center, end)` | `CenterBox` layout and `ShellServices` subscriptions |
-| `Pill` / `Spacer` / `Icon` / `ValueText` | basic layout and text |
-| `AnimatedPercent` | spring-animated integer value |
-| `EqualizerBars` | independent spring equalizer, active/idle colours |
-| `MusicPill` / `UpdatesPill` / `WorkspaceStrip` | ready-made modules |
-| `VolumePill` / `MetricPill` / `ClockPill` / `PowerPill` | ready-made modules |
+```kotlin
+@Composable
+fun VolumePill(theme: BarTheme = BarTheme.Mocha) {
+    val volume = BarState.volume.value
+    Pill(theme) {
+        Icon("\uF028")
+        Slider(
+            value = volume.toFloat(),
+            min = 0f,
+            max = 100f,
+            step = 5f,
+            modifier = Modifier
+                .width(64)
+                .height(16)
+                .rawStyle(" trough", "min-height: 6px; border-radius: 3px; background-color: #45475A;")
+                .rawStyle(" highlight", "border-radius: 3px; background-color: #A6E3A1;")
+                .rawStyle(" slider", "min-width: 14px; min-height: 14px; border-radius: 50%; background-color: #CDD6F4;"),
+        ) { Shell.services.setVolume(it.toInt()) }
+        Text(volume.toString() + "%", theme, size = 12)
+    }
+}
+```
 
-`MusicPill`, `VolumePill`, `WorkspaceStrip` and `ClockPill` read the shared `BarState`
-that `Bar` fills from `Shell.services` (workspaces, media, volume, system stats) so a
-custom module only needs to declare its content. A fully custom module can instead
-collect `Shell.services` flows itself, as the dashboard example does.
+## Example: an animated indicator
 
-The built-in [`TopBar`](../shell-ui/src/nativeMain/kotlin/dev/knshell/ui/TopBar.kt) is
-the reference composition: it is nothing but `Bar` plus a list of kit components.
+```kotlin
+@Composable
+fun PulseDot(theme: BarTheme = BarTheme.Mocha) {
+    var up by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(900)
+            up = !up
+        }
+    }
+    val radius by animateFloatAsState(if (up) 8f else 4f, stiffness = 300f, dampingRatio = 0.5f)
+    Canvas(24, 24) { cr, width, height ->
+        drawCircle(cr, width, height, radius, 0.35, 0.75, 1.0)   // dev.knshell.ui.drawing helper
+    }
+}
+```
+
+## Composing the bar
+
+```kotlin
+@Composable
+fun MyBar() = Bar(
+    theme = BarTheme.Mocha,
+    start = { ClockPill() },
+    center = { Space(16) },
+    end = { VolumePill(); PulseDot() },
+)
+```
+
+## Hooking the bar into the shell
+
+```kotlin
+fun main() = Shell.run {
+    barWindow { MyBar() }
+}
+```
+
+Windows, services and actions are documented in [shell-api.md](shell-api.md).

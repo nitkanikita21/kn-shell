@@ -1,4 +1,4 @@
-package dev.knshell.ui.kit
+package dev.knshell.ui.style
 
 import dev.knshell.compose.Catppuccin
 import dev.knshell.compose.Color

@@ -2,115 +2,63 @@
 
 package dev.knshell
 
+import androidx.compose.runtime.Composable
 import dev.knshell.compose.Color
-import dev.knshell.compose.runComposeWindow
-import dev.knshell.demo.PhaseOneDemo
-import dev.knshell.services.ShellServices
 import dev.knshell.shell.Shell
 import dev.knshell.shell.WindowSpec
-import dev.knshell.ui.CircleAnimationDemo
-import dev.knshell.ui.DashboardExample
-import dev.knshell.ui.KnPanel
-import dev.knshell.ui.TopBar
+import dev.knshell.ui.primitives.Bar
+import dev.knshell.ui.style.BarTheme
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
 
 /**
- * Single entry point of the shell.
+ * Entry point of the shell.
  *
- * The Compose composition is created *inside* this module so that no composable
- * lambda has to cross the shell-app <-> shell-ui klib boundary.
+ * Modes:
+ *  - `panel` (default) — a wlr-layer-shell bar at the top of the output;
+ *  - `windowed` — the same bar content inside a regular window (development/testing).
  *
- * Runtime modes:
- *  - panel      (default) — layer-shell bar; production mode.
- *  - windowed             — the same panel in a normal GTK window (safe for tests).
- *  - demo                 — Phase 4 expanding/collapsing circle window.
- *  - phase1               — Phase 1 applier smoke test (static Column).
- *  - multiwindow          — declarative Shell.run: layer-shell bar + dashboard window
- *                           sharing one GLib loop and one Recomposer.
+ * The bar intentionally ships **without modules**: compose your own inside the [Bar]
+ * slots using the primitives from `dev.knshell.ui.primitives`, the styling helpers from
+ * `dev.knshell.ui.style`, the Modifier DSL and the reactive services (`Shell.services`).
  */
 fun startKnShell() {
-    // Subscribe to the Rust services; callbacks are logged (and stored in Compose state).
-    ShellServices.start()
-
-    // Runtime mode selection:
-    //   panel    (default) — layer-shell bar; production mode.
-    //   windowed           — the same panel in a normal GTK window (safe for tests).
-    //   demo               — Phase 4 expanding/collapsing circle window.
-    //   phase1             — Phase 1 applier smoke test (static Column).
-    //   multiwindow        — Shell.run { barWindow { … }; window(WindowSpec(…)) { … } }
-    val mode = getenv("KN_SHELL_MODE")?.toKString()
-        ?: if (getenv("KN_SHELL_WINDOWED")?.toKString() == "1") "windowed" else "panel"
-
-    when (mode) {
-        "multiwindow" -> {
-            println("[shell-ui] multiwindow mode — declarative Shell.run (bar + dashboard)")
+    when (getenv("KN_SHELL_MODE")?.toKString() ?: "panel") {
+        "windowed" -> {
+            println("[shell] windowed mode")
             Shell.run {
-                barWindow {
-                    TopBar()
-                }
                 window(
                     WindowSpec(
-                        title = "KN Shell — Dashboard",
-                        width = 420,
-                        height = 260,
+                        title = "KN Shell",
+                        width = 640,
+                        height = 120,
                         background = Color.hex(0x1E1E2E),
                     ),
                 ) {
-                    DashboardExample()
+                    ShellBar()
                 }
-            }
-        }
-
-        "demo" -> {
-            println("[shell-ui] animation demo window")
-            runComposeWindow(
-                title = "KN Shell — Circle Animation Demo",
-                width = 480,
-                height = 320,
-                layerShell = false,
-            ) {
-                CircleAnimationDemo()
-            }
-        }
-
-        "windowed" -> {
-            println("[shell-ui] windowed top bar (no layer shell)")
-            runComposeWindow(
-                title = "KN Shell — Top Bar (windowed)",
-                width = 1200,
-                height = 56,
-                css = "",
-                layerShell = false,
-            ) {
-                TopBar()
-            }
-        }
-
-        "phase1" -> {
-            runComposeWindow(
-                title = "KN Shell — Phase 1",
-                width = 480,
-                height = 220,
-                layerShell = false,
-            ) {
-                PhaseOneDemo()
             }
         }
 
         else -> {
-            println("[shell-ui] layer-shell top bar mode")
-            runComposeWindow(
-                title = "KN Shell — Top Bar",
-                width = 1280,
-                height = 40,
-                css = "",
-                layerShell = true,
-                barAtTop = true,
-            ) {
-                TopBar()
+            println("[shell] panel mode (layer-shell top bar)")
+            Shell.run {
+                barWindow {
+                    ShellBar()
+                }
             }
         }
     }
+}
+
+/** Empty bar skeleton — add your own modules to the slots. */
+@Composable
+private fun ShellBar() {
+    Bar(
+        theme = BarTheme.Mocha,
+        start = {},
+        center = {},
+        end = {},
+    )
 }

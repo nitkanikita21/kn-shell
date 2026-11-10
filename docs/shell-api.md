@@ -38,8 +38,8 @@ panels).
 
 ```kotlin
 fun main() = Shell.run {
-    barWindow { TopBar() }
-    window(WindowSpec("Dashboard", 420, 260)) { DashboardExample() }
+    barWindow { MyBar() }                     // your layer-shell bar
+    window(WindowSpec("Panel", 420, 260)) { MyPanel() }
 }
 ```
 
@@ -50,7 +50,7 @@ is a normal toplevel; `background` installs a per-window CSS rule and plain wind
 12 px horizontal / 6 px vertical margins around their root box.
 
 `BarWindowSpec` describes a layer-shell surface; every field has a default, so
-`barWindow { TopBar() }` already produces the production bar:
+`barWindow { MyBar() }` mounts your bar as the production layer surface:
 
 | Field | Default | Meaning |
 | --- | --- | --- |
@@ -135,11 +135,31 @@ Hyprland ≥ 0.56 evaluates dispatchers as Lua, so `dispatch` takes a full expre
 to legacy `dispatch workspace <name>`. `spawn` discards stdio, reaps the child in a thread
 and never blocks the shell.
 
-## The bar kit (`dev.knshell.ui.kit`)
+## Primitives and style
 
-`BarTheme` carries every colour and metric. `BarTheme.Mocha` (also `BarTheme.Default`) is
-the Catppuccin reference palette: `surface`, `text`, `accent`, `blue`, `green`, `red`,
-`mauve`, `pink`, `flamingo`, `sapphire`, `sky`, plus `radius = 16`, `pillPaddingH = 14`,
+The library deliberately ships **no ready-made modules** — no music pill, workspace strip or
+clock. It provides layout/text primitives, a theme, styling modifiers and reactive state, so a
+bar is written from scratch.
+
+`dev.knshell.ui.primitives`:
+
+| API | Renders |
+| --- | --- |
+| `Bar(theme, start, center, end)` | `CenterBox` + service subscriptions + theme font |
+| `Pill(theme, color, spacing, onClick, content)` | rounded, padded, shadowed container; `onClick` makes it a button |
+| `Space(width, height)`, `HSpace(w)`, `VSpace(h)`, `Spacer(modifier)` | spacing boxes |
+| `Icon(glyph, size = 13, color = null)` | Nerd Font glyph |
+| `Text(text, theme, color, size)` | themed label |
+
+`Bar` subscribes to workspaces, media, volume and system, ticks a 1 s clock and writes the
+public `BarState` object (`workspaces`, `media`, `volume`, `stats`, `clock`), so custom modules
+only read `BarState.*.value` inside composition.
+
+`dev.knshell.ui.style`:
+
+`BarTheme` carries every colour and metric. `BarTheme.Mocha` (also `BarTheme.Default`) is the
+Catppuccin reference palette: `surface`, `text`, `accent`, `blue`, `green`, `red`, `mauve`,
+`pink`, `flamingo`, `sapphire`, `sky`, plus `radius = 16`, `pillPaddingH = 14`,
 `pillPaddingV = 5`, `gap = 5`, `fontFamily = "JetBrainsMono Nerd Font"`, `fontSize = 13`.
 Re-skin a whole bar with a copy:
 
@@ -149,49 +169,29 @@ Bar(BarTheme.Mocha.copy(radius = 10, gap = 3), start = {…}, center = {…}, en
 
 Modifiers: `Modifier.pill(theme, color = theme.surface, radius)` = themed padding + rounded
 background with shadow, 200 ms colour transition and horizontal margin;
-`Modifier.chip(active, theme, width, height)` = workspace chip (mauve, bold 10 px when
+`Modifier.chip(active, theme, width, height)` = workspace-style chip (mauve, bold 10 px when
 active; small round dot otherwise; hover accent); `Modifier.pillText(theme, color, size,
-bold)` = matching text style. Example: `Label("\uF0AC", Modifier.pill(theme).pillText(theme,
-color = theme.blue))`.
-
-| Component | Renders |
-| --- | --- |
-| `Bar(theme, start, center, end)` | `CenterBox` + service subscriptions + theme font |
-| `Pill(color, theme, spacing, onClick, content)` | themed pill; `onClick` makes it a button without changing layout |
-| `Spacer(modifier)` / `Icon(glyph, size = 13)` / `ValueText(text, theme, color, size, bold)` | layout and text primitives |
-| `AnimatedPercent(target, theme, color, format, size, stiffness, dampingRatio)` | spring-animated integer (`"42%"` by default) |
-| `EqualizerBars(playing, bars = 5, width = 24, height = 14, activeColor, idleColor)` | cairo equalizer, new spring targets every 140 ms (white / `#F5C2E6`) |
-| `MusicPill(theme)` | title + equalizer; blue while playing, click toggles play/pause |
-| `UpdatesPill(theme, count = 0)` | static updates counter |
-| `WorkspaceStrip(theme)` | animated chips; click focuses the workspace |
-| `VolumePill(theme)` | 0–100 slider (step 5) + animated percentage |
-| `MetricPill(icon, value, color, theme)` | icon + animated percentage (CPU, memory, …) |
-| `ClockPill(theme)` | day/weekday, blinking colon, bold minutes |
-| `PowerPill(theme, onClick = {})` | power glyph; no-op by default |
-
-`Bar` subscribes to workspaces, media, volume and system, ticks a 1 s clock and writes the
-shared `BarState`, which `MusicPill`, `WorkspaceStrip`, `VolumePill` and `ClockPill` read.
-`BarState` is `internal` to `shell-ui`; code outside that module collects `Shell.services`
-itself (see `DashboardExample`).
+bold)` = matching text style.
 
 ```kotlin
 @Composable
-fun BatteryPill(percent: Int, theme: BarTheme = BarTheme.Mocha) = Pill(theme = theme) {
-    Row(spacing = 4, modifier = Modifier.textColor(theme.green)) {
-        Icon("\uF240", size = 14)
-        AnimatedPercent(percent, theme, theme.green, size = 12)
+fun ClockPill(theme: BarTheme = BarTheme.Mocha) {
+    val (date, colon, minutes) = BarState.clock.value
+    Pill(theme) {
+        Icon("\uF017")
+        Space(6)
+        Text(date, theme)
+        Text(colon, theme, color = theme.flamingo)
+        Text(minutes, theme, color = theme.flamingo)
     }
 }
 
 @Composable
 fun MyBar() = Bar(
     theme = BarTheme.Mocha,
-    start = { MusicPill() },
-    center = { WorkspaceStrip() },
-    end = {
-        BatteryPill(82); VolumePill()
-        ClockPill(); PowerPill { Shell.Hyprland.spawn("wlogout") }
-    },
+    start = { ClockPill() },
+    center = { Space(16) },
+    end = { Icon("\uF240", 14); Space(6); Text("82%", theme) },
 )
 ```
 
@@ -234,9 +234,9 @@ fun Spinner(modifier: Modifier = Modifier) = ComposeNode<GtkSpinnerNode, GtkAppl
 )
 ```
 
-**Bar component.** Add a composable in `ui/kit/Components.kt` built from `Pill` / `Icon` /
-`ValueText` / `Modifier`; read `BarState` if it needs live bar data, and take colours from
-`BarTheme` so custom themes keep working.
+**Bar component.** Add a composable in your own module file (there are no built-in visual
+modules) built from `Pill` / `Icon` / `Text` / `Modifier`; read `BarState` if it needs live bar
+data, and take colours from `BarTheme` so custom themes keep working.
 
 ## Limitations and caveats
 

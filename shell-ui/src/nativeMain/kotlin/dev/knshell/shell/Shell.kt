@@ -10,8 +10,8 @@ import dev.knshell.services.ShellServices
  * ```
  * fun main() {
  *     Shell.run {
- *         barWindow { TopBar() }
- *         window(WindowSpec("Dashboard", 420, 260)) { DashboardExample() }
+ *         barWindow { MyBar() }
+ *         window(WindowSpec("Panel", 420, 260)) { MyPanel() }
  *     }
  * }
  * ```

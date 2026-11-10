@@ -11,8 +11,6 @@ A minimal Wayland desktop shell where:
 The shell runs on the author's Hyprland 0.56 / Wayland session and was verified phase by phase
 (see [Verification log](#verification-log)).
 
-![Layer-shell top bar](docs/screenshots/topbar-layer.png)
-
 ---
 
 ## Architecture
@@ -53,7 +51,7 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 | Module | Contents |
 |---|---|
 | `rust-core/` | Rust crate, UniFFI exports, services, Gobley cargo/uniffi plugins |
-| `shell-ui/` | GTK4 C interop, `GtkApplier`, Compose DSL, shell runtime (`Shell.run`), layer-shell, spring animation, reactive services facade, bar kit (`ui/kit`) |
+| `shell-ui/` | GTK4 C interop, `GtkApplier`, Compose DSL, shell runtime (`Shell.run`), layer-shell, spring animation, reactive services facade, UI primitives (`ui/primitives`) and style helpers (`ui/style`) |
 | `shell-app/` | `main()` — starts the shell |
 
 ---
@@ -107,7 +105,6 @@ so a plain `./gradlew run` works without any manual setup (this also pins JDK 21
 ./gradlew build     # Rust (release) → UniFFI bindings → Kotlin/Native → link
 ./gradlew run       # build and launch the layer-shell panel
 ./scripts/run.sh    # build, then exec the kexe as a standalone process
-./scripts/demo.sh   # build + run with logging
 ```
 
 `./gradlew run` executes the binary as a child of the Gradle daemon; `scripts/run.sh` builds
@@ -120,11 +117,6 @@ shell is a normal standalone process (handy for `hyprctl layers` checks and PID-
 |---|---|
 | *(unset)* / `panel` | **production**: wlr-layer-shell bar (TOP layer, anchored top/left/right), no regular window |
 | `windowed` | same panel in a normal GTK window — safe for testing, does not touch the desktop |
-| `demo` | Phase 4 test case: two circles animating with a spring |
-| `phase1` | Phase 1 applier smoke test (static Column/Label/Button) |
-| `multiwindow` | declarative `Shell.run`: layer-shell bar + dashboard window sharing one GLib loop and one Recomposer |
-
-`KN_SHELL_WINDOWED=1` is still accepted as a legacy alias for `windowed`.
 
 ```bash
 # safe test run — a normal window, no layer surface:
@@ -135,7 +127,7 @@ KN_SHELL_MODE=windowed ./gradlew run
 
 ```bash
 hyprctl layers          # kn-shell surface in the TOP layer
-pactl set-sink-volume @DEFAULT_SINK@ 40%   # the panel slider follows the sink
+pactl set-sink-volume @DEFAULT_SINK@ 40%   # the volume service follows the sink
 ```
 
 ---
@@ -144,15 +136,14 @@ pactl set-sink-volume @DEFAULT_SINK@ 40%   # the panel slider follows the sink
 
 | Phase | Result |
 |---|---|
-| 0 — monorepo + UniFFI | `./gradlew run` printed `[shell-app] Rust says: Hello from Rust via UniFFI` |
-| 1 — Compose→GTK applier | GTK window `KN Shell — Phase 1` opened; a Column/Label/Button rendered from Compose; recomposition ticks logged (`[demo] recomposition tick — clicks=1…7`) |
-| 2 — layer shell | `hyprctl layers` → `namespace: kn-shell, xywh: 0 1392 2560 48` in **layer TOP**, translucent CSS |
-| 3 — Rust services | live callbacks: 7 toplevel windows with real titles; audio `100% → 45% → 70% → 33%`; MPRIS `player=Mozilla zen playing=true title="…"` |
-| 4 — animation | spring animation verified via `composition #30 big=91.5 → #60 big=26.8`, frame clock delivering continuous frames |
-| 5 — panel | layer-shell bar with clock, volume slider, media title, play/pause, window count and a pulsing circle; `./gradlew clean build` green |
-
-Screenshots: [`docs/screenshots/`](docs/screenshots) — layer-shell bar, windowed panel,
-circle animation, and the headless bar.
+| Phase | Result (historical — the demo modes were removed from the library) |
+|---|---|
+| 0 — monorepo + UniFFI | `./gradlew run` printed the Rust greeting |
+| 1 — Compose→GTK applier | a GTK window rendered a Compose `Column`/`Label`/`Button`; recomposition ticks observed in logs |
+| 2 — layer shell | `hyprctl layers` showed `namespace: kn-shell` in layer TOP with translucent CSS |
+| 3 — Rust services | live callbacks: toplevel windows, MPRIS metadata, audio `100% → 45% → 70% → 33%` |
+| 4 — animation | Compose spring animation verified with a frame counter (`composition #30 → #60`) |
+| 5 — panel | layer-shell bar with clock/volume/media modules; `./gradlew clean build` green |
 
 ### Shell API
 
@@ -160,8 +151,8 @@ Windows are declared, not assembled by hand:
 
 ```kotlin
 fun main() = Shell.run {
-    barWindow { TopBar() }                                     // wlr-layer-shell bar
-    window(WindowSpec("Dashboard", 420, 260)) { DashboardExample() }
+    barWindow { MyBar() }                                      // wlr-layer-shell bar
+    window(WindowSpec("Panel", 420, 260)) { MyPanel() }
 }
 ```
 
@@ -171,9 +162,9 @@ fun main() = Shell.run {
   `workspaces`, `media`, `volume`, `system`.
 * `Shell.Hyprland` performs compositor actions: `focusWorkspace(name)`, `dispatch(lua)`,
   `spawn(command)`.
-* `dev.knshell.ui.kit` provides `BarTheme`, the `pill`/`chip`/`pillText` modifiers and the
-  bar components (`Bar`, `Pill`, `WorkspaceStrip`, `MusicPill`, `VolumePill`, `MetricPill`,
-  `ClockPill`, `PowerPill`, …).
+* `dev.knshell.ui.primitives` provides `Bar`, `Pill`, `Space`/`HSpace`/`VSpace`, `Icon`,
+  `Text` and the shared `BarState`; `dev.knshell.ui.style` provides `BarTheme` and the
+  `pill`/`chip`/`pillText` modifiers. There are no ready-made modules — you compose them.
 
 The complete reference — window/bar specs, layers, anchors, margins, exclusive zone,
 keyboard mode, service latency, actions, the kit, the modifier table and extension points —
@@ -182,15 +173,22 @@ kit overview) is in [`docs/bar-api.md`](docs/bar-api.md).
 
 ### The bar
 
-The default mode is a **waybar-like top bar** (`KN_SHELL_MODE=panel`, the default):
+The shell starts with an **empty bar skeleton**: `Bar(BarTheme.Mocha)` with empty `start`,
+`center` and `end` slots. Nothing visual is hard-coded in the library — modules such as a
+clock, a workspace strip or a volume control are written by you from primitives:
 
-* **start** — music pill (title + live cairo equalizer animated with Compose springs) and an updates pill;
-* **center** — workspace chips (dot → chip width spring, active chip highlighted, click focuses the workspace);
-* **end** — network, volume pill with slider, CPU and memory (numbers smoothly animated towards the measured values),
-  clock with a blinking colon, power button.
+```kotlin
+@Composable
+fun MyBar() = Bar(
+    theme = BarTheme.Mocha,
+    start = { ClockPill() },
+    center = { Space(16) },
+    end = { VolumePill() },
+)
+```
 
-Styling is expressed **in Kotlin with a Compose-like `Modifier` chain** — there are no per-module
-CSS classes:
+Styling is expressed **in Kotlin with a Compose-like `Modifier` chain** — there are no
+per-module CSS classes:
 
 ```kotlin
 Label(
@@ -204,22 +202,13 @@ Label(
 )
 ```
 
-`Modifier` maps to native GTK calls (margins, size, opacity, expand/align) plus a per-widget style
-provider for background/border/padding/font declarations; `rawStyle(selector, css)` is an escape
-hatch for widget internals (e.g. `GtkScale` trough/slider). Only the window root uses generated CSS
-(window background + font), built from `runComposeWindow` parameters.
+`Modifier` maps to native GTK calls (margins, size, opacity, expand/align) plus a per-widget
+style provider for background/border/padding/font declarations; `rawStyle(selector, css)` is
+an escape hatch for widget internals (e.g. `GtkScale` trough/slider). Window-level CSS is
+generated from `runComposeWindow` parameters.
 
-The built-in bar is a thin declarative composition: `Bar(BarTheme.Mocha)` with
-`start = MusicPill + UpdatesPill`, `center = WorkspaceStrip`, `end = NetworkPill + VolumePill +
-MetricPill(cpu) + MetricPill(mem) + ClockPill + PowerPill`. All styling, animation and service
-subscriptions live in `dev.knshell.ui.kit`; see [`docs/bar-api.md`](docs/bar-api.md) for writing
-your own modules.
-
-When the real waybar is running, the layer surface is placed below it (exclusive zone); stop waybar
-to see the bar at the very top edge.
-
-Screenshots: [`docs/screenshots/topbar-layer.png`](docs/screenshots/topbar-layer.png),
-[`docs/screenshots/topbar-vs-waybar.png`](docs/screenshots/topbar-vs-waybar.png).
+When the real waybar is running, the layer surface is placed below it (exclusive zone); stop
+waybar to see the bar at the very top edge.
 
 ### How the composition is driven
 
@@ -312,14 +301,15 @@ committed.
 │   ├── src/media.rs              # MPRIS
 │   ├── src/audio.rs              # default sink volume (pactl)
 │   └── src/system.rs             # CPU / memory from /proc
-├── shell-ui/                     # Compose → GTK bridge, shell runtime, bar kit
+├── shell-ui/                     # Compose → GTK bridge, shell runtime, primitives
 │   ├── src/nativeInterop/cinterop/gtk4.def
 │   └── src/nativeMain/kotlin/dev/knshell/
+│       ├── compose/              # applier, Modifier DSL, widgets, frame clock
 │       ├── shell/                # Shell.run, ShellScope, ShellRuntime
-│       ├── ui/kit/               # BarTheme, pill/chip modifiers, components
-│       └── …
+│       ├── ui/primitives/        # Bar, Pill, Space, Icon, Text, BarState
+│       ├── ui/style/             # BarTheme, pill/chip/pillText modifiers
+│       └── services/             # ShellServices facade over the Rust backend
 ├── shell-app/                    # main()
-├── scripts/demo.sh, scripts/run.sh
-├── docs/shell-api.md, docs/bar-api.md
-└── docs/screenshots/
+├── scripts/run.sh, scripts/gobley-rustup.sh
+└── docs/shell-api.md, docs/bar-api.md
 ```
