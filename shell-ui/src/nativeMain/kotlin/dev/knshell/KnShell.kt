@@ -2,10 +2,14 @@
 
 package dev.knshell
 
+import dev.knshell.compose.Color
 import dev.knshell.compose.runComposeWindow
 import dev.knshell.demo.PhaseOneDemo
 import dev.knshell.services.ShellServices
+import dev.knshell.shell.Shell
+import dev.knshell.shell.WindowSpec
 import dev.knshell.ui.CircleAnimationDemo
+import dev.knshell.ui.DashboardExample
 import dev.knshell.ui.KnPanel
 import dev.knshell.ui.TopBar
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -18,10 +22,13 @@ import platform.posix.getenv
  * The Compose composition is created *inside* this module so that no composable
  * lambda has to cross the shell-app <-> shell-ui klib boundary.
  *
- * Two run modes:
- *  - default      : a wlr-layer-shell bar (TOP layer, anchored bottom) — production mode.
- *  - `KN_SHELL_WINDOWED=1` : a normal GTK window — used for tests / development so that
- *    the running desktop session is not modified (no layer surface is created).
+ * Runtime modes:
+ *  - panel      (default) — layer-shell bar; production mode.
+ *  - windowed             — the same panel in a normal GTK window (safe for tests).
+ *  - demo                 — Phase 4 expanding/collapsing circle window.
+ *  - phase1               — Phase 1 applier smoke test (static Column).
+ *  - multiwindow          — declarative Shell.run: layer-shell bar + dashboard window
+ *                           sharing one GLib loop and one Recomposer.
  */
 fun startKnShell() {
     // Subscribe to the Rust services; callbacks are logged (and stored in Compose state).
@@ -32,10 +39,30 @@ fun startKnShell() {
     //   windowed           — the same panel in a normal GTK window (safe for tests).
     //   demo               — Phase 4 expanding/collapsing circle window.
     //   phase1             — Phase 1 applier smoke test (static Column).
+    //   multiwindow        — Shell.run { barWindow { … }; window(WindowSpec(…)) { … } }
     val mode = getenv("KN_SHELL_MODE")?.toKString()
         ?: if (getenv("KN_SHELL_WINDOWED")?.toKString() == "1") "windowed" else "panel"
 
     when (mode) {
+        "multiwindow" -> {
+            println("[shell-ui] multiwindow mode — declarative Shell.run (bar + dashboard)")
+            Shell.run {
+                barWindow {
+                    TopBar()
+                }
+                window(
+                    WindowSpec(
+                        title = "KN Shell — Dashboard",
+                        width = 420,
+                        height = 260,
+                        background = Color.hex(0x1E1E2E),
+                    ),
+                ) {
+                    DashboardExample()
+                }
+            }
+        }
+
         "demo" -> {
             println("[shell-ui] animation demo window")
             runComposeWindow(

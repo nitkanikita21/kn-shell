@@ -23,7 +23,9 @@ import kn.gtk.g_signal_connect_data
 import kn.gtk.gtk_box_append
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
+import kn.gtk.gtk_button_new
 import kn.gtk.gtk_button_new_with_label
+import kn.gtk.gtk_button_set_child
 import kn.gtk.gtk_button_set_label
 import kn.gtk.gtk_center_box_new
 import kn.gtk.gtk_center_box_set_center_widget
@@ -107,6 +109,47 @@ class GtkButtonNode(text: String) : GtkNode(gtk_button_new_with_label(text)!!) {
 
     fun setText(text: String) {
         gtk_button_set_label(widget.reinterpret<GtkButton>(), text)
+    }
+}
+
+/**
+ * A button that hosts arbitrary widgets instead of a plain label.
+ *
+ * GTK buttons accept a single child, so the composable content is mounted into an
+ * internal horizontal box.
+ */
+class GtkButtonContainerNode : GtkNode(gtk_button_new()!!) {
+    var onClick: (() -> Unit)? = null
+
+    private val contentBox = gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!
+
+    @Suppress("unused")
+    private val selfRef = StableRef.create(this)
+
+    init {
+        gtk_button_set_child(widget.reinterpret<GtkButton>(), contentBox)
+
+        val ref = selfRef
+        val handler = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
+            data?.asStableRef<GtkButtonContainerNode>()?.get()?.onClick?.invoke()
+            Unit
+        }
+        g_signal_connect_data(
+            instance = widget,
+            detailed_signal = "clicked",
+            c_handler = handler.reinterpret(),
+            data = ref.asCPointer(),
+            destroy_data = null,
+            connect_flags = 0u,
+        )
+    }
+
+    override fun attachChild(child: CPointer<GtkWidget>) {
+        gtk_box_append(contentBox.reinterpret<GtkBox>(), child)
+    }
+
+    override fun detachChild(child: CPointer<GtkWidget>) {
+        gtk_box_remove(contentBox.reinterpret<GtkBox>(), child)
     }
 }
 
@@ -216,6 +259,21 @@ fun Row(spacing: Int = 8, modifier: Modifier = Modifier, content: @Composable ()
     gtkBox(vertical = false, spacing = spacing, modifier = modifier, content = content)
 }
 
+/** Empty container, useful as a [Spacer] or as a sized gap between widgets. */
+@Composable
+fun Box(modifier: Modifier = Modifier) {
+    ComposeNode<GtkBoxNode, GtkApplier>(
+        factory = {
+            GtkBoxNode(
+                gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!,
+            )
+        },
+        update = {
+            set(modifier) { value -> applyModifier(value) }
+        },
+    )
+}
+
 @Composable
 fun CenterBox(modifier: Modifier = Modifier, start: @Composable () -> Unit, center: @Composable () -> Unit, end: @Composable () -> Unit) {
     ComposeNode<GtkCenterBoxNode, GtkApplier>(
@@ -251,6 +309,20 @@ fun Button(text: String, modifier: Modifier = Modifier, onClick: () -> Unit = {}
             set(modifier) { value -> applyModifier(value) }
         },
     )
+}
+
+/** Button with arbitrary content (e.g. a clickable pill with an icon and an equalizer). */
+@Composable
+fun Button(modifier: Modifier = Modifier, onClick: () -> Unit = {}, content: @Composable () -> Unit) {
+    ComposeNode<GtkButtonContainerNode, GtkApplier>(
+        factory = { GtkButtonContainerNode() },
+        update = {
+            set(onClick) { value -> this.onClick = value }
+            set(modifier) { value -> applyModifier(value) }
+        },
+    ) {
+        content()
+    }
 }
 
 @Composable

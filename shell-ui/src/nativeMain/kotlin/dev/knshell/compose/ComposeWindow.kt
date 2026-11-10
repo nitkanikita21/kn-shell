@@ -3,66 +3,26 @@
 package dev.knshell.compose
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Composition
 import androidx.compose.runtime.MonotonicFrameClock
-import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.snapshots.Snapshot
+import dev.knshell.shell.BarAnchor
+import dev.knshell.shell.BarWindowSpec
+import dev.knshell.shell.Margins
+import dev.knshell.shell.ShellRuntime
 import kotlinx.cinterop.COpaquePointer
-import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.asStableRef
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.CancellableContinuation
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Runnable
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.CoroutineContext
 import kotlin.time.TimeSource
-import kotlinx.coroutines.Runnable
-import kn.gtk.GMainLoop
-import kn.gtk.GdkDisplay
-import kn.gtk.GtkWindow
-import kn.gtk.GTK_LAYER_SHELL_EDGE_BOTTOM
-import kn.gtk.GTK_LAYER_SHELL_EDGE_TOP
-import kn.gtk.GTK_LAYER_SHELL_EDGE_LEFT
-import kn.gtk.GTK_LAYER_SHELL_EDGE_RIGHT
-import kn.gtk.GTK_LAYER_SHELL_KEYBOARD_MODE_NONE
-import kn.gtk.GTK_LAYER_SHELL_LAYER_TOP
-import kn.gtk.gtk_layer_auto_exclusive_zone_enable
-import kn.gtk.gtk_layer_init_for_window
-import kn.gtk.gtk_layer_is_supported
-import kn.gtk.gtk_layer_set_anchor
-import kn.gtk.gtk_layer_set_keyboard_mode
-import kn.gtk.gtk_layer_set_layer
-import kn.gtk.gtk_layer_set_margin
-import kn.gtk.gtk_layer_set_namespace
 import kn.gtk.g_idle_add
-import kn.gtk.g_main_loop_new
-import kn.gtk.g_main_loop_quit
-import kn.gtk.g_main_loop_run
-import kn.gtk.g_signal_connect_data
 import kn.gtk.g_timeout_add
-import kn.gtk.gdk_display_get_default
-import kn.gtk.gtk_css_provider_load_from_string
-import kn.gtk.gtk_css_provider_new
-import kn.gtk.gtk_init
-import kn.gtk.gtk_style_context_add_provider_for_display
-import kn.gtk.gtk_window_present
-import kn.gtk.gtk_window_set_child
-import kn.gtk.gtk_window_set_default_size
-import kn.gtk.gtk_window_set_title
-import kn.gtk.gtk_window_new
-import kn.gtk.gtk_widget_set_margin_bottom
-import kn.gtk.gtk_widget_set_margin_end
-import kn.gtk.gtk_widget_set_margin_start
-import kn.gtk.gtk_widget_set_margin_top
-
-/** The GLib loop of the running shell (single window for the MVP). */
-private var mainLoop: CPointer<GMainLoop>? = null
 
 /**
  * Runs coroutine work on the GLib main loop thread (the thread that owns GTK).
@@ -169,50 +129,12 @@ scale {
 .kn-panel { padding: 8px 12px; }
 """
 
-private fun installCss(css: String) {
-    val provider = gtk_css_provider_new()
-    gtk_css_provider_load_from_string(provider, css)
-    val display: CPointer<GdkDisplay>? = gdk_display_get_default()
-    if (display != null && provider != null) {
-        // GTK_STYLE_PROVIDER_PRIORITY_APPLICATION == 600
-        gtk_style_context_add_provider_for_display(display, provider.reinterpret(), 600u)
-    }
-}
-
-/**
- * Turns the window into a wlr-layer-shell surface.
- *
- * Requires a wlroots-based compositor (Hyprland / Sway / Niri). On GNOME/Mutter
- * the protocol is not implemented and `gtk_layer_is_supported()` returns false.
- */
-private fun configureLayerShell(window: CPointer<GtkWindow>, atTop: Boolean, sideMargin: Int = 10) {
-    if (gtk_layer_is_supported() == 0) {
-        println("[shell-ui] gtk4-layer-shell not supported by this compositor; using a normal window")
-        return
-    }
-    gtk_layer_init_for_window(window)
-    gtk_layer_set_namespace(window, "kn-shell")
-    gtk_layer_set_layer(window, GTK_LAYER_SHELL_LAYER_TOP)
-    gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_LEFT, 1)
-    gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_RIGHT, 1)
-    if (atTop) {
-        gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_TOP, 1)
-        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_TOP, 8)
-        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_LEFT, sideMargin)
-        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_RIGHT, sideMargin)
-        println("[shell-ui] layer-shell surface initialised (layer=TOP, anchors=top/left/right)")
-    } else {
-        gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_BOTTOM, 1)
-        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_BOTTOM, 0)
-        println("[shell-ui] layer-shell surface initialised (layer=TOP, anchors=bottom/left/right)")
-    }
-    gtk_layer_auto_exclusive_zone_enable(window)
-    gtk_layer_set_keyboard_mode(window, GTK_LAYER_SHELL_KEYBOARD_MODE_NONE)
-}
-
 /**
  * Creates a GTK window, mounts a Compose composition into it and blocks in the
  * GLib main loop.
+ *
+ * Legacy entry point kept for the existing run modes; it delegates to the shared
+ * [ShellRuntime] (one GTK init / loop / Recomposer per process).
  */
 fun runComposeWindow(
     title: String,
@@ -225,66 +147,32 @@ fun runComposeWindow(
     windowModifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    gtk_init()
-    installCss(
-        buildString {
-            append("window.kn-window { background-color: ${windowBackground.toCss()}; }\n")
-            if (layerShell) {
-                append("window.kn-window.kn-bar { background-color: transparent; }\n")
-            }
-            append(css)
-        },
-    )
+    val runtime = ShellRuntime.instance()
+    runtime.installCss(css)
 
-    val window = gtk_window_new()!!.reinterpret<GtkWindow>()
-    gtk_window_set_title(window, title)
-    gtk_window_set_default_size(window, width, height)
-    kn.gtk.gtk_widget_add_css_class(window.reinterpret<kn.gtk.GtkWidget>(), "kn-window")
-    // Window-level decorations can also be expressed with modifiers.
-    GtkNode(window.reinterpret()).applyModifier(windowModifier)
-    if (layerShell) {
-        configureLayerShell(window, atTop = barAtTop)
-        kn.gtk.gtk_widget_add_css_class(window.reinterpret<kn.gtk.GtkWidget>(), "kn-bar")
+    // Reuse the exact layer-shell geometry the previous implementation hard-coded.
+    val barSpec: BarWindowSpec? = when {
+        !layerShell -> null
+        barAtTop -> BarWindowSpec()
+        else -> BarWindowSpec(
+            anchors = setOf(BarAnchor.Bottom, BarAnchor.Left, BarAnchor.Right),
+            margins = Margins(top = 0, left = 0, right = 0, bottom = 0),
+        )
     }
 
-    val rootWidget = kn.gtk.gtk_box_new(kn.gtk.GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!
-    if (!barAtTop) {
-        gtk_widget_set_margin_start(rootWidget, 12)
-        gtk_widget_set_margin_end(rootWidget, 12)
-        gtk_widget_set_margin_top(rootWidget, 6)
-        gtk_widget_set_margin_bottom(rootWidget, 6)
-    }
-    gtk_window_set_child(window, rootWidget)
-
-    val root = GtkBoxNode(rootWidget)
-    val applier = GtkApplier(root)
-
-    val dispatcher = GLibDispatcher()
-    val frameClock = GLibFrameClock().also { it.startTicker() }
-    // The frame clock must be part of the *calling* coroutine context: Recomposer's
-    // recompositionRunner() reads `coroutineContext.monotonicFrameClock` from it.
-    val scope = CoroutineScope(SupervisorJob() + dispatcher + frameClock)
-    val recomposer = Recomposer(scope.coroutineContext)
-    scope.launch { recomposer.runRecomposeAndApplyChanges() }
-
-    val composition = Composition(applier = applier, parent = recomposer)
-    composition.setContent(content)
-
-    val loop = g_main_loop_new(null, 0)
-    mainLoop = loop
-    g_signal_connect_data(
-        instance = window,
-        detailed_signal = "close-request",
-        c_handler = staticCFunction { _: COpaquePointer?, _: COpaquePointer? ->
-            mainLoop?.let { g_main_loop_quit(it) }
-            0
-        }.reinterpret(),
-        data = null,
-        destroy_data = null,
-        connect_flags = 0u,
+    runtime.createWindow(
+        title = title,
+        width = width,
+        height = height,
+        // Layer-shell bars stay transparent (RUNTIME_CSS); plain windows keep the
+        // legacy configurable background.
+        background = if (layerShell) null else windowBackground,
+        decorations = true,
+        cssClass = null,
+        bar = barSpec,
+        windowModifier = windowModifier,
+        content = content,
     )
-
-    gtk_window_present(window)
     println("[shell-ui] Compose composition mounted, entering GLib main loop")
-    g_main_loop_run(loop)
+    runtime.run()
 }

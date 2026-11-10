@@ -26,7 +26,7 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 ┌───────────────┴──────────────────────────────────────────────────┐
 │ shell-ui (Kotlin/Native library)                                 │
 │                                                                   │
-│  Compose Runtime              GtkNodeApplier        GTK4 + cinterop│
+│  Compose Runtime              GtkApplier            GTK4 + cinterop│
 │  ┌────────────────┐      ┌──────────────────┐    ┌───────────────┐│
 │  │ Composer /     │─────▶│ Applier<GtkNode> │───▶│ GtkWindow     ││
 │  │ Recomposer     │      │ Box/Label/Button │    │ GtkBox        ││
@@ -35,14 +35,16 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 │  └───────▲────────┘      └──────────────────┘    │ GtkDrawingArea││
 │          │ GLibFrameClock (16 ms, broadcast)     │ GtkScale      ││
 │          │ GLibDispatcher (g_idle_add)           └───────▲───────┘│
-│  GtkLayerShell: TOP layer, anchors bottom/left/right, rgba CSS    │
+│  gtk4-layer-shell: TOP layer, anchors top/left/right, rgba CSS    │
 └──────────────────────────────────────────────────────────────────┘
                 │ UniFFI (Kotlin/Native ←→ Rust)
 ┌───────────────┴──────────────────────────────────────────────────┐
 │ rust-core (Rust staticlib)                                        │
-│   WindowService  ← ext-foreign-toplevel-list-v1 via sctk 0.21     │
-│   MediaService   ← MPRIS via mpris 2.1 (blocking libdbus)         │
-│   AudioService   ← PipeWire through pipewire-pulse via pactl      │
+│  WindowService    ← ext-foreign-toplevel-list-v1 via sctk 0.21   │
+│  WorkspaceService ← Hyprland IPC event socket (poll fallback)    │
+│  MediaService     ← MPRIS via mpris 2.1 (blocking libdbus)       │
+│  AudioService     ← PipeWire through pipewire-pulse via pactl    │
+│  SystemService    ← /proc/stat + /proc/meminfo                   │
 └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -51,7 +53,7 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 | Module | Contents |
 |---|---|
 | `rust-core/` | Rust crate, UniFFI exports, services, Gobley cargo/uniffi plugins |
-| `shell-ui/` | GTK4 C interop, `GtkApplier`, Compose DSL, layer-shell, spring animation, services facade, panel UI |
+| `shell-ui/` | GTK4 C interop, `GtkApplier`, Compose DSL, shell runtime (`Shell.run`), layer-shell, spring animation, reactive services facade, bar kit (`ui/kit`) |
 | `shell-app/` | `main()` — starts the shell |
 
 ---
@@ -104,17 +106,25 @@ so a plain `./gradlew run` works without any manual setup (this also pins JDK 21
 ```bash
 ./gradlew build     # Rust (release) → UniFFI bindings → Kotlin/Native → link
 ./gradlew run       # build and launch the layer-shell panel
+./scripts/run.sh    # build, then exec the kexe as a standalone process
 ./scripts/demo.sh   # build + run with logging
 ```
+
+`./gradlew run` executes the binary as a child of the Gradle daemon; `scripts/run.sh` builds
+once and `exec`s `shell-app/build/bin/linuxX64/releaseExecutable/shell-app.kexe`, so the
+shell is a normal standalone process (handy for `hyprctl layers` checks and PID-based cleanup).
 
 ### Run modes (`KN_SHELL_MODE`)
 
 | Value | Behaviour |
 |---|---|
-| *(unset)* / `panel` | **production**: wlr-layer-shell bar (TOP layer, anchored bottom), no regular window |
+| *(unset)* / `panel` | **production**: wlr-layer-shell bar (TOP layer, anchored top/left/right), no regular window |
 | `windowed` | same panel in a normal GTK window — safe for testing, does not touch the desktop |
 | `demo` | Phase 4 test case: two circles animating with a spring |
 | `phase1` | Phase 1 applier smoke test (static Column/Label/Button) |
+| `multiwindow` | declarative `Shell.run`: layer-shell bar + dashboard window sharing one GLib loop and one Recomposer |
+
+`KN_SHELL_WINDOWED=1` is still accepted as a legacy alias for `windowed`.
 
 ```bash
 # safe test run — a normal window, no layer surface:
@@ -144,6 +154,32 @@ pactl set-sink-volume @DEFAULT_SINK@ 40%   # the panel slider follows the sink
 Screenshots: [`docs/screenshots/`](docs/screenshots) — layer-shell bar, windowed panel,
 circle animation, and the headless bar.
 
+### Shell API
+
+Windows are declared, not assembled by hand:
+
+```kotlin
+fun main() = Shell.run {
+    barWindow { TopBar() }                                     // wlr-layer-shell bar
+    window(WindowSpec("Dashboard", 420, 260)) { DashboardExample() }
+}
+```
+
+* `Shell.run { … }` mounts every declared window on one shared runtime (one GTK init, one GLib
+  loop, one Recomposer) and blocks until the last window closes.
+* `Shell.services` publishes the reactive Rust backend as `StateFlow`s: `windows`,
+  `workspaces`, `media`, `volume`, `system`.
+* `Shell.Hyprland` performs compositor actions: `focusWorkspace(name)`, `dispatch(lua)`,
+  `spawn(command)`.
+* `dev.knshell.ui.kit` provides `BarTheme`, the `pill`/`chip`/`pillText` modifiers and the
+  bar components (`Bar`, `Pill`, `WorkspaceStrip`, `MusicPill`, `VolumePill`, `MetricPill`,
+  `ClockPill`, `PowerPill`, …).
+
+The complete reference — window/bar specs, layers, anchors, margins, exclusive zone,
+keyboard mode, service latency, actions, the kit, the modifier table and extension points —
+is in [`docs/shell-api.md`](docs/shell-api.md). A focused bar-module tutorial (custom bar,
+kit overview) is in [`docs/bar-api.md`](docs/bar-api.md).
+
 ### The bar
 
 The default mode is a **waybar-like top bar** (`KN_SHELL_MODE=panel`, the default):
@@ -172,6 +208,12 @@ Label(
 provider for background/border/padding/font declarations; `rawStyle(selector, css)` is an escape
 hatch for widget internals (e.g. `GtkScale` trough/slider). Only the window root uses generated CSS
 (window background + font), built from `runComposeWindow` parameters.
+
+The built-in bar is a thin declarative composition: `Bar(BarTheme.Mocha)` with
+`start = MusicPill + UpdatesPill`, `center = WorkspaceStrip`, `end = NetworkPill + VolumePill +
+MetricPill(cpu) + MetricPill(mem) + ClockPill + PowerPill`. All styling, animation and service
+subscriptions live in `dev.knshell.ui.kit`; see [`docs/bar-api.md`](docs/bar-api.md) for writing
+your own modules.
 
 When the real waybar is running, the layer surface is placed below it (exclusive zone); stop waybar
 to see the bar at the very top edge.
@@ -246,6 +288,11 @@ committed.
 * Only `linuxX64` is configured.
 * The audio service polls `pactl` every 500 ms (no event subscription yet).
 * MPRIS support is polling-based (700 ms) and uses the first available player.
+* Toplevel windows and workspaces are event-driven (sctk `ext-foreign-toplevel-list-v1`,
+  Hyprland event socket `.socket2.sock`). Workspaces fall back to a 400 ms poll when the event
+  socket is unavailable and run a 2 s safety poll while listening; the service discovers the
+  instance signature itself, so it also works when the shell starts outside the compositor
+  environment.
 * Hyprland ≥ 0.5x evaluates dispatchers as Lua (`hl.dsp.focus({ workspace = "…" })`);
   `focus_workspace` uses that spelling and falls back to the legacy `dispatch workspace` form on older releases.
 * The privileged-sandbox environment made a nested Hyprland impossible (aquamarine's DRM backend
@@ -259,14 +306,20 @@ committed.
 .
 ├── gradle/libs.versions.toml     # pinned versions (Kotlin 2.1, Gobley 0.3.7, Compose runtime 1.7.3)
 ├── rust-core/                    # Rust crate + services
-│   ├── src/lib.rs                # UniFFI exports, listeners, records
+│   ├── src/lib.rs                # UniFFI exports, listeners, records, actions
 │   ├── src/windows.rs            # ext-foreign-toplevel-list-v1 (sctk)
+│   ├── src/workspaces.rs         # Hyprland IPC (event socket + polling fallback)
 │   ├── src/media.rs              # MPRIS
-│   └── src/audio.rs              # default sink volume
-├── shell-ui/                     # Compose → GTK bridge + panel
+│   ├── src/audio.rs              # default sink volume (pactl)
+│   └── src/system.rs             # CPU / memory from /proc
+├── shell-ui/                     # Compose → GTK bridge, shell runtime, bar kit
 │   ├── src/nativeInterop/cinterop/gtk4.def
-│   └── src/nativeMain/kotlin/dev/knshell/…
+│   └── src/nativeMain/kotlin/dev/knshell/
+│       ├── shell/                # Shell.run, ShellScope, ShellRuntime
+│       ├── ui/kit/               # BarTheme, pill/chip modifiers, components
+│       └── …
 ├── shell-app/                    # main()
-├── scripts/demo.sh
+├── scripts/demo.sh, scripts/run.sh
+├── docs/shell-api.md, docs/bar-api.md
 └── docs/screenshots/
 ```

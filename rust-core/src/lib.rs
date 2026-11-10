@@ -185,6 +185,61 @@ pub fn toggle_play_pause() {
     media::toggle_play_pause();
 }
 
+/// Runs a raw Hyprland dispatcher payload through `hyprctl dispatch`.
+///
+/// Hyprland >= 0.56 evaluates dispatchers as Lua, so callers pass a full Lua
+/// expression such as `hl.dsp.focus({ workspace = "2" })`.
+#[uniffi::export]
+pub fn hyprctl_dispatch(lua: String) {
+    if !run_hyprctl_dispatch(&lua) {
+        eprintln!("[rust/actions] hyprctl dispatch failed: {lua}");
+    }
+}
+
+/// Launches `sh -c <command>` detached from the shell process.
+///
+/// Output is discarded so the child never blocks on the shell's stdio; a reaper thread
+/// waits for the child to avoid leaving a zombie behind.
+#[uniffi::export]
+pub fn spawn_command(command: String) {
+    match std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&command)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    {
+        Ok(mut child) => {
+            std::thread::spawn(move || {
+                let _ = child.wait();
+            });
+        }
+        Err(error) => eprintln!("[rust/actions] failed to spawn `{command}`: {error}"),
+    }
+}
+
+/// Runs `hyprctl dispatch <lua>`; returns whether the dispatcher was accepted.
+fn run_hyprctl_dispatch(lua: &str) -> bool {
+    match std::process::Command::new("hyprctl")
+        .args(["dispatch", lua])
+        .output()
+    {
+        Ok(output) if output.status.success() => true,
+        Ok(output) => {
+            eprintln!(
+                "[rust/actions] hyprctl dispatch rejected: {}",
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            false
+        }
+        Err(error) => {
+            eprintln!("[rust/actions] failed to run hyprctl: {error}");
+            false
+        }
+    }
+}
+
 /// Switches the focused Hyprland workspace (click on a workspace chip in the bar).
 ///
 /// Hyprland >= 0.5x evaluates dispatchers as Lua (`hl.dsp.focus({ workspace = "..." })`);
@@ -195,16 +250,8 @@ pub fn focus_workspace(name: String) {
     let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
     let lua = format!("hl.dsp.focus({{ workspace = \"{escaped}\" }})");
 
-    match std::process::Command::new("hyprctl")
-        .args(["dispatch", &lua])
-        .output()
-    {
-        Ok(output) if output.status.success() => return,
-        Ok(output) => eprintln!(
-            "[rust/workspaces] modern dispatch failed ({}); trying legacy syntax",
-            String::from_utf8_lossy(&output.stderr).trim()
-        ),
-        Err(error) => eprintln!("[rust/workspaces] failed to run hyprctl: {error}"),
+    if run_hyprctl_dispatch(&lua) {
+        return;
     }
 
     // Legacy dispatcher syntax for older Hyprland releases.
