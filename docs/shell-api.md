@@ -282,18 +282,22 @@ its main child, overlay children are painted on top (centered) and never affect 
 measured size. Combine with `clipOverflow()` to clip the overflow.
 
 ```kotlin
-Box(
+Overlay(
     Modifier
         .size(16, 16)
         .radius(8)
         .background(Catppuccin.Surface3)
         .clipOverflow(),
 ) {
-    Overlay(Modifier.fillMaxSize()) {
-        Text("2", size = 10)   // 10px label: drawn inside 16px, does not stretch the chip
-    }
+    Text("2", size = 10)   // 10px label: drawn inside 16px, does not stretch the chip
 }
 ```
+
+Give the Overlay its size through the Modifier. It deliberately does **not** set
+`hexpand`/`vexpand`: `GtkBox` aggregates its children's expand flags, so an expanding
+Overlay would make the surrounding box claim extra space and stretch (e.g. a workspace chip
+stretched across the whole row). If you *do* want the overlay to fill a parent that already
+allocates space, pass `Modifier.fillMaxSize()` explicitly.
 
 Verified semantics: a `GtkOverlay` whose main child is empty measures 0×0 even with a 17px
 overlay label. Use it for badges, counters, icons over fixed-size shapes; keep regular

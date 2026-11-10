@@ -93,12 +93,11 @@ open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
 class GtkOverlayNode : GtkNode(gtk_overlay_new()!!) {
     init {
         val overlay = widget.reinterpret<GtkOverlay>()
-        // Invisible main child: it alone defines the measured size (0x0).
+        // Invisible main child: it alone defines the measured size (0x0), so the Overlay
+        // itself is sized by the Modifier (size/min-size). No expand here: GtkBox aggregates
+        // children's expand flags, and an expanding Overlay would stretch its parent (e.g. a
+        // workspace chip inside a Row). Overlay children stay centered.
         gtk_overlay_set_child(overlay, gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!)
-        gtk_widget_set_hexpand(widget, 1)
-        gtk_widget_set_vexpand(widget, 1)
-        gtk_widget_set_halign(widget, GTK_ALIGN_FILL)
-        gtk_widget_set_valign(widget, GTK_ALIGN_FILL)
     }
 
     override fun attachChild(child: CPointer<GtkWidget>) {

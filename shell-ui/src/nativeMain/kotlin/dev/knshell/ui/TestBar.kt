@@ -15,11 +15,13 @@ import dev.knshell.compose.Catppuccin
 import dev.knshell.compose.CenterBox
 import dev.knshell.compose.Color
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.Overlay
 import dev.knshell.compose.Row
 import dev.knshell.compose.background
 import dev.knshell.compose.centerVertically
 import dev.knshell.compose.fillMaxWidth
 import dev.knshell.compose.fillMaxHeight
+import dev.knshell.compose.fillMaxSize
 import dev.knshell.compose.fontFamily
 import dev.knshell.compose.fontSize
 import dev.knshell.compose.height
@@ -43,7 +45,7 @@ fun TestBar() {
             .fillMaxWidth()
             .fillMaxHeight()
             .fontFamily("JetBrainsMono Nerd Font")
-            .fontSize(7),
+            .fontSize(13),
         start = { HSpace(1) },
         center = { Workspaces() },
         end = { HSpace(1) },
@@ -71,22 +73,22 @@ private fun Workspaces() {
 @Composable
 private fun WorkspaceChip(workspace: WorkspaceInfo) {
     val chipWidth by animateFloatAsState(
-        targetValue = if (workspace.active) 32f else 16f,
+        targetValue = if (workspace.active) 40f else 28f,
         durationMs = 180,
         easing = Easing.OutCubic,
     )
 
-    Box(
+    Overlay(
         modifier = Modifier
-            .size(chipWidth.toInt(), 8)
-            .radius(999)
+            .size(chipWidth.toInt(), 28)
+            .radius(14)
             .background(
                 if (workspace.active) Catppuccin.Mauve else Catppuccin.Surface3,
                 transitionMs = 150,
             )
-            .textColor(if (workspace.active) Catppuccin.Crust else Catppuccin.Text)
-        ,                // щоб 17px рядок став по центру 28px
-    ) {
-//        if (workspace.active)Text( workspace.name)
+            .centerVertically()
+            .textColor(if (workspace.active) Catppuccin.Crust else Catppuccin.Text),
+    ) {40f
+        Text(workspace.name)
     }
 }
