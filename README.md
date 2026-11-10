@@ -115,8 +115,10 @@ KN_SHELL_MODE=panel ./scripts/dev.sh --watch
 ./gradlew build
 ```
 
-`scripts/dev.sh` notices Rust source changes and cleans the native build dirs before
-rebuilding: incremental links were observed to reuse a stale Rust static library, silently
+`scripts/dev.sh` runs the shell in its own process group with output in
+`shell-app/build/dev.log` (`--logs` follows it), so Ctrl+C stops both the watcher and the
+app — no orphaned process and no log spam in the terminal. It also notices Rust source
+changes and cleans the native build dirs before rebuilding: incremental links were observed to reuse a stale Rust static library, silently
 running old service code (e.g. the workspace list staying empty for seconds at startup).
 
 Measured on this machine (one changed Kotlin file): **debug 12 s**, **release 82–95 s** —
