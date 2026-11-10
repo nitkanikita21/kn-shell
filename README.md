@@ -102,14 +102,26 @@ so a plain `./gradlew run` works without any manual setup (this also pins JDK 21
 ## Build & run
 
 ```bash
-./gradlew build     # Rust (release) → UniFFI bindings → Kotlin/Native → link
-./gradlew run       # build and launch the layer-shell panel
-./scripts/run.sh    # build, then exec the kexe as a standalone process
+# fast development loop — Kotlin/Native DEBUG binary (no LTO)
+./scripts/dev.sh                 # build + run (windowed by default)
+./scripts/dev.sh --watch         # rebuild + restart on .kt/.rs changes
+KN_SHELL_MODE=panel ./scripts/dev.sh --watch
+
+# release build — whole-program LTO, slower to link but optimized
+./scripts/run.sh                 # builds only :shell-app:linkReleaseExecutableLinuxX64
+./gradlew run                    # same, but runs the binary under the Gradle daemon
+
+# everything at once (slow: debug + release + tests)
+./gradlew build
 ```
 
+Measured on this machine (one changed Kotlin file): **debug 12 s**, **release 82–95 s** —
+release pays for whole-program LTO. `scripts/dev.sh` builds
+`linkDebugExecutableLinuxX64` and runs `debugExecutable/shell-app.kexe`; with `--watch` it
+polls mtimes every second and restarts the process, so UI edits need no manual commands.
 `./gradlew run` executes the binary as a child of the Gradle daemon; `scripts/run.sh` builds
-once and `exec`s `shell-app/build/bin/linuxX64/releaseExecutable/shell-app.kexe`, so the
-shell is a normal standalone process (handy for `hyprctl layers` checks and PID-based cleanup).
+once and `exec`s `releaseExecutable/shell-app.kexe`, so the shell is a normal standalone
+process (handy for `hyprctl layers` checks and PID-based cleanup).
 
 ### Run modes (`KN_SHELL_MODE`)
 
@@ -316,6 +328,6 @@ committed.
 │       ├── ui/primitives/        # Space/HSpace/VSpace, Spacer, Icon, Text
 │       └── services/             # ShellServices facade over the Rust backend
 ├── shell-app/                    # main()
-├── scripts/run.sh, scripts/gobley-rustup.sh
+├── scripts/dev.sh, scripts/run.sh, scripts/gobley-rustup.sh
 └── docs/shell-api.md, docs/bar-api.md
 ```
