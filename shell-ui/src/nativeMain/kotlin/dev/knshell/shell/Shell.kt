@@ -46,6 +46,9 @@ object Shell {
      * Compose content mounted into their own GTK window.
      */
     fun run(content: ShellScope.() -> Unit) {
+        // Bring up the reactive backend once; subscriptions are idempotent. Without this
+        // no Rust service is subscribed and every flow stays empty.
+        ShellServices.start()
         val current = runtime
         ShellScope(current).content()
 

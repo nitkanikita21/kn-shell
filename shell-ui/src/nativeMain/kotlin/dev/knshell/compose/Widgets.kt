@@ -259,19 +259,30 @@ fun Row(spacing: Int = 8, modifier: Modifier = Modifier, content: @Composable ()
     gtkBox(vertical = false, spacing = spacing, modifier = modifier, content = content)
 }
 
-/** Empty container, useful as a [Spacer] or as a sized gap between widgets. */
+/**
+ * Generic container — the "div" of this toolkit.
+ *
+ * Children stack vertically (block flow); use [Row] / [Column] for flex layouts. All
+ * styling comes from the [Modifier]: size, padding, background, radius, hover, etc.
+ * A plain visible bar surface is just
+ * `Box(Modifier.fillMaxWidth().height(40).background(color)) { ... }`.
+ *
+ * Layer-shell windows are transparent: if nothing paints, the bar is invisible.
+ */
 @Composable
-fun Box(modifier: Modifier = Modifier) {
+fun Box(modifier: Modifier = Modifier, content: @Composable () -> Unit = {}) {
     ComposeNode<GtkBoxNode, GtkApplier>(
         factory = {
             GtkBoxNode(
-                gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!,
+                gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!,
             )
         },
         update = {
             set(modifier) { value -> applyModifier(value) }
         },
-    )
+    ) {
+        content()
+    }
 }
 
 @Composable
