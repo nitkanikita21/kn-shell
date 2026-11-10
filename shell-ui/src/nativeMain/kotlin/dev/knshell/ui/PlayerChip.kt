@@ -10,7 +10,10 @@ import androidx.compose.runtime.setValue
 import dev.knshell.compose.Box
 import dev.knshell.compose.Color
 import dev.knshell.compose.Label
+import dev.knshell.compose.Align
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.align
+import dev.knshell.compose.Row
 import dev.knshell.compose.centerVertically
 import dev.knshell.compose.fillMaxHeight
 import dev.knshell.compose.fontSize
@@ -23,8 +26,6 @@ import dev.knshell.compose.radius
 import dev.knshell.compose.textColor
 import dev.knshell.services.ShellServices
 import kotlinx.coroutines.delay
-
-private val TrackText = Color.hex(0x111111)
 
 // Lighter silver base with a white sheen band that fades out at both ends, so the loop
 // restarts invisibly and the animation is seamless.
@@ -71,20 +72,27 @@ fun PlayerChip(
         Color.Transparent to 1f,
     )
 
-    Box(
+    Row(
         modifier = Modifier
-            .fillMaxHeight()
-            .centerVertically()
+            .align(v = Align.Fill)
+            .align(v = Align.Center)
             .radius(8)
             .background(SheenBase)
             .gradientStops(*sheenStops, angleDeg = 100f)
             .pointerCursor()
             .onClick { onClick?.invoke() ?: ShellServices.togglePlayPause() }
+            .align(v = Align.Center)
             .padding(horizontal = 14, vertical = 4),
     ) {
+        CavaEqualizer(
+            width = 80,
+            height = 20,
+            bars = 6,
+            color = Grayscale.Surface,
+        )
         Label(
-            text = track,
-            modifier = Modifier.fontSize(12).textColor(TrackText),
+            text = "${media.artist ?: ""} - $track",
+            modifier = Modifier.fontSize(12).textColor(Grayscale.Surface),
             align = 0f,
         )
     }

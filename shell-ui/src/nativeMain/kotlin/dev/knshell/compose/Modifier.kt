@@ -298,24 +298,7 @@ fun Modifier.width(width: Int): Modifier = with(SizeElement(width, null))
 
 fun Modifier.height(height: Int): Modifier = with(SizeElement(null, height))
 
-fun Modifier.fillMaxWidth(): Modifier = with(ExpandElement(horizontal = true, vertical = false)).with(
-    AlignElement(horizontal = GTK_ALIGN_FILL, vertical = null),
-)
 
-/** Take all available vertical space (`vexpand` + vertical `GTK_ALIGN_FILL`). */
-fun Modifier.fillMaxHeight(): Modifier = with(ExpandElement(horizontal = false, vertical = true)).with(
-    AlignElement(horizontal = null, vertical = GTK_ALIGN_FILL),
-)
-
-/** Take all available space in both directions. */
-fun Modifier.fillMaxSize(): Modifier = with(ExpandElement(horizontal = true, vertical = true)).with(
-    AlignElement(horizontal = GTK_ALIGN_FILL, vertical = GTK_ALIGN_FILL),
-)
-
-fun Modifier.centerVertically(): Modifier = with(AlignElement(horizontal = null, vertical = GTK_ALIGN_CENTER))
-
-/** Centers a child horizontally inside its parent [Row] (or any allocating box). */
-fun Modifier.centerHorizontally(): Modifier = with(AlignElement(horizontal = GTK_ALIGN_CENTER, vertical = null))
 
 fun Modifier.opacity(value: Float): Modifier = with(OpacityElement(value))
 

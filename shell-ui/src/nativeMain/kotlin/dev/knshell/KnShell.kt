@@ -64,11 +64,7 @@ fun startKnShell() {
                         height = 40,
                         layer = if (overlayDev) BarLayer.Overlay else BarLayer.Top,
                         anchors = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
-                        margins = if (overlayDev) {
-                            Margins(top = -40, left = 10, right = 10, bottom = 0)
-                        } else {
-                            Margins(top = 0, left = 10, right = 10, bottom = 0)
-                        },
+                        margins = Margins(top = 0, left = 0, right = 0, bottom = 30),
                         exclusiveZone = if (overlayDev) ExclusiveZone.None else ExclusiveZone.Auto,
                         namespace = "my-bar",
                     ),
