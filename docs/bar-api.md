@@ -175,6 +175,29 @@ Tips:
 * true blur/glow shaders (`GskGLShader` / `gtk_snapshot_push_gl_shader`) are possible but
   require the GL renderer and a custom GSK node — not wired up yet.
 
+### Audio visualiser (CAVA)
+
+`CavaEqualizer` draws a real audio spectrum: the Rust `spectrum` service spawns a `cava`
+child with a generated raw-ASCII config and publishes 16 bar values (`0..100`) at 30 fps
+through `ShellServices.spectrum`.
+
+```kotlin
+Row(spacing = 8) {
+    PlayerChip()
+    HSpace(8)
+    CavaEqualizer(width = 80, height = 20, color = Grayscale.Background)
+}
+```
+
+Requirements: `cava` must be installed (`pacman -S cava`); the service feeds it PulseAudio
+(pipewire-pulse works) and respawns it if it exits. With no audio playing the bars stay
+flat. A plain widget for custom drawing:
+
+```kotlin
+val bars by ShellServices.spectrum.collectAsState()
+Canvas(96, 20) { cr, w, h -> /* draw bars from 0..100 values */ }
+```
+
 ## The bar itself
 
 ```kotlin

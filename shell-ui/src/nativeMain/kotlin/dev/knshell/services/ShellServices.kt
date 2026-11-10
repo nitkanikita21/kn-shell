@@ -1,6 +1,7 @@
 package dev.knshell.services
 
 import dev.knshell.core.MediaListener
+import dev.knshell.core.SpectrumListener
 import dev.knshell.core.SystemListener
 import dev.knshell.core.SystemStats
 import dev.knshell.core.WorkspaceInfo
@@ -13,6 +14,7 @@ import dev.knshell.core.subscribeMedia
 import dev.knshell.core.subscribeVolume
 import dev.knshell.core.subscribeWindows
 import dev.knshell.core.subscribeSystem
+import dev.knshell.core.subscribeSpectrum
 import dev.knshell.core.subscribeWorkspaces
 import dev.knshell.core.setVolume
 import dev.knshell.core.togglePlayPause
@@ -31,6 +33,8 @@ object ShellServices {
     val media = MutableStateFlow(MediaState("", "", false, "", false))
     val workspaces = MutableStateFlow<List<WorkspaceInfo>>(emptyList())
     val system = MutableStateFlow(SystemStats(0, 0))
+    /** CAVA bars, 0..100, 16 values by default. */
+    val spectrum = MutableStateFlow<List<Int>>(List(16) { 0 })
 
     private val retained = mutableListOf<Any>()
     private var started = false
@@ -95,5 +99,13 @@ object ShellServices {
         }
         retained += systemListener
         subscribeSystem(systemListener)
+
+        val spectrumListener = object : SpectrumListener {
+            override fun onSpectrum(bars: List<Int>) {
+                this@ShellServices.spectrum.value = bars
+            }
+        }
+        retained += spectrumListener
+        subscribeSpectrum(spectrumListener)
     }
 }

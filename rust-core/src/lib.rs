@@ -13,6 +13,7 @@
 
 mod audio;
 mod media;
+mod spectrum;
 mod system;
 mod windows;
 mod workspaces;
@@ -277,3 +278,30 @@ pub(crate) use broadcast_system_stats as publish_system_stats;
 pub(crate) use broadcast_volume as publish_volume;
 pub(crate) use broadcast_windows as publish_windows;
 pub(crate) use broadcast_workspaces as publish_workspaces;
+
+
+/// Audio spectrum frames from CAVA (values in `0..=100`, one per bar).
+#[uniffi::export(callback_interface)]
+pub trait SpectrumListener: Send + Sync {
+    fn on_spectrum(&self, bars: Vec<i32>);
+}
+
+pub(crate) fn spectrum_listeners() -> &'static Mutex<Vec<Arc<dyn SpectrumListener>>> {
+    static REGISTRY: OnceLock<Mutex<Vec<Arc<dyn SpectrumListener>>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn broadcast_spectrum(bars: Vec<i32>) {
+    let listeners: Vec<Arc<dyn SpectrumListener>> = spectrum_listeners().lock().unwrap().clone();
+    for listener in listeners {
+        listener.on_spectrum(bars.clone());
+    }
+}
+
+pub(crate) use broadcast_spectrum as publish_spectrum;
+
+#[uniffi::export]
+pub fn subscribe_spectrum(listener: Box<dyn SpectrumListener>) {
+    spectrum_listeners().lock().unwrap().push(Arc::from(listener));
+    spectrum::ensure_started();
+}
