@@ -131,6 +131,50 @@ the widget node (plain GTK calls, no Compose recomposition). The first applicati
 the initial value; removing the widget cancels its tween. Colours are better handled by
 `transition(ms)` / `transitionMs` (native GTK transitions).
 
+### Gradients and effects
+
+Static gradients are native GTK CSS (no frame loop):
+
+```kotlin
+Box(Modifier.size(120, 32).radius(16).gradient(Grayscale.Background, Grayscale.Accent, angleDeg = 90f))
+Box(Modifier.size(32, 32).radius(16).radialGradient(Grayscale.Accent, Grayscale.Background))
+Box(Modifier.size(120, 32).radius(16).glow(Grayscale.Accent, blur = 16, spread = 2))
+```
+
+Animated effects (shimmer, moving gradient, pulse) are done with `Canvas` + cairo, which
+gives float geometry and real per-frame control:
+
+```kotlin
+@Composable
+fun ShimmerPill() {
+    var phase by remember { mutableStateOf(0f) }
+    LaunchedEffect(Unit) {
+        while (true) withFrameNanos { phase = (phase + 0.012f) % 1f }
+    }
+
+    Canvas(160, 32) { cr, w, h ->
+        val pattern = cairo_pattern_create_linear(0.0, 0.0, w.toDouble(), 0.0)
+        val mid = phase.coerceIn(0.05f, 0.95f)
+        cairo_pattern_add_color_stop_rgba(pattern, 0.0, 0.08, 0.08, 0.08, 1.0)
+        cairo_pattern_add_color_stop_rgba(pattern, mid.toDouble(), 0.81, 0.81, 0.81, 0.55)
+        cairo_pattern_add_color_stop_rgba(pattern, 1.0, 0.08, 0.08, 0.08, 1.0)
+        cairo_set_source(cr, pattern)
+        cairo_paint(cr)
+        cairo_pattern_destroy(pattern)
+    }
+}
+```
+
+Tips:
+
+* a gradient respects `radius(...)` clipping on the same widget (GTK clips the background);
+* animate `glow` colour with `transition(ms)` instead of a frame loop — GTK interpolates
+  `box-shadow` natively;
+* per-frame CSS gradient changes are expensive; for animation use `Canvas`, not
+  `gradient(...)`;
+* true blur/glow shaders (`GskGLShader` / `gtk_snapshot_push_gl_shader`) are possible but
+  require the GL renderer and a custom GSK node — not wired up yet.
+
 ## The bar itself
 
 ```kotlin

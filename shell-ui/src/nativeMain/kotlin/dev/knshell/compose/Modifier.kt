@@ -146,6 +146,15 @@ internal data class LetterSpacingElement(val px: Float) : ModifierElement
 
 internal data class TransitionElement(val ms: Int) : ModifierElement
 
+/** CSS linear-gradient background. */
+internal data class LinearGradientElement(val stops: List<Color>, val angleDeg: Float) : ModifierElement
+
+/** CSS radial-gradient background. */
+internal data class RadialGradientElement(val stops: List<Color>) : ModifierElement
+
+/** Coloured glow around the widget (box-shadow). */
+internal data class GlowElement(val color: Color, val blur: Int, val spread: Int) : ModifierElement
+
 /** Text selection colours inside a label. */
 internal data class SelectionElement(val background: Color, val color: Color) : ModifierElement
 
@@ -226,6 +235,27 @@ fun Modifier.fontWeight(weight: Int): Modifier = with(FontWeightElement(weight))
 fun Modifier.letterSpacing(px: Float): Modifier = with(LetterSpacingElement(px))
 
 fun Modifier.transition(ms: Int): Modifier = with(TransitionElement(ms))
+
+/**
+ * Linear gradient background (native GTK CSS, no frame loop).
+ *
+ * ```kotlin
+ * Box(Modifier.size(120, 32).gradient(Grayscale.Background, Grayscale.Accent, angleDeg = 90f))
+ * ```
+ */
+fun Modifier.gradient(vararg stops: Color, angleDeg: Float = 90f): Modifier =
+    with(LinearGradientElement(stops.toList(), angleDeg))
+
+/** Radial gradient background (native GTK CSS). */
+fun Modifier.radialGradient(vararg stops: Color): Modifier =
+    with(RadialGradientElement(stops.toList()))
+
+/**
+ * Coloured glow around the widget (`box-shadow: 0 0 blur spread color`).
+ * Animate its colour with [transition] for a pulsing effect.
+ */
+fun Modifier.glow(color: Color, blur: Int = 12, spread: Int = 0): Modifier =
+    with(GlowElement(color, blur, spread))
 
 fun Modifier.bold(): Modifier = with(BoldElement)
 
@@ -566,6 +596,15 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is FontWeightElement -> rules += "" to "font-weight: ${element.weight};"
 
             is LetterSpacingElement -> rules += "" to "letter-spacing: ${element.px}px;"
+
+            is LinearGradientElement -> rules += "" to
+                "background-image: linear-gradient(${element.angleDeg}deg, ${element.stops.joinToString(", ") { it.toCss() }});"
+
+            is RadialGradientElement -> rules += "" to
+                "background-image: radial-gradient(circle, ${element.stops.joinToString(", ") { it.toCss() }});"
+
+            is GlowElement -> rules += "" to
+                "box-shadow: 0 0 ${element.blur}px ${element.spread}px ${element.color.toCss()};"
 
             is TransitionElement -> rules += "" to "transition: color ${element.ms}ms ease, background-color ${element.ms}ms ease, border-color ${element.ms}ms ease, box-shadow ${element.ms}ms ease, opacity ${element.ms}ms ease;"
 
