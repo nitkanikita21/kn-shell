@@ -96,7 +96,7 @@ internal data class BackgroundElement(
 ) : ModifierElement
 
 internal data class HoverBackgroundElement(val color: Color) : ModifierElement
-internal data class TextColorElement(val color: Color) : ModifierElement
+internal data class TextColorElement(val color: Color, val transitionMs: Int) : ModifierElement
 internal data class FontSizeElement(val px: Int) : ModifierElement
 internal data class FontFamilyElement(val family: String) : ModifierElement
 internal data object BoldElement : ModifierElement
@@ -143,6 +143,8 @@ internal data class FontWeightElement(val weight: Int) : ModifierElement
 
 /** Letter spacing in CSS pixels. */
 internal data class LetterSpacingElement(val px: Float) : ModifierElement
+
+internal data class TransitionElement(val ms: Int) : ModifierElement
 
 /** Text selection colours inside a label. */
 internal data class SelectionElement(val background: Color, val color: Color) : ModifierElement
@@ -202,7 +204,7 @@ fun Modifier.background(
 
 fun Modifier.hoverBackground(color: Color): Modifier = with(HoverBackgroundElement(color))
 
-fun Modifier.textColor(color: Color): Modifier = with(TextColorElement(color))
+fun Modifier.textColor(color: Color, transitionMs: Int = 0): Modifier = with(TextColorElement(color, transitionMs))
 
 fun Modifier.fontSize(px: Int): Modifier = with(FontSizeElement(px))
 
@@ -222,6 +224,8 @@ fun Modifier.fontWeight(weight: Int): Modifier = with(FontWeightElement(weight))
 
 /** Letter spacing in CSS pixels (fractional allowed). */
 fun Modifier.letterSpacing(px: Float): Modifier = with(LetterSpacingElement(px))
+
+fun Modifier.transition(ms: Int): Modifier = with(TransitionElement(ms))
 
 fun Modifier.bold(): Modifier = with(BoldElement)
 
@@ -434,7 +438,13 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
 
             is HoverBackgroundElement -> rules += ":hover" to "background-color: ${element.color.toCss()};"
 
-            is TextColorElement -> rules += "" to "color: ${element.color.toCss()};"
+            is TextColorElement -> {
+                val d = buildString {
+                    append("color: ${element.color.toCss()};")
+                    if (element.transitionMs > 0) append(" transition: color ${element.transitionMs}ms ease;")
+                }
+                rules += "" to d
+            }
 
             is FontSizeElement -> rules += "" to "font-size: ${element.px}px;"
 
@@ -524,6 +534,8 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is FontWeightElement -> rules += "" to "font-weight: ${element.weight};"
 
             is LetterSpacingElement -> rules += "" to "letter-spacing: ${element.px}px;"
+
+            is TransitionElement -> rules += "" to "transition: color ${element.ms}ms ease, background-color ${element.ms}ms ease, border-color ${element.ms}ms ease, box-shadow ${element.ms}ms ease, opacity ${element.ms}ms ease;"
 
             is SelectionElement ->
                 rules += " selection" to "background-color: ${element.background.toCss()}; color: ${element.color.toCss()};"

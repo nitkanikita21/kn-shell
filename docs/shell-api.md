@@ -251,7 +251,8 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `hoverTextColor(color)` / `checkedTextColor(color)` | text colour for `:hover` / `:checked` |
 | `focusRing(color, width = 2, offset = 0)` | keyboard focus outline for `:focus-visible` |
 | `minWidth(px)` / `minHeight(px)` / `minSize(w, h)` | CSS minimums after the plain reset removed the theme's |
-| `textColor(color)` / `fontSize(px)` / `fontFamily(name)` / `bold()` | CSS text declarations |
+| `textColor(color, transitionMs = 0)` / `fontSize(px)` / `fontFamily(name)` / `bold()` | CSS text declarations; `transitionMs` animates the text colour |
+| `transition(ms)` | native GTK transition for colour-like props (color/background/border/shadow/opacity) |
 | `italic()` / `underline()` / `strikethrough()` | `font-style: italic` / `text-decoration-line` |
 | `fontWeight(weight)` | numeric weight: `400` normal, `700` bold, `900` heavy |
 | `letterSpacing(px)` | CSS `letter-spacing` (fractional ok) |
