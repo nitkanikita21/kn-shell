@@ -17,9 +17,6 @@ import dev.knshell.compose.align
 import dev.knshell.compose.Overlay
 import dev.knshell.compose.Row
 import dev.knshell.compose.background
-import dev.knshell.compose.centerVertically
-import dev.knshell.compose.fillMaxWidth
-import dev.knshell.compose.fillMaxHeight
 import dev.knshell.compose.fontFamily
 import dev.knshell.compose.fontSize
 import dev.knshell.compose.fontWeight

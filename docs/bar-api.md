@@ -205,7 +205,7 @@ Canvas(96, 20) { cr, w, h -> /* draw bars from 0..100 values */ }
 fun MyBar() {
     CenterBox(
         modifier = Modifier
-            .fillMaxWidth()
+            .align(h = Align.Fill)
             .height(40)
             .fontFamily("JetBrainsMono Nerd Font")
             .fontSize(13),

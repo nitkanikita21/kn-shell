@@ -157,7 +157,7 @@ with the Modifier DSL.
 @Composable
 fun MyBar() {
     CenterBox(
-        modifier = Modifier.fillMaxWidth().height(40)
+        modifier = Modifier.align(h = Align.Fill).height(40)
             .fontFamily("JetBrainsMono Nerd Font").fontSize(13),
         start = { Row(spacing = 6) { Clock() } },
         center = { Space(16) },
@@ -263,9 +263,10 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `slider(troughColor, troughHeight, highlightColor, knobColor, knobSize)` | typed styling of `GtkScale` trough/highlight/knob |
 | `size(w, h)` / `width(w)` / `height(h)` | `gtk_widget_set_size_request` |
 | `widthBehavior(ms, easing)` / `heightBehavior(...)` / `sizeBehavior(...)` | opt-in QML-like Behavior: tweens later width / height / both changes |
-| `fillMaxWidth()` | `hexpand` + horizontal `GTK_ALIGN_FILL` |
-| `centerVertically()` | vertical `GTK_ALIGN_CENTER` |
-| `centerHorizontally()` | horizontal `GTK_ALIGN_CENTER` |
+| `align(h = …, v = …)` / `align(Align.…)` | unified alignment on one or both axes |
+| `hExpand()` / `vExpand()` / `expand()` | grow + fill on one axis / both |
+| `fillWidth()` / `fillHeight()` / `fillAll()` | shorthand for expand + fill |
+| `centerH()` / `centerV()` / `centerBoth()` | shorthand for align(Center) |
 | `opacity(value)` | `gtk_widget_set_opacity` |
 | `clipOverflow()` | `gtk_widget_set_overflow(GTK_OVERFLOW_HIDDEN)` — clip children to the allocation |
 | `onClick { … }` | click gesture on any widget (Label, Icon, Box, …) |
@@ -309,7 +310,7 @@ Give the Overlay its size through the Modifier. It deliberately does **not** set
 `hexpand`/`vexpand`: `GtkBox` aggregates its children's expand flags, so an expanding
 Overlay would make the surrounding box claim extra space and stretch (e.g. a workspace chip
 stretched across the whole row). If you *do* want the overlay to fill a parent that already
-allocates space, pass `Modifier.fillMaxSize()` explicitly.
+allocates space, pass `Modifier.align(Align.Fill)` explicitly.
 
 Verified semantics: a `GtkOverlay` whose main child is empty measures 0×0 even with a 17px
 overlay label. Use it for badges, counters, icons over fixed-size shapes; keep regular
@@ -333,7 +334,7 @@ Row(spacing = 0, modifier = Modifier.padding(horizontal = 8, vertical = 4)) {
 ```
 
 The row width is now `slots * 48 + padding * 2` and never changes when the active item
-moves; only the chip inside its slot animates (`Modifier.centerHorizontally()` keeps it
+moves; only the chip inside its slot animates (`Modifier.align(h = Align.Center)` keeps it
 centered). This also removes the parent-layout jitter caused by several simultaneous width
 animations.
 

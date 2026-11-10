@@ -7,7 +7,6 @@ import dev.knshell.compose.CenterBox
 import dev.knshell.compose.Color
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.Row
-import dev.knshell.compose.fillMaxWidth
 import dev.knshell.compose.fontFamily
 import dev.knshell.compose.fontSize
 import dev.knshell.compose.height

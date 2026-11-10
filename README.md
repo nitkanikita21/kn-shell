@@ -229,7 +229,7 @@ DSL and `Shell.services`:
 @Composable
 fun MyBar() {
     CenterBox(
-        modifier = Modifier.fillMaxWidth().height(40)
+        modifier = Modifier.align(h = Align.Fill).height(40)
             .fontFamily("JetBrainsMono Nerd Font").fontSize(13),
         start = { Row(spacing = 6) { Clock() } },
         center = { Space(16) },

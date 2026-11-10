@@ -14,8 +14,6 @@ import dev.knshell.compose.Align
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.align
 import dev.knshell.compose.Row
-import dev.knshell.compose.centerVertically
-import dev.knshell.compose.fillMaxHeight
 import dev.knshell.compose.fontSize
 import dev.knshell.compose.background
 import dev.knshell.compose.gradientStops
@@ -40,7 +38,7 @@ private fun smoothstep(edge: Float, value: Float): Float {
  * Player chip: silver gradient with a rotating sheen and a black track title.
  *
  * Sizes itself: the width follows the text plus padding, the height fills the parent row
- * (`fillMaxHeight`), so there is nothing to hard-code. Clicking toggles play/pause.
+ * (`.align(v = Align.Fill)`), so there is nothing to hard-code. Clicking toggles play/pause.
  */
 @Composable
 fun PlayerChip(

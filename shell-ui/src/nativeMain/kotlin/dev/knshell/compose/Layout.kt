@@ -2,6 +2,11 @@
 
 package dev.knshell.compose
 
+import kn.gtk.GTK_ALIGN_CENTER
+import kn.gtk.GTK_ALIGN_END
+import kn.gtk.GTK_ALIGN_FILL
+import kn.gtk.GTK_ALIGN_START
+
 import kotlinx.cinterop.ExperimentalForeignApi
 import kn.gtk.GTK_ALIGN_CENTER
 import kn.gtk.GTK_ALIGN_END
@@ -59,20 +64,3 @@ fun Modifier.fillAll(): Modifier = expand().align(Align.Fill)
 fun Modifier.centerH(): Modifier = align(h = Align.Center)
 fun Modifier.centerV(): Modifier = align(v = Align.Center)
 fun Modifier.centerBoth(): Modifier = align(Align.Center)
-
-// ── Backward-compat aliases (deprecated, migrate to align/hExpand/vExpand) ──
-@Deprecated("Use Modifier.align(h = Align.Fill)", ReplaceWith("align(h = Align.Fill)"))
-fun Modifier.fillMaxWidth(): Modifier = hExpand().align(h = Align.Fill)
-
-@Deprecated("Use Modifier.align(v = Align.Fill)", ReplaceWith("align(v = Align.Fill)"))
-fun Modifier.fillMaxHeight(): Modifier = vExpand().align(v = Align.Fill)
-
-@Deprecated("Use Modifier.align(Align.Fill)", ReplaceWith("align(Align.Fill)"))
-fun Modifier.fillMaxSize(): Modifier = expand().align(Align.Fill)
-
-@Deprecated("Use Modifier.align(v = Align.Center)", ReplaceWith("align(v = Align.Center)"))
-fun Modifier.centerVertically(): Modifier = align(v = Align.Center)
-
-@Deprecated("Use Modifier.align(h = Align.Center)", ReplaceWith("align(h = Align.Center)"))
-fun Modifier.centerHorizontally(): Modifier = align(h = Align.Center)
-
