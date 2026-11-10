@@ -73,7 +73,7 @@ import kn.gtk.gtk_widget_queue_draw
  * theme never paints a background, border, shadow, padding or state highlight and the
  * whole visual definition comes from the [Modifier] DSL.
  */
-private fun <T : GtkNode> T.plain(): T {
+internal fun <T : GtkNode> T.plain(): T {
     gtk_widget_add_css_class(widget, PLAIN_CLASS)
     return this
 }

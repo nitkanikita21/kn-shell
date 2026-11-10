@@ -1,0 +1,7 @@
+/*
+ * OpenGL via libepoxy (the GL loader GTK4 itself uses) for GtkGLArea shaders.
+ */
+package = kn.gl
+headers = epoxy/gl.h
+compilerOpts = -I/usr/include
+linkerOpts = -lepoxy

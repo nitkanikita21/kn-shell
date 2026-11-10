@@ -10,11 +10,20 @@ val gtkCflags: List<String> = providers.exec {
     commandLine("pkg-config", "--cflags", "gtk4", "gtk4-layer-shell-0")
 }.standardOutput.asText.get().trim().split(Regex("\\s+")).filter { it.isNotBlank() }
 
+val epoxyCflags: List<String> = providers.exec {
+    commandLine("pkg-config", "--cflags", "epoxy")
+}.standardOutput.asText.get().trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+
 kotlin {
     linuxX64 {
         compilations.getByName("main").cinterops.create("gtk4") {
             defFile(project.file("src/nativeInterop/cinterop/gtk4.def"))
             compilerOpts(gtkCflags)
+        }
+
+        compilations.getByName("main").cinterops.create("gl") {
+            defFile(project.file("src/nativeInterop/cinterop/gl.def"))
+            compilerOpts(epoxyCflags)
         }
     }
 
