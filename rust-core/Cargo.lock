@@ -322,6 +322,7 @@ name = "kn_shell_core"
 version = "0.1.0"
 dependencies = [
  "mpris",
+ "serde_json",
  "smithay-client-toolkit",
  "uniffi",
  "wayland-client",

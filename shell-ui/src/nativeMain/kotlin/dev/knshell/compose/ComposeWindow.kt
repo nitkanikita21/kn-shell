@@ -26,6 +26,7 @@ import kn.gtk.GMainLoop
 import kn.gtk.GdkDisplay
 import kn.gtk.GtkWindow
 import kn.gtk.GTK_LAYER_SHELL_EDGE_BOTTOM
+import kn.gtk.GTK_LAYER_SHELL_EDGE_TOP
 import kn.gtk.GTK_LAYER_SHELL_EDGE_LEFT
 import kn.gtk.GTK_LAYER_SHELL_EDGE_RIGHT
 import kn.gtk.GTK_LAYER_SHELL_KEYBOARD_MODE_NONE
@@ -176,7 +177,7 @@ private fun installCss(css: String) {
  * Requires a wlroots-based compositor (Hyprland / Sway / Niri). On GNOME/Mutter
  * the protocol is not implemented and `gtk_layer_is_supported()` returns false.
  */
-private fun configureLayerShell(window: CPointer<GtkWindow>) {
+private fun configureLayerShell(window: CPointer<GtkWindow>, atTop: Boolean, sideMargin: Int = 10) {
     if (gtk_layer_is_supported() == 0) {
         println("[shell-ui] gtk4-layer-shell not supported by this compositor; using a normal window")
         return
@@ -184,14 +185,21 @@ private fun configureLayerShell(window: CPointer<GtkWindow>) {
     gtk_layer_init_for_window(window)
     gtk_layer_set_namespace(window, "kn-shell")
     gtk_layer_set_layer(window, GTK_LAYER_SHELL_LAYER_TOP)
-    // Bottom bar: anchored to bottom + left + right.
-    gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_BOTTOM, 1)
     gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_LEFT, 1)
     gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_RIGHT, 1)
-    gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_BOTTOM, 0)
+    if (atTop) {
+        gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_TOP, 1)
+        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_TOP, 8)
+        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_LEFT, sideMargin)
+        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_RIGHT, sideMargin)
+        println("[shell-ui] layer-shell surface initialised (layer=TOP, anchors=top/left/right)")
+    } else {
+        gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_BOTTOM, 1)
+        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_BOTTOM, 0)
+        println("[shell-ui] layer-shell surface initialised (layer=TOP, anchors=bottom/left/right)")
+    }
     gtk_layer_auto_exclusive_zone_enable(window)
     gtk_layer_set_keyboard_mode(window, GTK_LAYER_SHELL_KEYBOARD_MODE_NONE)
-    println("[shell-ui] layer-shell surface initialised (layer=TOP, anchors=bottom/left/right)")
 }
 
 /**
@@ -204,6 +212,7 @@ fun runComposeWindow(
     height: Int,
     css: String = DEFAULT_CSS,
     layerShell: Boolean = false,
+    barAtTop: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     gtk_init()
@@ -212,16 +221,19 @@ fun runComposeWindow(
     val window = gtk_window_new()!!.reinterpret<GtkWindow>()
     gtk_window_set_title(window, title)
     gtk_window_set_default_size(window, width, height)
+    kn.gtk.gtk_widget_add_css_class(window.reinterpret<kn.gtk.GtkWidget>(), "kn-window")
     if (layerShell) {
-        configureLayerShell(window)
+        configureLayerShell(window, atTop = barAtTop)
         kn.gtk.gtk_widget_add_css_class(window.reinterpret<kn.gtk.GtkWidget>(), "kn-bar")
     }
 
     val rootWidget = kn.gtk.gtk_box_new(kn.gtk.GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!
-    gtk_widget_set_margin_start(rootWidget, 12)
-    gtk_widget_set_margin_end(rootWidget, 12)
-    gtk_widget_set_margin_top(rootWidget, 6)
-    gtk_widget_set_margin_bottom(rootWidget, 6)
+    if (!barAtTop) {
+        gtk_widget_set_margin_start(rootWidget, 12)
+        gtk_widget_set_margin_end(rootWidget, 12)
+        gtk_widget_set_margin_top(rootWidget, 6)
+        gtk_widget_set_margin_bottom(rootWidget, 6)
+    }
     gtk_window_set_child(window, rootWidget)
 
     val root = GtkBoxNode(rootWidget)

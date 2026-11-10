@@ -13,10 +13,10 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
 import kn.gtk.GtkBox
 import kn.gtk.GtkButton
+import kn.gtk.GtkCenterBox
 import kn.gtk.GtkDrawingArea
 import kn.gtk.GtkLabel
 import kn.gtk.GtkOrientation
-import kn.gtk.GtkScale
 import kn.gtk.GtkWidget
 import kn.gtk.cairo_t
 import kn.gtk.g_signal_connect_data
@@ -25,6 +25,10 @@ import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 import kn.gtk.gtk_button_new_with_label
 import kn.gtk.gtk_button_set_label
+import kn.gtk.gtk_center_box_new
+import kn.gtk.gtk_center_box_set_center_widget
+import kn.gtk.gtk_center_box_set_end_widget
+import kn.gtk.gtk_center_box_set_start_widget
 import kn.gtk.gtk_drawing_area_new
 import kn.gtk.gtk_drawing_area_set_content_height
 import kn.gtk.gtk_drawing_area_set_content_width
@@ -33,13 +37,19 @@ import kn.gtk.gtk_label_new
 import kn.gtk.gtk_label_set_label
 import kn.gtk.gtk_range_set_value
 import kn.gtk.gtk_scale_new_with_range
+import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_queue_draw
+import kn.gtk.gtk_widget_remove_css_class
+import kn.gtk.gtk_widget_set_opacity
+import kn.gtk.gtk_widget_set_size_request
 
 // ---------------------------------------------------------------------------
 // GTK widget nodes
 // ---------------------------------------------------------------------------
 
 open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
+    private var stateClass: String? = null
+
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_box_append(widget.reinterpret<GtkBox>(), child)
     }
@@ -47,11 +57,55 @@ open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
     override fun detachChild(child: CPointer<GtkWidget>) {
         gtk_box_remove(widget.reinterpret<GtkBox>(), child)
     }
+
+    fun setStateClass(cls: String?) {
+        stateClass = widget.swapStateClass(stateClass, cls)
+    }
+}
+
+/**
+ * Three-region bar layout (`GtkCenterBox`): start / center / end.
+ * Children are attached bottom-up in composition order (start, center, end).
+ */
+class GtkCenterBoxNode : GtkNode(gtk_center_box_new()!!) {
+    private var attached = 0
+
+    override fun attachChild(child: CPointer<GtkWidget>) {
+        val box = widget.reinterpret<GtkCenterBox>()
+        when (attached) {
+            0 -> gtk_center_box_set_start_widget(box, child)
+            1 -> gtk_center_box_set_center_widget(box, child)
+            2 -> gtk_center_box_set_end_widget(box, child)
+        }
+        attached += 1
+    }
+
+    override fun detachChild(child: CPointer<GtkWidget>) {
+        // Static bar layout: no dynamic removal needed.
+    }
+}
+
+/** Common CSS state handling: a single "state class" that can be swapped. */
+private fun CPointer<GtkWidget>.swapStateClass(current: String?, next: String?): String? {
+    if (current == next) return current
+    current?.let { gtk_widget_remove_css_class(this, it) }
+    next?.let { gtk_widget_add_css_class(this, it) }
+    return next
 }
 
 class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
+    private var stateClass: String? = null
+
     fun setText(text: String) {
         gtk_label_set_label(widget.reinterpret<GtkLabel>(), text)
+    }
+
+    fun setStateClass(cls: String?) {
+        stateClass = widget.swapStateClass(stateClass, cls)
+    }
+
+    fun setOpacity(opacity: Float) {
+        gtk_widget_set_opacity(widget, opacity.toDouble())
     }
 }
 
@@ -63,6 +117,8 @@ class GtkButtonNode(text: String) : GtkNode(gtk_button_new_with_label(text)!!) {
     // a dangling user_data pointer.
     @Suppress("unused")
     private val selfRef = StableRef.create(this)
+
+    private var stateClass: String? = null
 
     init {
         val ref = selfRef
@@ -82,6 +138,14 @@ class GtkButtonNode(text: String) : GtkNode(gtk_button_new_with_label(text)!!) {
 
     fun setText(text: String) {
         gtk_button_set_label(widget.reinterpret<GtkButton>(), text)
+    }
+
+    fun setStateClass(cls: String?) {
+        stateClass = widget.swapStateClass(stateClass, cls)
+    }
+
+    fun setMinWidth(width: Int) {
+        gtk_widget_set_size_request(widget, width, 0)
     }
 }
 
@@ -143,6 +207,7 @@ class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area_new()!!)
         val self = selfRef
         val draw = staticCFunction { _: CPointer<GtkDrawingArea>?, cr: CPointer<cairo_t>?, w: Int, h: Int, data: COpaquePointer? ->
             val node = data?.asStableRef<GtkCanvasNode>()?.get()
+            node?.drawCalls = (node?.drawCalls ?: 0) + 1
             if (cr != null && node != null) {
                 node.drawFn?.invoke(cr, w, h)
             }
@@ -161,50 +226,108 @@ class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area_new()!!)
 // ---------------------------------------------------------------------------
 
 @Composable
-fun Column(spacing: Int = 8, content: @Composable () -> Unit) {
+private fun gtkBox(
+    vertical: Boolean,
+    spacing: Int,
+    cssClass: String?,
+    stateClass: String?,
+    content: @Composable () -> Unit,
+) {
     ComposeNode<GtkBoxNode, GtkApplier>(
-        factory = { GtkBoxNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, spacing)!!) },
-        update = {},
+        factory = {
+            val widget = gtk_box_new(
+                if (vertical) GtkOrientation.GTK_ORIENTATION_VERTICAL else GtkOrientation.GTK_ORIENTATION_HORIZONTAL,
+                spacing,
+            )!!
+            cssClass?.let { gtk_widget_add_css_class(widget, it) }
+            GtkBoxNode(widget)
+        },
+        update = {
+            set(stateClass) { value -> setStateClass(value) }
+        },
     ) {
         content()
     }
 }
 
 @Composable
-fun Row(spacing: Int = 8, content: @Composable () -> Unit) {
-    ComposeNode<GtkBoxNode, GtkApplier>(
-        factory = { GtkBoxNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, spacing)!!) },
+fun Column(spacing: Int = 8, cssClass: String? = null, stateClass: String? = null, content: @Composable () -> Unit) {
+    gtkBox(vertical = true, spacing = spacing, cssClass = cssClass, stateClass = stateClass, content = content)
+}
+
+@Composable
+fun Row(spacing: Int = 8, cssClass: String? = null, stateClass: String? = null, content: @Composable () -> Unit) {
+    gtkBox(vertical = false, spacing = spacing, cssClass = cssClass, stateClass = stateClass, content = content)
+}
+
+@Composable
+fun CenterBox(cssClass: String? = null, start: @Composable () -> Unit, center: @Composable () -> Unit, end: @Composable () -> Unit) {
+    ComposeNode<GtkCenterBoxNode, GtkApplier>(
+        factory = {
+            val node = GtkCenterBoxNode()
+            cssClass?.let { gtk_widget_add_css_class(node.widget, it) }
+            node
+        },
         update = {},
     ) {
-        content()
+        start()
+        center()
+        end()
     }
 }
 
 @Composable
-fun Label(text: String) {
+fun Label(
+    text: String,
+    cssClass: String? = null,
+    stateClass: String? = null,
+    opacity: Float = 1f,
+) {
     ComposeNode<GtkLabelNode, GtkApplier>(
-        factory = { GtkLabelNode() },
+        factory = {
+            val node = GtkLabelNode()
+            cssClass?.let { gtk_widget_add_css_class(node.widget, it) }
+            node
+        },
         update = {
             set(text) { value -> setText(value) }
+            set(stateClass) { value -> setStateClass(value) }
+            set(opacity) { value -> setOpacity(value) }
         },
     )
 }
 
 @Composable
-fun Button(text: String, onClick: () -> Unit) {
+fun Button(
+    text: String,
+    cssClass: String? = null,
+    stateClass: String? = null,
+    minWidth: Int = 0,
+    onClick: () -> Unit = {},
+) {
     ComposeNode<GtkButtonNode, GtkApplier>(
-        factory = { GtkButtonNode(text) },
+        factory = {
+            val node = GtkButtonNode(text)
+            cssClass?.let { gtk_widget_add_css_class(node.widget, it) }
+            node
+        },
         update = {
             set(text) { value -> setText(value) }
+            set(stateClass) { value -> setStateClass(value) }
+            set(minWidth) { value -> setMinWidth(value) }
             set(onClick) { value -> this.onClick = value }
         },
     )
 }
 
 @Composable
-fun Canvas(width: Int, height: Int, onDraw: (CPointer<cairo_t>, Int, Int) -> Unit) {
+fun Canvas(width: Int, height: Int, cssClass: String? = null, onDraw: (CPointer<cairo_t>, Int, Int) -> Unit) {
     ComposeNode<GtkCanvasNode, GtkApplier>(
-        factory = { GtkCanvasNode(width, height) },
+        factory = {
+            val node = GtkCanvasNode(width, height)
+            cssClass?.let { gtk_widget_add_css_class(node.widget, it) }
+            node
+        },
         update = {
             set(onDraw) { value ->
                 drawFn = value
@@ -215,9 +338,20 @@ fun Canvas(width: Int, height: Int, onDraw: (CPointer<cairo_t>, Int, Int) -> Uni
 }
 
 @Composable
-fun Slider(value: Float, min: Float = 0f, max: Float = 100f, step: Float = 1f, onValueChange: (Float) -> Unit) {
+fun Slider(
+    value: Float,
+    min: Float = 0f,
+    max: Float = 100f,
+    step: Float = 1f,
+    cssClass: String? = null,
+    onValueChange: (Float) -> Unit,
+) {
     ComposeNode<GtkSliderNode, GtkApplier>(
-        factory = { GtkSliderNode(min, max, step) },
+        factory = {
+            val node = GtkSliderNode(min, max, step)
+            cssClass?.let { gtk_widget_add_css_class(node.widget, it) }
+            node
+        },
         update = {
             set(value) { newValue -> setValue(newValue) }
             set(onValueChange) { fn -> onChange = fn }

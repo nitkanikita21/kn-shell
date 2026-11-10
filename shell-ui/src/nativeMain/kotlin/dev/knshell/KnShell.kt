@@ -7,6 +7,8 @@ import dev.knshell.demo.PhaseOneDemo
 import dev.knshell.services.ShellServices
 import dev.knshell.ui.CircleAnimationDemo
 import dev.knshell.ui.KnPanel
+import dev.knshell.ui.TOPBAR_CSS
+import dev.knshell.ui.TopBar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
@@ -48,14 +50,15 @@ fun startKnShell() {
         }
 
         "windowed" -> {
-            println("[shell-ui] windowed panel (no layer shell)")
+            println("[shell-ui] windowed top bar (no layer shell)")
             runComposeWindow(
-                title = "KN Shell — Windowed Test",
-                width = 960,
-                height = 96,
+                title = "KN Shell — Top Bar (windowed)",
+                width = 1200,
+                height = 56,
+                css = TOPBAR_CSS,
                 layerShell = false,
             ) {
-                KnPanel()
+                TopBar()
             }
         }
 
@@ -71,14 +74,16 @@ fun startKnShell() {
         }
 
         else -> {
-            println("[shell-ui] layer-shell panel mode")
+            println("[shell-ui] layer-shell top bar mode")
             runComposeWindow(
-                title = "KN Shell — Panel",
+                title = "KN Shell — Top Bar",
                 width = 1280,
                 height = 40,
+                css = TOPBAR_CSS,
                 layerShell = true,
+                barAtTop = true,
             ) {
-                KnPanel()
+                TopBar()
             }
         }
     }
