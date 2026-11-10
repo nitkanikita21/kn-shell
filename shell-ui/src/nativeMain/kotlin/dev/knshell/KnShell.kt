@@ -57,7 +57,7 @@ fun startKnShell() {
                 barWindow(
                     BarWindowSpec(
                         title = "My Bar",
-                        height = 24,
+                        height = 32,
                         anchors = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
                         margins = Margins(top = 4, left = 10, right = 10, bottom = 4),
                         exclusiveZone = ExclusiveZone.Auto,

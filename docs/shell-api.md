@@ -258,6 +258,7 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `fillMaxWidth()` | `hexpand` + horizontal `GTK_ALIGN_FILL` |
 | `centerVertically()` | vertical `GTK_ALIGN_CENTER` |
 | `opacity(value)` | `gtk_widget_set_opacity` |
+| `clipOverflow()` | `gtk_widget_set_overflow(GTK_OVERFLOW_HIDDEN)` — clip children to the allocation |
 | `rawStyle(selector, declarations)` | escape hatch: arbitrary CSS scoped to the widget |
 
 ### Radius examples
@@ -272,6 +273,31 @@ Box(Modifier.background(color).radius(Corner(10, 4), Corner(10), Corner(2), Corn
 
 Later modifiers win on order as usual: `background(color, radius = 8)` overrides an earlier
 `radius(12)` when placed after it.
+
+### Text that does not affect layout
+
+GTK measures children, so a `Label` forces its line height onto the parent — a 16px chip
+with a 13px label grows to ~17px. Put such content in [Overlay]: `GtkOverlay` measures only
+its main child, overlay children are painted on top (centered) and never affect the
+measured size. Combine with `clipOverflow()` to clip the overflow.
+
+```kotlin
+Box(
+    Modifier
+        .size(16, 16)
+        .radius(8)
+        .background(Catppuccin.Surface3)
+        .clipOverflow(),
+) {
+    Overlay(Modifier.fillMaxSize()) {
+        Text("2", size = 10)   // 10px label: drawn inside 16px, does not stretch the chip
+    }
+}
+```
+
+Verified semantics: a `GtkOverlay` whose main child is empty measures 0×0 even with a 17px
+overlay label. Use it for badges, counters, icons over fixed-size shapes; keep regular
+`Label` where the text *should* size its container.
 
 ## Extending
 

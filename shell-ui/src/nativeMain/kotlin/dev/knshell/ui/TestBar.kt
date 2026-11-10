@@ -43,7 +43,7 @@ fun TestBar() {
             .fillMaxWidth()
             .fillMaxHeight()
             .fontFamily("JetBrainsMono Nerd Font")
-            .fontSize(13),
+            .fontSize(7),
         start = { HSpace(1) },
         center = { Workspaces() },
         end = { HSpace(1) },
@@ -71,22 +71,22 @@ private fun Workspaces() {
 @Composable
 private fun WorkspaceChip(workspace: WorkspaceInfo) {
     val chipWidth by animateFloatAsState(
-        targetValue = if (workspace.active) 28 * 2f else 28f,
+        targetValue = if (workspace.active) 32f else 16f,
         durationMs = 180,
         easing = Easing.OutCubic,
     )
 
     Box(
         modifier = Modifier
-            .size(chipWidth.toInt(), 28)
-            .radius(14)
+            .size(chipWidth.toInt(), 8)
+            .radius(999)
             .background(
                 if (workspace.active) Catppuccin.Mauve else Catppuccin.Surface3,
                 transitionMs = 150,
             )
             .textColor(if (workspace.active) Catppuccin.Crust else Catppuccin.Text)
-            .padding(vertical = 5),                // щоб 17px рядок став по центру 28px
+        ,                // щоб 17px рядок став по центру 28px
     ) {
-        Text(workspace.name)
+//        if (workspace.active)Text( workspace.name)
     }
 }

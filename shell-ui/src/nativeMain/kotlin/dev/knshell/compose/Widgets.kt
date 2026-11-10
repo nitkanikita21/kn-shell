@@ -23,6 +23,16 @@ import kn.gtk.g_signal_connect_data
 import kn.gtk.gtk_box_append
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
+import kn.gtk.GTK_ALIGN_CENTER
+import kn.gtk.GTK_ALIGN_FILL
+import kn.gtk.GtkOverlay
+import kn.gtk.gtk_overlay_add_overlay
+import kn.gtk.gtk_overlay_new
+import kn.gtk.gtk_overlay_set_child
+import kn.gtk.gtk_widget_set_halign
+import kn.gtk.gtk_widget_set_hexpand
+import kn.gtk.gtk_widget_set_valign
+import kn.gtk.gtk_widget_set_vexpand
 import kn.gtk.gtk_button_new
 import kn.gtk.gtk_button_new_with_label
 import kn.gtk.gtk_button_set_child
@@ -72,6 +82,36 @@ open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
  * Three-region bar layout (`GtkCenterBox`): start / center / end.
  * Children are attached bottom-up in composition order (start, center, end).
  */
+/**
+ * GtkOverlay where overlay children are painted on top but **do not affect the measured
+ * size** (`gtk_overlay_set_measure_overlay` stays false). The node keeps an invisible
+ * empty main child, so the overlay can be as small as its parent requests — e.g. a 16px
+ * circle whose label is drawn on top and clipped instead of stretching the chip.
+ *
+ * Overlay children are centered horizontally and vertically.
+ */
+class GtkOverlayNode : GtkNode(gtk_overlay_new()!!) {
+    init {
+        val overlay = widget.reinterpret<GtkOverlay>()
+        // Invisible main child: it alone defines the measured size (0x0).
+        gtk_overlay_set_child(overlay, gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!)
+        gtk_widget_set_hexpand(widget, 1)
+        gtk_widget_set_vexpand(widget, 1)
+        gtk_widget_set_halign(widget, GTK_ALIGN_FILL)
+        gtk_widget_set_valign(widget, GTK_ALIGN_FILL)
+    }
+
+    override fun attachChild(child: CPointer<GtkWidget>) {
+        gtk_widget_set_halign(child, GTK_ALIGN_CENTER)
+        gtk_widget_set_valign(child, GTK_ALIGN_CENTER)
+        gtk_overlay_add_overlay(widget.reinterpret<GtkOverlay>(), child)
+    }
+
+    override fun detachChild(child: CPointer<GtkWidget>) {
+        // Static overlays only.
+    }
+}
+
 class GtkCenterBoxNode : GtkNode(gtk_center_box_new()!!) {
     private var attached = 0
 
@@ -290,6 +330,27 @@ fun Box(modifier: Modifier = Modifier, content: @Composable () -> Unit = {}) {
                 gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!,
             ).plain()
         },
+        update = {
+            set(modifier) { value -> applyModifier(value) }
+        },
+    ) {
+        content()
+    }
+}
+
+/**
+ * Paints [content] on top of the container without letting it affect the measured size.
+ *
+ * ```kotlin
+ * Box(Modifier.size(16, 16).radius(8).background(color).clipOverflow()) {
+ *     Overlay(Modifier.fillMaxSize()) { Text("2", size = 10) }
+ * }
+ * ```
+ */
+@Composable
+fun Overlay(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    ComposeNode<GtkOverlayNode, GtkApplier>(
+        factory = { GtkOverlayNode().plain() },
         update = {
             set(modifier) { value -> applyModifier(value) }
         },

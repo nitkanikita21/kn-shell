@@ -19,10 +19,12 @@ import kn.gtk.gtk_widget_set_margin_end
 import kn.gtk.gtk_widget_set_margin_start
 import kn.gtk.gtk_widget_set_margin_top
 import kn.gtk.gtk_widget_set_opacity
+import kn.gtk.gtk_widget_set_overflow
 import kn.gtk.gtk_widget_set_size_request
 import kn.gtk.gtk_widget_set_valign
 import kn.gtk.gtk_widget_set_vexpand
 import kn.gtk.GTK_ALIGN_CENTER
+import kn.gtk.GtkOverflow
 import kn.gtk.GTK_ALIGN_FILL
 
 /** A simple ARGB color with a CSS representation. */
@@ -129,6 +131,9 @@ internal data class SliderThemeElement(
 
 /** Text selection colours inside a label. */
 internal data class SelectionElement(val background: Color, val color: Color) : ModifierElement
+
+/** GTK overflow: clip children to the widget allocation. */
+internal data object ClipOverflowElement : ModifierElement
 
 /** Per-corner radius, with independent horizontal/vertical radii (elliptical corners). */
 data class Corner(val horizontal: Int, val vertical: Int = horizontal)
@@ -293,6 +298,9 @@ fun Modifier.slider(
 
 /** Text selection colours inside a label: `Modifier.selection(Catppuccin.Base, Catppuccin.Mauve)`. */
 fun Modifier.selection(color: Color, background: Color): Modifier = with(SelectionElement(background, color))
+
+/** Clips children to the widget's allocation (GTK `GTK_OVERFLOW_HIDDEN`). */
+fun Modifier.clipOverflow(): Modifier = with(ClipOverflowElement)
 
 // ---------------------------------------------------------------------------
 // GTK application
@@ -471,6 +479,8 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
                     }
                 }
             }
+
+            ClipOverflowElement -> gtk_widget_set_overflow(widget, GtkOverflow.GTK_OVERFLOW_HIDDEN)
 
             is SelectionElement ->
                 rules += " selection" to "background-color: ${element.background.toCss()}; color: ${element.color.toCss()};"
