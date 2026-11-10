@@ -1,54 +1,66 @@
-# Writing a bar module
+# Writing UI on top of the shell
 
-KN Shell ships the mechanics of a bar, **not** ready-made modules: there is no music pill,
-no workspace strip and no clock in the library. Everything visible is composed from small
-primitives, a theme and the Modifier DSL. This page shows the pieces.
+The library ships **no bar, no modules and no theme** — only mechanics. You compose the
+bar yourself from generic layout, utilities, the Modifier DSL and reactive services.
 
-## Primitives — `dev.knshell.ui.primitives`
+## Building blocks
 
-| API | What it is |
+| Piece | From |
 | --- | --- |
-| `Bar(theme, start, center, end)` | three-region layout (`GtkCenterBox`); subscribes to the shell services, maintains `BarState`, applies the theme font |
-| `Pill(theme, color, spacing, onClick, content)` | rounded, padded, shadowed container; `onClick` makes it clickable without changing its look |
-| `Space(width, height)` / `HSpace(w)` / `VSpace(h)` / `Spacer(modifier)` | empty boxes used for spacing |
-| `Icon(glyph, size = 13, color = null)` | Nerd Font glyph |
-| `Text(text, theme, color, size)` | themed label |
+| layout | `Row`, `Column`, `Box`, `CenterBox` — `dev.knshell.compose` |
+| utilities | `Space`, `HSpace`, `VSpace`, `Spacer`, `Icon`, `Text` — `dev.knshell.ui.primitives` |
+| styling | Modifier DSL (`padding`, `margin`, `background`, `textColor`, `fontSize`, …) + `Catppuccin` palette |
+| data | `Shell.services` — `StateFlow`s (`workspaces`, `media`, `volume`, `system`, `windows`) |
+| runtime | `Shell.run { barWindow { … } }` |
 
-`BarState` (same package) exposes the reactive snapshots that `Bar` keeps up to date:
-`workspaces`, `media`, `volume`, `stats`, `clock` — all Compose state, safe to read in a composable.
-
-## Style — `dev.knshell.ui.style`
-
-`BarTheme` holds colours and metrics (`BarTheme.Mocha`, `BarTheme.Default`, `copy(...)` to
-re-skin), and `Modifier.pill(...)`, `Modifier.chip(...)`, `Modifier.pillText(...)` are the
-style helpers on top of the generic Modifier DSL (`dev.knshell.compose`):
-`padding`, `margin`, `background(color, radius, shadow, borderWidth, borderColor, transitionMs)`,
-`hoverBackground`, `textColor`, `fontSize`, `fontFamily`, `bold`, `size/width/height`,
-`fillMaxWidth`, `centerVertically`, `opacity`, `rawStyle(selector, css)`.
-
-## Example: a clock module
+## A clock module
 
 ```kotlin
 @Composable
-fun ClockPill(theme: BarTheme = BarTheme.Mocha) {
-    val (date, colon, minutes) = BarState.clock.value
-    Pill(theme) {
+fun Clock() {
+    var parts by remember { mutableStateOf(currentClockParts()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1_000)
+            parts = currentClockParts()
+        }
+    }
+
+    Row(
+        spacing = 6,
+        modifier = Modifier
+            .padding(horizontal = 14, vertical = 5)
+            .background(Catppuccin.Surface0, radius = 16, shadow = true, transitionMs = 200)
+            .margin(horizontal = 5)
+            .textColor(Catppuccin.Flamingo),
+    ) {
         Icon("\uF017")
-        Space(6)
-        Text(date, theme)
-        Text(colon, theme, color = theme.flamingo)
-        Text(minutes, theme, color = theme.flamingo)
+        Text(parts.first)
+        Text(parts.second)
+        Text(parts.third)
     }
 }
 ```
 
-## Example: a volume module with a slider
+`currentClockParts()` is a small utility in `dev.knshell.ui` that returns
+`(date, ":", minutes)` so the colon can be animated separately.
+
+## A volume module
 
 ```kotlin
 @Composable
-fun VolumePill(theme: BarTheme = BarTheme.Mocha) {
-    val volume = BarState.volume.value
-    Pill(theme) {
+fun Volume() {
+    var volume by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { Shell.services.volume.collect { volume = it } }
+
+    Row(
+        spacing = 6,
+        modifier = Modifier
+            .padding(horizontal = 14, vertical = 5)
+            .background(Catppuccin.Surface0, radius = 16, shadow = true)
+            .margin(horizontal = 5)
+            .textColor(Catppuccin.Green),
+    ) {
         Icon("\uF028")
         Slider(
             value = volume.toFloat(),
@@ -62,52 +74,46 @@ fun VolumePill(theme: BarTheme = BarTheme.Mocha) {
                 .rawStyle(" highlight", "border-radius: 3px; background-color: #A6E3A1;")
                 .rawStyle(" slider", "min-width: 14px; min-height: 14px; border-radius: 50%; background-color: #CDD6F4;"),
         ) { Shell.services.setVolume(it.toInt()) }
-        Text(volume.toString() + "%", theme, size = 12)
+        Text(volume.toString() + "%")
     }
 }
 ```
 
-## Example: an animated indicator
+## The bar itself
 
 ```kotlin
 @Composable
-fun PulseDot(theme: BarTheme = BarTheme.Mocha) {
-    var up by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(900)
-            up = !up
-        }
-    }
-    val radius by animateFloatAsState(if (up) 8f else 4f, stiffness = 300f, dampingRatio = 0.5f)
-    Canvas(24, 24) { cr, width, height ->
-        drawCircle(cr, width, height, radius, 0.35, 0.75, 1.0)   // dev.knshell.ui.drawing helper
-    }
+fun MyBar() {
+    CenterBox(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40)
+            .fontFamily("JetBrainsMono Nerd Font")
+            .fontSize(13),
+        start = { Row(spacing = 0) { Clock() } },
+        center = { Space(16) },
+        end = { Row(spacing = 0) { Volume() } },
+    )
 }
-```
 
-## Composing the bar
-
-```kotlin
-@Composable
-fun MyBar() = Bar(
-    theme = BarTheme.Mocha,
-    start = { ClockPill() },
-    center = { Space(16) },
-    end = { VolumePill(); PulseDot() },
-)
-```
-
-## Hooking the bar into the shell
-
-```kotlin
 fun main() = Shell.run {
     barWindow { MyBar() }
 }
 ```
 
-The shell ships with an empty skeleton: add modules to the `Bar` slots and the layer surface
-sizes itself to the content (a completely empty bar falls back to GTK's default surface
-height). `BarTheme.barHeight` / `BarWindowSpec.height` define the target bar height.
+## Animations
+
+Any Compose state works; animate with `dev.knshell.animation.animateFloatAsState` (a small
+spring implementation on `withFrameNanos`) and draw with `Canvas` (cairo):
+
+```kotlin
+var up by remember { mutableStateOf(false) }
+LaunchedEffect(Unit) { while (true) { delay(900); up = !up } }
+val radius by animateFloatAsState(if (up) 8f else 4f, stiffness = 300f, dampingRatio = 0.5f)
+Canvas(24, 24) { cr, width, height -> /* cairo drawing */ }
+```
+
+A completely empty `CenterBox` (no modules) falls back to GTK's default surface height;
+the layer surface sizes to the content as soon as modules are added.
 
 Windows, services and actions are documented in [shell-api.md](shell-api.md).

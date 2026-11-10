@@ -3,11 +3,16 @@
 package dev.knshell
 
 import androidx.compose.runtime.Composable
+import dev.knshell.compose.CenterBox
 import dev.knshell.compose.Color
+import dev.knshell.compose.Modifier
+import dev.knshell.compose.Row
+import dev.knshell.compose.fillMaxWidth
+import dev.knshell.compose.fontFamily
+import dev.knshell.compose.fontSize
+import dev.knshell.compose.height
 import dev.knshell.shell.Shell
 import dev.knshell.shell.WindowSpec
-import dev.knshell.ui.primitives.Bar
-import dev.knshell.ui.style.BarTheme
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
@@ -17,11 +22,11 @@ import platform.posix.getenv
  *
  * Modes:
  *  - `panel` (default) — a wlr-layer-shell bar at the top of the output;
- *  - `windowed` — the same bar content inside a regular window (development/testing).
+ *  - `windowed` — the same content inside a regular window (development/testing).
  *
- * The bar intentionally ships **without modules**: compose your own inside the [Bar]
- * slots using the primitives from `dev.knshell.ui.primitives`, the styling helpers from
- * `dev.knshell.ui.style`, the Modifier DSL and the reactive services (`Shell.services`).
+ * The library intentionally provides no bar, no modules and no theme: compose them from
+ * `dev.knshell.compose` layout, the Modifier DSL, `dev.knshell.ui.primitives` utilities
+ * and the reactive `Shell.services` flows.
  */
 fun startKnShell() {
     when (getenv("KN_SHELL_MODE")?.toKString() ?: "panel") {
@@ -36,7 +41,7 @@ fun startKnShell() {
                         background = Color.hex(0x1E1E2E),
                     ),
                 ) {
-                    ShellBar()
+                    ShellSurface()
                 }
             }
         }
@@ -45,19 +50,25 @@ fun startKnShell() {
             println("[shell] panel mode (layer-shell top bar)")
             Shell.run {
                 barWindow {
-                    ShellBar()
+                    ShellSurface()
                 }
             }
         }
     }
 }
 
-/** Empty bar skeleton — add your own modules to the slots. */
+/**
+ * Empty top-level surface: three regions, theme-less font, no modules.
+ * Replace the slot lambdas with your own `Row { … }` content.
+ */
 @Composable
-private fun ShellBar() {
-    Bar(
-        theme = BarTheme.Mocha,
-        // Add your modules here.
+private fun ShellSurface() {
+    CenterBox(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(40)
+            .fontFamily("JetBrainsMono Nerd Font")
+            .fontSize(13),
         start = {},
         center = {},
         end = {},

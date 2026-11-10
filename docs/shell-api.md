@@ -135,64 +135,58 @@ Hyprland ≥ 0.56 evaluates dispatchers as Lua, so `dispatch` takes a full expre
 to legacy `dispatch workspace <name>`. `spawn` discards stdio, reaps the child in a thread
 and never blocks the shell.
 
-## Primitives and style
+## Utilities
 
-The library deliberately ships **no ready-made modules** — no music pill, workspace strip or
-clock. It provides layout/text primitives, a theme, styling modifiers and reactive state, so a
-bar is written from scratch.
+The library ships **no bar, no modules and no theme**. Layout comes from the generic
+widgets, data from `Shell.services`, styling from the Modifier DSL, and a few utilities
+remove boilerplate:
 
 `dev.knshell.ui.primitives`:
 
-| API | Renders |
+| Utility | What it is |
 | --- | --- |
-| `Bar(theme, start, center, end)` | `CenterBox` + service subscriptions + theme font |
-| `Pill(theme, color, spacing, onClick, content)` | rounded, padded, shadowed container; `onClick` makes it a button |
-| `Space(width, height)`, `HSpace(w)`, `VSpace(h)`, `Spacer(modifier)` | spacing boxes |
+| `Space(width, height)`, `HSpace(w)`, `VSpace(h)`, `Spacer(modifier)` | empty boxes for spacing |
 | `Icon(glyph, size = 13, color = null)` | Nerd Font glyph |
-| `Text(text, theme, color, size)` | themed label |
+| `Text(text, size = 13, color = null)` | plain label |
 
-`Bar` subscribes to workspaces, media, volume and system, ticks a 1 s clock and writes the
-public `BarState` object (`workspaces`, `media`, `volume`, `stats`, `clock`), so custom modules
-only read `BarState.*.value` inside composition.
-
-`dev.knshell.ui.style`:
-
-`BarTheme` carries every colour and metric. `BarTheme.Mocha` (also `BarTheme.Default`) is the
-Catppuccin reference palette: `surface`, `text`, `accent`, `blue`, `green`, `red`, `mauve`,
-`pink`, `flamingo`, `sapphire`, `sky`, plus `radius = 16`, `pillPaddingH = 14`,
-`pillPaddingV = 5`, `gap = 5`, `fontFamily = "JetBrainsMono Nerd Font"`, `fontSize = 13`.
-Re-skin a whole bar with a copy:
+Layout: `Row`, `Column`, `Box`, `CenterBox` from `dev.knshell.compose`.
+Colours: the `Catppuccin` palette object (`dev.knshell.compose`); build any other palette
+with the Modifier DSL.
 
 ```kotlin
-Bar(BarTheme.Mocha.copy(radius = 10, gap = 3), start = {…}, center = {…}, end = {…})
+@Composable
+fun MyBar() {
+    CenterBox(
+        modifier = Modifier.fillMaxWidth().height(40)
+            .fontFamily("JetBrainsMono Nerd Font").fontSize(13),
+        start = { Row(spacing = 6) { Clock() } },
+        center = { Space(16) },
+        end = { Row(spacing = 6) { Volume() } },
+    )
+}
 ```
 
-Modifiers: `Modifier.pill(theme, color = theme.surface, radius)` = themed padding + rounded
-background with shadow, 200 ms colour transition and horizontal margin;
-`Modifier.chip(active, theme, width, height)` = workspace-style chip (mauve, bold 10 px when
-active; small round dot otherwise; hover accent); `Modifier.pillText(theme, color, size,
-bold)` = matching text style.
+Services are plain `StateFlow`s — collect them into Compose state yourself:
 
 ```kotlin
 @Composable
-fun ClockPill(theme: BarTheme = BarTheme.Mocha) {
-    val (date, colon, minutes) = BarState.clock.value
-    Pill(theme) {
-        Icon("\uF017")
-        Space(6)
-        Text(date, theme)
-        Text(colon, theme, color = theme.flamingo)
-        Text(minutes, theme, color = theme.flamingo)
+fun Volume() {
+    var volume by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { Shell.services.volume.collect { volume = it } }
+
+    Row(
+        spacing = 6,
+        modifier = Modifier.padding(horizontal = 14, vertical = 5)
+            .background(Catppuccin.Surface0, radius = 16, shadow = true)
+            .margin(horizontal = 5).textColor(Catppuccin.Green),
+    ) {
+        Icon("\uF028")
+        Text(volume.toString() + "%")
+        Slider(value = volume.toFloat(), min = 0f, max = 100f, step = 5f) {
+            Shell.services.setVolume(it.toInt())
+        }
     }
 }
-
-@Composable
-fun MyBar() = Bar(
-    theme = BarTheme.Mocha,
-    start = { ClockPill() },
-    center = { Space(16) },
-    end = { Icon("\uF240", 14); Space(6); Text("82%", theme) },
-)
 ```
 
 ### Modifier reference (`dev.knshell.compose`)
@@ -234,9 +228,9 @@ fun Spinner(modifier: Modifier = Modifier) = ComposeNode<GtkSpinnerNode, GtkAppl
 )
 ```
 
-**Bar component.** Add a composable in your own module file (there are no built-in visual
-modules) built from `Pill` / `Icon` / `Text` / `Modifier`; read `BarState` if it needs live bar
-data, and take colours from `BarTheme` so custom themes keep working.
+**Bar module.** Add a composable in your own file (there are no built-in visual modules)
+built from `Row` / `Column` / `Space` / `Icon` / `Text` and the Modifier DSL; collect
+`Shell.services.*` if it needs live data.
 
 ## Limitations and caveats
 

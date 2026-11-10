@@ -162,9 +162,9 @@ fun main() = Shell.run {
   `workspaces`, `media`, `volume`, `system`.
 * `Shell.Hyprland` performs compositor actions: `focusWorkspace(name)`, `dispatch(lua)`,
   `spawn(command)`.
-* `dev.knshell.ui.primitives` provides `Bar`, `Pill`, `Space`/`HSpace`/`VSpace`, `Icon`,
-  `Text` and the shared `BarState`; `dev.knshell.ui.style` provides `BarTheme` and the
-  `pill`/`chip`/`pillText` modifiers. There are no ready-made modules — you compose them.
+* `dev.knshell.ui.primitives` provides `Space`/`HSpace`/`VSpace`, `Spacer`, `Icon` and
+  `Text`; layout comes from `Row`/`Column`/`Box`/`CenterBox`, styling from the Modifier
+  DSL, data from `Shell.services`. The library ships no bar, no modules and no theme.
 
 The complete reference — window/bar specs, layers, anchors, margins, exclusive zone,
 keyboard mode, service latency, actions, the kit, the modifier table and extension points —
@@ -173,18 +173,21 @@ kit overview) is in [`docs/bar-api.md`](docs/bar-api.md).
 
 ### The bar
 
-The shell starts with an **empty bar skeleton**: `Bar(BarTheme.Mocha)` with empty `start`,
-`center` and `end` slots. Nothing visual is hard-coded in the library — modules such as a
-clock, a workspace strip or a volume control are written by you from primitives:
+The shell starts with an **empty surface**: a `CenterBox` with three empty slots and no
+theme. Everything visible is yours to compose from generic layout, utilities, the Modifier
+DSL and `Shell.services`:
 
 ```kotlin
 @Composable
-fun MyBar() = Bar(
-    theme = BarTheme.Mocha,
-    start = { ClockPill() },
-    center = { Space(16) },
-    end = { VolumePill() },
-)
+fun MyBar() {
+    CenterBox(
+        modifier = Modifier.fillMaxWidth().height(40)
+            .fontFamily("JetBrainsMono Nerd Font").fontSize(13),
+        start = { Row(spacing = 6) { Clock() } },
+        center = { Space(16) },
+        end = { Row(spacing = 6) { Volume() } },
+    )
+}
 ```
 
 Styling is expressed **in Kotlin with a Compose-like `Modifier` chain** — there are no
@@ -206,6 +209,10 @@ Label(
 style provider for background/border/padding/font declarations; `rawStyle(selector, css)` is
 an escape hatch for widget internals (e.g. `GtkScale` trough/slider). Window-level CSS is
 generated from `runComposeWindow` parameters.
+
+Data comes from `Shell.services` (plain `StateFlow`s): collect a flow in a `LaunchedEffect`
+and read the Compose state. An empty bar surface falls back to GTK's default height; add
+modules and it sizes to the content.
 
 When the real waybar is running, the layer surface is placed below it (exclusive zone); stop
 waybar to see the bar at the very top edge.
@@ -306,8 +313,7 @@ committed.
 │   └── src/nativeMain/kotlin/dev/knshell/
 │       ├── compose/              # applier, Modifier DSL, widgets, frame clock
 │       ├── shell/                # Shell.run, ShellScope, ShellRuntime
-│       ├── ui/primitives/        # Bar, Pill, Space, Icon, Text, BarState
-│       ├── ui/style/             # BarTheme, pill/chip/pillText modifiers
+│       ├── ui/primitives/        # Space/HSpace/VSpace, Spacer, Icon, Text
 │       └── services/             # ShellServices facade over the Rust backend
 ├── shell-app/                    # main()
 ├── scripts/run.sh, scripts/gobley-rustup.sh
