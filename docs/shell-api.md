@@ -254,7 +254,8 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `textColor(color, transitionMs = 0)` / `fontSize(px)` / `fontFamily(name)` / `bold()` | CSS text declarations; `transitionMs` animates the text colour |
 | `transition(ms)` | native GTK transition for colour-like props (color/background/border/shadow/opacity) |
 | `italic()` / `underline()` / `strikethrough()` | `font-style: italic` / `text-decoration-line` |
-| `fontWeight(weight)` | numeric weight: `400` normal, `700` bold, `900` heavy |
+| `fontWeight(weight)` | numeric weight: `100` thin, `300` light, `400` normal, `500` medium, `600` semiBold, `700` bold, `800` extraBold, `900` black |
+| `thin()` / `light()` / `medium()` / `semiBold()` / `extraBold()` / `black()` | named aliases for the weights above |
 | `letterSpacing(px)` | CSS `letter-spacing` (fractional ok) |
 | `selection(color, background)` | text-selection colours inside a label |
 | `slider(troughColor, troughHeight, highlightColor, knobColor, knobSize)` | typed styling of `GtkScale` trough/highlight/knob |

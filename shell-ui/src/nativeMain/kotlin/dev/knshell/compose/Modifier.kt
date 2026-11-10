@@ -229,6 +229,27 @@ fun Modifier.transition(ms: Int): Modifier = with(TransitionElement(ms))
 
 fun Modifier.bold(): Modifier = with(BoldElement)
 
+/** Thin, 100. */
+fun Modifier.thin(): Modifier = fontWeight(100)
+
+/** ExtraLight, 200. */
+fun Modifier.extraLight(): Modifier = fontWeight(200)
+
+/** Light, 300. */
+fun Modifier.light(): Modifier = fontWeight(300)
+
+/** Medium, 500. */
+fun Modifier.medium(): Modifier = fontWeight(500)
+
+/** SemiBold, 600. */
+fun Modifier.semiBold(): Modifier = fontWeight(600)
+
+/** ExtraBold, 800 (the font must ship that weight; JetBrainsMono Nerd Font does). */
+fun Modifier.extraBold(): Modifier = fontWeight(800)
+
+/** Black/Heavy, 900. */
+fun Modifier.black(): Modifier = fontWeight(900)
+
 fun Modifier.size(width: Int? = null, height: Int? = null): Modifier = with(SizeElement(width, height))
 
 fun Modifier.width(width: Int): Modifier = with(SizeElement(width, null))
