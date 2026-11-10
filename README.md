@@ -139,9 +139,28 @@ The default mode is a **waybar-like top bar** (`KN_SHELL_MODE=panel`, the defaul
 * **end** — network, volume pill with slider, CPU and memory (numbers smoothly animated towards the measured values),
   clock with a blinking colon, power button.
 
-Styling follows the reference waybar: Catppuccin Mocha palette, rounded `rgba(22,25,37,0.9)` pills with
-shadow, JetBrainsMono Nerd Font, CSS hover transitions. When the real waybar is running, the layer
-surface is placed below it (exclusive zone); stop waybar to see the bar at the very top edge.
+Styling is expressed **in Kotlin with a Compose-like `Modifier` chain** — there are no per-module
+CSS classes:
+
+```kotlin
+Label(
+    "12:30",
+    modifier = Modifier
+        .padding(horizontal = 14, vertical = 5)
+        .background(Catppuccin.Surface0, radius = 16, shadow = true, transitionMs = 200)
+        .margin(horizontal = 5)
+        .textColor(Catppuccin.Flamingo)
+        .fontSize(13),
+)
+```
+
+`Modifier` maps to native GTK calls (margins, size, opacity, expand/align) plus a per-widget style
+provider for background/border/padding/font declarations; `rawStyle(selector, css)` is an escape
+hatch for widget internals (e.g. `GtkScale` trough/slider). Only the window root uses generated CSS
+(window background + font), built from `runComposeWindow` parameters.
+
+When the real waybar is running, the layer surface is placed below it (exclusive zone); stop waybar
+to see the bar at the very top edge.
 
 Screenshots: [`docs/screenshots/topbar-layer.png`](docs/screenshots/topbar-layer.png),
 [`docs/screenshots/topbar-vs-waybar.png`](docs/screenshots/topbar-vs-waybar.png).

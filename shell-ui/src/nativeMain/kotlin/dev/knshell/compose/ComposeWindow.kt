@@ -221,15 +221,27 @@ fun runComposeWindow(
     css: String = DEFAULT_CSS,
     layerShell: Boolean = false,
     barAtTop: Boolean = false,
+    windowBackground: Color = Color.hex(0x121218, 0.85f),
+    windowModifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     gtk_init()
-    installCss(css)
+    installCss(
+        buildString {
+            append("window.kn-window { background-color: ${windowBackground.toCss()}; }\n")
+            if (layerShell) {
+                append("window.kn-window.kn-bar { background-color: transparent; }\n")
+            }
+            append(css)
+        },
+    )
 
     val window = gtk_window_new()!!.reinterpret<GtkWindow>()
     gtk_window_set_title(window, title)
     gtk_window_set_default_size(window, width, height)
     kn.gtk.gtk_widget_add_css_class(window.reinterpret<kn.gtk.GtkWidget>(), "kn-window")
+    // Window-level decorations can also be expressed with modifiers.
+    GtkNode(window.reinterpret()).applyModifier(windowModifier)
     if (layerShell) {
         configureLayerShell(window, atTop = barAtTop)
         kn.gtk.gtk_widget_add_css_class(window.reinterpret<kn.gtk.GtkWidget>(), "kn-bar")

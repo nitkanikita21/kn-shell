@@ -17,6 +17,13 @@ import kn.gtk.GtkWidget
 open class GtkNode(val widget: CPointer<GtkWidget>) {
     internal val children = mutableListOf<GtkNode>()
 
+    /** Per-widget style provider used by modifier-based styling. */
+    internal val inlineStyle = InlineStyle(widget)
+
+    internal fun applyModifier(modifier: Modifier) {
+        applyModifiers(widget, modifier, inlineStyle)
+    }
+
     open fun insertChild(index: Int, child: GtkNode) {
         val safeIndex = index.coerceIn(0, children.size)
         children.add(safeIndex, child)
