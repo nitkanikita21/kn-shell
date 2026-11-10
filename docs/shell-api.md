@@ -202,13 +202,35 @@ It is the GTK analogue of an HTML CSS reset: a widget paints only what your Modi
 Per-widget modifier CSS is registered at priority **700** (above the reset), so
 `Modifier.background(...)`, `textColor(...)`, `fontSize(...)` always win.
 
-Consequences:
+Everything the reset removes is styleable with **typed modifiers** (no rawStyle needed):
 
-* buttons have no default padding, min-size, hover background or focus ring — set them yourself;
-* the `GtkScale` slider/trough are invisible until styled; use `rawStyle(" trough", ...)`,
-  `rawStyle(" highlight", ...)`, `rawStyle(" slider", ...)`;
-* the focus ring is gone — re-add one with `rawStyle(":focus-visible", "outline: ...")` if the
-  widget must stay keyboard-visible.
+```kotlin
+Button(
+    "ok",
+    modifier = Modifier
+        .padding(horizontal = 10, vertical = 4)
+        .minWidth(48)
+        .background(Catppuccin.Surface0, radius = 8, transitionMs = 150)
+        .hoverBackground(Catppuccin.Surface1)
+        .pressedBackground(Catppuccin.Surface3)
+        .hoverTextColor(Color.White)
+        .focusRing(Catppuccin.Mauve),
+) { }
+
+Slider(
+    value = 50f,
+    modifier = Modifier.width(96).height(16).slider(
+        troughColor = Catppuccin.Surface1,
+        troughHeight = 6,
+        highlightColor = Catppuccin.Green,
+        knobColor = Catppuccin.Text,
+        knobSize = 12,
+    ),
+    onValueChange = { },
+)
+
+Label("selectable", Modifier.selection(Catppuccin.Base, Catppuccin.Mauve))
+```
 
 The reset is installed once after `gtk_init()`, by both `Shell.run` and the legacy
 `runComposeWindow`. Implementation: `compose/Reset.kt`.
@@ -221,12 +243,18 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `margin(horizontal, vertical)` | GTK start/end and top/bottom margins |
 | `background(color, radius, shadow, borderWidth, borderColor, transitionMs)` | CSS background, radius, optional shadow/border, CSS transition |
 | `hoverBackground(color)` | `:hover` background rule |
+| `pressedBackground(color)` / `checkedBackground(color)` / `disabledBackground(color)` | `:active` / `:checked` / `:disabled` background rules |
+| `hoverTextColor(color)` / `checkedTextColor(color)` | text colour for `:hover` / `:checked` |
+| `focusRing(color, width = 2, offset = 0)` | keyboard focus outline for `:focus-visible` |
+| `minWidth(px)` / `minHeight(px)` / `minSize(w, h)` | CSS minimums after the plain reset removed the theme's |
 | `textColor(color)` / `fontSize(px)` / `fontFamily(name)` / `bold()` | CSS text declarations |
+| `selection(color, background)` | text-selection colours inside a label |
+| `slider(troughColor, troughHeight, highlightColor, knobColor, knobSize)` | typed styling of `GtkScale` trough/highlight/knob |
 | `size(w, h)` / `width(w)` / `height(h)` | `gtk_widget_set_size_request` |
 | `fillMaxWidth()` | `hexpand` + horizontal `GTK_ALIGN_FILL` |
 | `centerVertically()` | vertical `GTK_ALIGN_CENTER` |
 | `opacity(value)` | `gtk_widget_set_opacity` |
-| `rawStyle(selector, declarations)` | extra CSS scoped to the widget (e.g. `" trough"` for `GtkScale`) |
+| `rawStyle(selector, declarations)` | escape hatch: arbitrary CSS scoped to the widget |
 
 ## Extending
 

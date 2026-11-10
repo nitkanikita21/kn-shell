@@ -70,9 +70,13 @@ fun Volume() {
             modifier = Modifier
                 .width(64)
                 .height(16)
-                .rawStyle(" trough", "min-height: 6px; border-radius: 3px; background-color: #45475A;")
-                .rawStyle(" highlight", "border-radius: 3px; background-color: #A6E3A1;")
-                .rawStyle(" slider", "min-width: 14px; min-height: 14px; border-radius: 50%; background-color: #CDD6F4;"),
+                .slider(
+                    troughColor = Catppuccin.Surface1,
+                    troughHeight = 6,
+                    highlightColor = Catppuccin.Green,
+                    knobColor = Catppuccin.Text,
+                    knobSize = 12,
+                ),
         ) { Shell.services.setVolume(it.toInt()) }
         Text(volume.toString() + "%")
     }

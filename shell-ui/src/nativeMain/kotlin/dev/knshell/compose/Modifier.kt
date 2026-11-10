@@ -103,8 +103,32 @@ internal data class ExpandElement(val horizontal: Boolean, val vertical: Boolean
 internal data class AlignElement(val horizontal: UInt?, val vertical: UInt?) : ModifierElement
 internal data class OpacityElement(val value: Float) : ModifierElement
 
-/** Escape hatch for CSS that cannot be expressed with the typed modifiers (e.g. GtkScale internals). */
+/** Escape hatch for CSS that cannot be expressed with the typed modifiers. */
 internal data class RawStyleElement(val selector: String, val declarations: String) : ModifierElement
+
+/** Background colour for a widget state (":hover", ":active", ":checked", ":disabled", ...). */
+internal data class StateBackgroundElement(val selector: String, val color: Color) : ModifierElement
+
+/** Text colour for a widget state. */
+internal data class StateTextColorElement(val selector: String, val color: Color) : ModifierElement
+
+/** Keyboard focus outline (":focus-visible"). */
+internal data class FocusRingElement(val color: Color, val width: Int, val offset: Int) : ModifierElement
+
+/** CSS minimum size, applied after the reset removed the theme's defaults. */
+internal data class MinSizeElement(val width: Int?, val height: Int?) : ModifierElement
+
+/** Typed styling of the GtkScale sub-nodes: trough, highlight and slider (knob). */
+internal data class SliderThemeElement(
+    val troughColor: Color?,
+    val troughHeight: Int?,
+    val highlightColor: Color?,
+    val knobColor: Color?,
+    val knobSize: Int?,
+) : ModifierElement
+
+/** Text selection colours inside a label. */
+internal data class SelectionElement(val background: Color, val color: Color) : ModifierElement
 
 /**
  * Immutable chain of widget decorations, applied when the node is updated.
@@ -175,6 +199,51 @@ fun Modifier.centerVertically(): Modifier = with(AlignElement(horizontal = null,
 fun Modifier.opacity(value: Float): Modifier = with(OpacityElement(value))
 
 fun Modifier.rawStyle(selector: String, declarations: String): Modifier = with(RawStyleElement(selector, declarations))
+
+fun Modifier.pressedBackground(color: Color): Modifier = with(StateBackgroundElement(":active", color))
+
+fun Modifier.checkedBackground(color: Color): Modifier = with(StateBackgroundElement(":checked", color))
+
+fun Modifier.disabledBackground(color: Color): Modifier = with(StateBackgroundElement(":disabled", color))
+
+fun Modifier.hoverTextColor(color: Color): Modifier = with(StateTextColorElement(":hover", color))
+
+fun Modifier.checkedTextColor(color: Color): Modifier = with(StateTextColorElement(":checked", color))
+
+/** Keyboard focus outline. GTK draws it for `:focus-visible` only (keyboard, not mouse). */
+fun Modifier.focusRing(color: Color, width: Int = 2, offset: Int = 0): Modifier =
+    with(FocusRingElement(color, width, offset))
+
+/** Minimum width in CSS pixels (the plain reset removes the theme minimums). */
+fun Modifier.minWidth(px: Int): Modifier = with(MinSizeElement(px, null))
+
+/** Minimum height in CSS pixels. */
+fun Modifier.minHeight(px: Int): Modifier = with(MinSizeElement(null, px))
+
+/** Both minimums. */
+fun Modifier.minSize(width: Int, height: Int): Modifier = with(MinSizeElement(width, height))
+
+/**
+ * Styles the GtkScale sub-nodes with typed parameters instead of rawStyle strings.
+ *
+ * ```kotlin
+ * Slider(value, modifier = Modifier.width(80).height(16).slider(
+ *     troughColor = Catppuccin.Surface1, troughHeight = 6,
+ *     highlightColor = Catppuccin.Green,
+ *     knobColor = Catppuccin.Text, knobSize = 12,
+ * ))
+ * ```
+ */
+fun Modifier.slider(
+    troughColor: Color? = null,
+    troughHeight: Int? = null,
+    highlightColor: Color? = null,
+    knobColor: Color? = null,
+    knobSize: Int? = null,
+): Modifier = with(SliderThemeElement(troughColor, troughHeight, highlightColor, knobColor, knobSize))
+
+/** Text selection colours inside a label: `Modifier.selection(Catppuccin.Base, Catppuccin.Mauve)`. */
+fun Modifier.selection(color: Color, background: Color): Modifier = with(SelectionElement(background, color))
 
 // ---------------------------------------------------------------------------
 // GTK application
@@ -299,6 +368,61 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             }
 
             is OpacityElement -> opacity = element.value
+
+            is StateBackgroundElement ->
+                rules += element.selector to "background-color: ${element.color.toCss()}; background-image: none;"
+
+            is StateTextColorElement -> rules += element.selector to "color: ${element.color.toCss()};"
+
+            is FocusRingElement -> rules += ":focus-visible" to buildString {
+                append("outline-style: solid;")
+                append(" outline-width: ${element.width}px;")
+                append(" outline-color: ${element.color.toCss()};")
+                append(" outline-offset: ${element.offset}px;")
+            }
+
+            is MinSizeElement -> {
+                val declarations = buildString {
+                    element.width?.let { append("min-width: ${it}px; ") }
+                    element.height?.let { append("min-height: ${it}px;") }
+                }
+                if (declarations.isNotBlank()) rules += "" to declarations
+            }
+
+            is SliderThemeElement -> {
+                element.troughColor?.let { color ->
+                    val height = element.troughHeight
+                    val radius = if (height != null) height / 2 else 3
+                    rules += " trough" to buildString {
+                        append("background-color: ${color.toCss()}; ")
+                        append("background-image: none; border-radius: ${radius}px;")
+                        if (height != null) append(" min-height: ${height}px;")
+                    }
+                } ?: element.troughHeight?.let { height ->
+                    rules += " trough" to "min-height: ${height}px; border-radius: ${height / 2}px;"
+                }
+
+                element.highlightColor?.let { color ->
+                    val radius = element.troughHeight?.let { it / 2 } ?: 3
+                    rules += " highlight" to
+                        "background-color: ${color.toCss()}; background-image: none; border-radius: ${radius}px;"
+                }
+
+                val knob = element.knobSize
+                if (element.knobColor != null || knob != null) {
+                    rules += " slider" to buildString {
+                        element.knobColor?.let { append("background-color: ${it.toCss()}; background-image: none; ") }
+                        if (knob != null) {
+                            append("min-width: ${knob}px; min-height: ${knob}px; ")
+                            append("border-radius: ${knob / 2}px; ")
+                        }
+                        append("border: none; box-shadow: none;")
+                    }
+                }
+            }
+
+            is SelectionElement ->
+                rules += " selection" to "background-color: ${element.background.toCss()}; color: ${element.color.toCss()};"
 
             is RawStyleElement -> rules += element.selector to element.declarations
         }
