@@ -78,6 +78,20 @@ source .tools/env.sh   # JAVA_HOME, GRADLE_USER_HOME, KONAN_DATA_DIR, CARGO_HOME
 
 In a normal environment skip that and use your global toolchains.
 
+### IDE (IntelliJ IDEA) sync
+
+IntelliJ starts Gradle directly (not through the `gradlew` shell script), so shell environment
+variables are not applied. The build therefore configures Gobley explicitly:
+
+* `dev.gobley.rust` + `rust { toolchainDirectory = <repo>/.rustup/toolchains/<...>/bin }` makes
+  Gobley use the repository toolchain (`cargo`/`rustc`) instead of the system one — Arch's
+  `rustc --version` output cannot be parsed by Gobley;
+* Gobley's `rustup` invocations are pointed at `scripts/gobley-rustup.sh`, which sets
+  `RUSTUP_HOME`/`CARGO_HOME` for the local toolchain and falls back to the system `rustup`.
+
+No IDE Gradle-environment tweaks are needed: `Sync Project with Gradle Files` works out of the box
+(with the Gradle JVM set to a supported JDK, e.g. 21).
+
 In *this* checkout the bootstrap is automatic: `gradlew` sources `.tools/env.sh` when it exists,
 so a plain `./gradlew run` works without any manual setup (this also pins JDK 21 and makes
 `rustup` visible to Gobley). On a fresh clone without `.tools/`, install the prerequisites above
