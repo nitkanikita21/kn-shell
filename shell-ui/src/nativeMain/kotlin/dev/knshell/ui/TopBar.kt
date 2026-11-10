@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import dev.knshell.animation.animateFloatAsState
 import dev.knshell.compose.Button
 import dev.knshell.compose.Canvas
+import dev.knshell.compose.DebugWidgets
 import dev.knshell.compose.CenterBox
 import dev.knshell.compose.Label
 import dev.knshell.compose.Row
@@ -20,6 +21,7 @@ import dev.knshell.core.MediaState
 import dev.knshell.core.SystemStats
 import dev.knshell.core.WorkspaceInfo
 import dev.knshell.services.ShellServices
+import kotlinx.cinterop.toKString
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -41,23 +43,57 @@ import kotlin.random.Random
  *  * the clock colon fades in/out every 500 ms,
  *  * GTK CSS transitions handle hover states of the pills.
  */
+/**
+ * Bar state is intentionally hoisted outside the composition.
+ *
+ * The values are written from coroutines that outlive composition re-creations
+ * (effects collecting the Rust service flows), and `remember`-owned state was not
+ * reliably shared with those collectors in this custom (non-Compose-UI) applier setup.
+ * A process-global state holder keeps producers and the UI on the same state objects.
+ */
+internal val UI_DEBUG: Boolean = platform.posix.getenv("KN_SHELL_DEBUG_UI")?.toKString() == "1"
+
+internal object BarState {
+    val volume = mutableStateOf(0)
+    val media = mutableStateOf(MediaState("", "", false, "", false))
+    val workspaces = mutableStateOf<List<WorkspaceInfo>>(emptyList())
+    val stats = mutableStateOf(SystemStats(0, 0))
+    val clock = mutableStateOf(currentClockParts())
+}
+
 @Composable
 fun TopBar() {
-    var volume by remember { mutableStateOf(0) }
-    var media by remember { mutableStateOf(MediaState("", "", false, "", false)) }
-    var workspaces by remember { mutableStateOf<List<WorkspaceInfo>>(emptyList()) }
-    var stats by remember { mutableStateOf(SystemStats(0, 0)) }
-    var clock by remember { mutableStateOf(currentClockParts()) }
+    val volume by BarState.volume
+    val media by BarState.media
+    val workspaces by BarState.workspaces
+    val stats by BarState.stats
+    val clock by BarState.clock
 
     LaunchedEffect(Unit) {
-        launch { ShellServices.volume.collect { volume = it } }
-        launch { ShellServices.media.collect { media = it } }
-        launch { ShellServices.workspaces.collect { workspaces = it } }
-        launch { ShellServices.system.collect { stats = it } }
+        launch {
+            // Self-test hook: click the active workspace chip programmatically to verify the
+            // GTK signal -> Compose callback -> Rust -> hyprctl chain without a mouse.
+            if (platform.posix.getenv("KN_SHELL_SELFTEST")?.toKString() == "1") {
+                delay(4_000)
+                val target = workspaces.firstOrNull { it.active } ?: workspaces.firstOrNull()
+                if (target != null) {
+                    val registered = DebugWidgets.click(target.name)
+                    println("[selftest] programmatic click on workspace chip \"${target.name}\" registered=$registered")
+                } else {
+                    println("[selftest] no workspaces to click")
+                }
+            }
+        }
+        launch { ShellServices.volume.collect { BarState.volume.value = it } }
+        launch { ShellServices.media.collect { BarState.media.value = it } }
+        launch {
+            ShellServices.workspaces.collect { BarState.workspaces.value = it }
+        }
+        launch { ShellServices.system.collect { BarState.stats.value = it } }
         launch {
             while (true) {
                 delay(1_000)
-                clock = currentClockParts()
+                BarState.clock.value = currentClockParts()
             }
         }
     }
@@ -162,7 +198,7 @@ fun TopBar() {
 @Composable
 private fun WorkspaceChip(workspace: WorkspaceInfo) {
     val width by animateFloatAsState(
-        targetValue = if (workspace.active) 26f else 12f,
+        targetValue = if (workspace.active) 28f else 16f,
         stiffness = 420f,
         dampingRatio = 0.65f,
     )

@@ -151,7 +151,10 @@ Screenshots: [`docs/screenshots/topbar-layer.png`](docs/screenshots/topbar-layer
 1. `GLibDispatcher` — a `CoroutineDispatcher` that posts work with `g_idle_add`, so recomposition runs
    on the GTK main thread.
 2. `GLibFrameClock` — a `MonotonicFrameClock` that broadcasts one frame to **all** suspended
-   `withFrameNanos` callers every 16 ms via `g_timeout_add`.
+   `withFrameNanos` callers every 16 ms via `g_timeout_add`. Every tick also calls
+   `Snapshot.sendApplyNotifications()`: Compose observes state writes through snapshot apply
+   notifications, which usually the platform UI loop sends. Without it the Recomposer freezes
+   after the initial composition (Rust service updates, clocks and animations stop reaching the UI).
 3. `GtkApplier` — an `AbstractApplier<GtkNode>` implementing bottom-up insertion, which maps
    Compose nodes onto `GtkBox` children.
 4. Composable state (clock text, volume, MPRIS title, animated radii) is read **during composition**,

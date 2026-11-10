@@ -195,17 +195,28 @@ pub fn focus_workspace(name: String) {
     let escaped = name.replace('\\', "\\\\").replace('"', "\\\"");
     let lua = format!("hl.dsp.focus({{ workspace = \"{escaped}\" }})");
 
-    let modern_ok = std::process::Command::new("hyprctl")
+    match std::process::Command::new("hyprctl")
         .args(["dispatch", &lua])
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false);
-
-    if !modern_ok {
-        let _ = std::process::Command::new("hyprctl")
-            .args(["dispatch", "workspace", &name])
-            .status();
+        .output()
+    {
+        Ok(output) => {
+            eprintln!(
+                "[rust/workspaces] focus_workspace(name={name:?}) lua={lua:?} status={:?} stdout={:?} stderr={:?}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout).trim(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            );
+            if output.status.success() {
+                return;
+            }
+        }
+        Err(error) => eprintln!("[rust/workspaces] failed to run hyprctl: {error}"),
     }
+
+    // Legacy dispatcher syntax for older Hyprland releases.
+    let _ = std::process::Command::new("hyprctl")
+        .args(["dispatch", "workspace", &name])
+        .status();
 }
 
 /// Sets the volume of the default sink (0-150 %).

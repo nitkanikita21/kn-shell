@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.snapshots.Snapshot
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -115,6 +116,13 @@ class GLibFrameClock : MonotonicFrameClock {
     }
 
     private fun tick() {
+        // Compose observes state changes through the snapshot apply notifications. On
+        // Android/Compose Desktop the platform calls this; in this GTK bridge nothing
+        // else does, and without it the Recomposer never learns about writes made from
+        // coroutines (Rust service callbacks, clocks, animations) — the UI freezes after
+        // the initial composition.
+        Snapshot.sendApplyNotifications()
+
         val nanos = start.elapsedNow().inWholeNanoseconds
         if (waiters.isEmpty()) return
         val pending = waiters.toList()
