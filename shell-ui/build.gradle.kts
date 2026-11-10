@@ -1,0 +1,31 @@
+plugins {
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.compose)
+}
+
+// GTK4 + layer-shell are consumed through a hand-written C interop instead of the
+// archived `gtk-kn` project (see README "Deviations"): include paths come from
+// pkg-config, linker options live in the .def file.
+val gtkCflags: List<String> = providers.exec {
+    commandLine("pkg-config", "--cflags", "gtk4", "gtk4-layer-shell-0")
+}.standardOutput.asText.get().trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+
+kotlin {
+    linuxX64 {
+        compilations.getByName("main").cinterops.create("gtk4") {
+            defFile(project.file("src/nativeInterop/cinterop/gtk4.def"))
+            compilerOpts(gtkCflags)
+        }
+    }
+
+    sourceSets {
+        commonMain.dependencies {
+            api(libs.compose.runtime)
+            implementation(libs.kotlinx.coroutines.core)
+        }
+
+        nativeMain.dependencies {
+            implementation(project(":rust-core"))
+        }
+    }
+}

@@ -1,0 +1,20 @@
+[package]
+name = "kn_shell_core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "kn_shell_core"
+# Gobley links the static library produced by Cargo into the Kotlin/Native binary.
+crate-type = ["staticlib"]
+
+[dependencies]
+# Must stay in sync with the UniFFI version embedded in Gobley 0.3.x.
+uniffi = "0.29.4"
+# Toplevel window list (ext-foreign-toplevel-list-v1).
+smithay-client-toolkit = "0.21"
+wayland-client = "0.31"
+wayland-protocols = "0.32"
+# MPRIS media player integration (blocking libdbus backend).
+mpris = "2.1"

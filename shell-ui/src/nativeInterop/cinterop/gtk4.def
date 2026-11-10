@@ -1,0 +1,13 @@
+/*
+ * C interop for GTK 4 and gtk4-layer-shell.
+ *
+ * Include paths are injected by build.gradle.kts from `pkg-config --cflags`.
+ * Linker options are declared here so they travel with the cinterop klib and are
+ * applied whenever a Kotlin/Native binary depends on it.
+ *
+ * Packages used by this project: gtk4, gtk4-layer-shell 1.x (GtkLayerShell-1.0.gir is
+ * generated from the same headers installed by the distro package).
+ */
+package = kn.gtk
+headers = gtk/gtk.h gtk4-layer-shell.h
+linkerOpts = -L/usr/lib -L/usr/lib64 -L/lib64 -lgtk-4 -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -lgdk_pixbuf-2.0 -lcairo-gobject -lcairo -lvulkan -lgraphene-1.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lgtk4-layer-shell

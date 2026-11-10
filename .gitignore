@@ -1,0 +1,33 @@
+# Gradle / Kotlin
+.gradle/
+.gradle-home/
+.kotlin/
+build/
+**/build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local toolchains (downloaded by the bootstrap script)
+.tools/
+.konan/
+.cargo-home/
+
+# Rust
+target/
+**/target/
+Cargo.lock.bak
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Kotlin/Native binaries
+*.kexe
+*.klib
+
+# Logs
+*.log
+
+# Local sandbox caches
+.rustup/
+.scratch/
