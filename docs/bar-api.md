@@ -107,13 +107,18 @@ fun main() = Shell.run {
 
 ## Animations
 
-Any Compose state works; animate with `dev.knshell.animation.animateFloatAsState` (a small
-spring implementation on `withFrameNanos`) and draw with `Canvas` (cairo):
+Any Compose state works; animate with `dev.knshell.animation.animateFloatAsState` — either the
+QML-style time-based variant (`durationMs` + `Easing`) or the spring variant (`stiffness` +
+`dampingRatio`) — and draw with `Canvas` (cairo):
 
 ```kotlin
 var up by remember { mutableStateOf(false) }
 LaunchedEffect(Unit) { while (true) { delay(900); up = !up } }
-val radius by animateFloatAsState(if (up) 8f else 4f, stiffness = 300f, dampingRatio = 0.5f)
+val radius by animateFloatAsState(
+    targetValue = if (up) 8f else 4f,
+    durationMs = 180,
+    easing = Easing.OutCubic,   // monotonic: no overshoot, no parent-layout jitter
+)
 Canvas(24, 24) { cr, width, height -> /* cairo drawing */ }
 ```
 

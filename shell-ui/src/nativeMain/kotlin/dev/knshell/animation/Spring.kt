@@ -67,3 +67,64 @@ fun animateFloatAsState(
 
     return value
 }
+
+/** QML-style easing curves for [animateFloatAsState]. Monotonic curves never overshoot. */
+enum class Easing {
+    Linear,
+    OutCubic,
+    InOutCubic,
+}
+
+private fun Easing.transform(t: Float): Float = when (this) {
+    Easing.Linear -> t
+    Easing.OutCubic -> {
+        val p = 1f - t
+        1f - p * p * p
+    }
+    Easing.InOutCubic -> if (t < 0.5f) {
+        4f * t * t * t
+    } else {
+        val p = -2f * t + 2f
+        1f - (p * p * p) / 2f
+    }
+}
+
+/**
+ * Time-based animation with an easing curve — the QML `NumberAnimation` analogue
+ * (`Behavior on width { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }`).
+ *
+ * Unlike the spring overload, [Easing.OutCubic] / [Easing.InOutCubic] are monotonic: the
+ * value never overshoots the target, so a parent layout (GtkBox width = sum of children)
+ * does not oscillate while several children animate at once.
+ */
+@Composable
+fun animateFloatAsState(
+    targetValue: Float,
+    durationMs: Int = 180,
+    easing: Easing = Easing.OutCubic,
+): State<Float> {
+    val value = remember { mutableStateOf(targetValue) }
+
+    LaunchedEffect(targetValue, durationMs, easing) {
+        if (durationMs <= 0) {
+            value.value = targetValue
+            return@LaunchedEffect
+        }
+        val start = value.value
+        if (start == targetValue) return@LaunchedEffect
+
+        var startNanos = 0L
+        var progress = 0f
+        while (progress < 1f) {
+            withFrameNanos { nanos ->
+                if (startNanos == 0L) startNanos = nanos
+                val elapsedMs = (nanos - startNanos) / 1_000_000f
+                progress = (elapsedMs / durationMs).coerceIn(0f, 1f)
+                value.value = start + (targetValue - start) * easing.transform(progress)
+            }
+        }
+        value.value = targetValue
+    }
+
+    return value
+}
