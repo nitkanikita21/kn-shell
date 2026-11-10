@@ -129,6 +129,21 @@ internal data class SliderThemeElement(
     val knobSize: Int?,
 ) : ModifierElement
 
+/** Italic text (`font-style: italic`). */
+internal data object ItalicElement : ModifierElement
+
+/** Underlined text (`text-decoration-line: underline`). */
+internal data object UnderlineElement : ModifierElement
+
+/** Struck-through text (`text-decoration-line: line-through`). */
+internal data object StrikeElement : ModifierElement
+
+/** Numeric font weight (400 normal, 700 bold, …). */
+internal data class FontWeightElement(val weight: Int) : ModifierElement
+
+/** Letter spacing in CSS pixels. */
+internal data class LetterSpacingElement(val px: Float) : ModifierElement
+
 /** Text selection colours inside a label. */
 internal data class SelectionElement(val background: Color, val color: Color) : ModifierElement
 
@@ -192,6 +207,21 @@ fun Modifier.textColor(color: Color): Modifier = with(TextColorElement(color))
 fun Modifier.fontSize(px: Int): Modifier = with(FontSizeElement(px))
 
 fun Modifier.fontFamily(family: String): Modifier = with(FontFamilyElement(family))
+
+/** Italic (`font-style: italic`). */
+fun Modifier.italic(): Modifier = with(ItalicElement)
+
+/** Underline (`text-decoration-line: underline`). */
+fun Modifier.underline(): Modifier = with(UnderlineElement)
+
+/** Strike-through (`text-decoration-line: line-through`). */
+fun Modifier.strikethrough(): Modifier = with(StrikeElement)
+
+/** Numeric font weight: `400` normal, `700` bold, `900` heavy. */
+fun Modifier.fontWeight(weight: Int): Modifier = with(FontWeightElement(weight))
+
+/** Letter spacing in CSS pixels (fractional allowed). */
+fun Modifier.letterSpacing(px: Float): Modifier = with(LetterSpacingElement(px))
 
 fun Modifier.bold(): Modifier = with(BoldElement)
 
@@ -484,6 +514,16 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             }
 
             ClipOverflowElement -> gtk_widget_set_overflow(widget, GtkOverflow.GTK_OVERFLOW_HIDDEN)
+
+            ItalicElement -> rules += "" to "font-style: italic;"
+
+            UnderlineElement -> rules += "" to "text-decoration-line: underline;"
+
+            StrikeElement -> rules += "" to "text-decoration-line: line-through;"
+
+            is FontWeightElement -> rules += "" to "font-weight: ${element.weight};"
+
+            is LetterSpacingElement -> rules += "" to "letter-spacing: ${element.px}px;"
 
             is SelectionElement ->
                 rules += " selection" to "background-color: ${element.background.toCss()}; color: ${element.color.toCss()};"

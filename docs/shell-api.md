@@ -252,6 +252,9 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `focusRing(color, width = 2, offset = 0)` | keyboard focus outline for `:focus-visible` |
 | `minWidth(px)` / `minHeight(px)` / `minSize(w, h)` | CSS minimums after the plain reset removed the theme's |
 | `textColor(color)` / `fontSize(px)` / `fontFamily(name)` / `bold()` | CSS text declarations |
+| `italic()` / `underline()` / `strikethrough()` | `font-style: italic` / `text-decoration-line` |
+| `fontWeight(weight)` | numeric weight: `400` normal, `700` bold, `900` heavy |
+| `letterSpacing(px)` | CSS `letter-spacing` (fractional ok) |
 | `selection(color, background)` | text-selection colours inside a label |
 | `slider(troughColor, troughHeight, highlightColor, knobColor, knobSize)` | typed styling of `GtkScale` trough/highlight/knob |
 | `size(w, h)` / `width(w)` / `height(h)` | `gtk_widget_set_size_request` |
