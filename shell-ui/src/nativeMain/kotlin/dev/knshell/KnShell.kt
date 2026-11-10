@@ -12,6 +12,7 @@ import dev.knshell.compose.fontFamily
 import dev.knshell.compose.fontSize
 import dev.knshell.compose.height
 import dev.knshell.shell.BarAnchor
+import dev.knshell.shell.BarLayer
 import dev.knshell.shell.BarWindowSpec
 import dev.knshell.shell.ExclusiveZone
 import dev.knshell.shell.Margins
@@ -52,15 +53,23 @@ fun startKnShell() {
         }
 
         else -> {
-            println("[shell] panel mode (layer-shell top bar)")
+            // Development convenience: overlay the bar on top of waybar (which reserves the
+            // top 40 px through its exclusive zone, hence the negative margin).
+            val overlayDev = getenv("KN_SHELL_BAR_LAYER")?.toKString() == "overlay"
+            println("[shell] panel mode (layer-shell " + (if (overlayDev) "overlay over waybar" else "top bar") + ")")
             Shell.run {
                 barWindow(
                     BarWindowSpec(
                         title = "My Bar",
                         height = 40,
+                        layer = if (overlayDev) BarLayer.Overlay else BarLayer.Top,
                         anchors = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
-                        margins = Margins(top = 4, left = 10, right = 10, bottom = 4),
-                        exclusiveZone = ExclusiveZone.Auto,
+                        margins = if (overlayDev) {
+                            Margins(top = -40, left = 10, right = 10, bottom = 0)
+                        } else {
+                            Margins(top = 0, left = 10, right = 10, bottom = 0)
+                        },
+                        exclusiveZone = if (overlayDev) ExclusiveZone.None else ExclusiveZone.Auto,
                         namespace = "my-bar",
                     ),
                 ) { TestBar() }

@@ -7,6 +7,9 @@ import dev.knshell.compose.Color
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kn.gtk.GTK_LAYER_SHELL_KEYBOARD_MODE_NONE
+import kn.gtk.GTK_LAYER_SHELL_LAYER_BACKGROUND
+import kn.gtk.GTK_LAYER_SHELL_LAYER_BOTTOM
+import kn.gtk.GTK_LAYER_SHELL_LAYER_OVERLAY
 import kn.gtk.GTK_LAYER_SHELL_LAYER_TOP
 import kn.gtk.GtkWindow
 
@@ -48,13 +51,27 @@ data class BarWindowSpec(
     val title: String = "KN Shell",
     val height: Int = 40,
     val width: Int = 1280,
-    val layer: UInt = GTK_LAYER_SHELL_LAYER_TOP,
+    val layer: UInt = BarLayer.Top,
     val anchors: Set<BarAnchor> = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
     val margins: Margins = Margins(top = 8, left = 10, right = 10, bottom = 0),
     val exclusiveZone: ExclusiveZone = ExclusiveZone.Auto,
     val keyboardMode: UInt = GTK_LAYER_SHELL_KEYBOARD_MODE_NONE,
     val namespace: String = "kn-shell",
 )
+
+/**
+ * wlr-layer-shell layers by name, so call sites do not need to import the cinterop
+ * constants (`kn.gtk.GTK_LAYER_SHELL_LAYER_*`).
+ *
+ * `Overlay` renders above `Top` (and therefore above waybar); combine it with
+ * [ExclusiveZone.None] and a negative top margin to place a development bar over waybar.
+ */
+object BarLayer {
+    val Background: UInt = GTK_LAYER_SHELL_LAYER_BACKGROUND
+    val Bottom: UInt = GTK_LAYER_SHELL_LAYER_BOTTOM
+    val Top: UInt = GTK_LAYER_SHELL_LAYER_TOP
+    val Overlay: UInt = GTK_LAYER_SHELL_LAYER_OVERLAY
+}
 
 /** Handle to a mounted window; [close] closes it through GTK's close-request path. */
 class WindowHandle internal constructor(

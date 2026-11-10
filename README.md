@@ -129,6 +129,36 @@ polls mtimes every second and restarts the process, so UI edits need no manual c
 once and `exec`s `releaseExecutable/shell-app.kexe`, so the shell is a normal standalone
 process (handy for `hyprctl layers` checks and PID-based cleanup).
 
+### Development bar above waybar
+
+waybar reserves the top exclusive zone, so a `TOP`-layer bar started later is placed below
+it (measured: waybar `y=0`, our bar `y=40`). Two stable options:
+
+**Cover waybar** (our bar at `y=0`, waybar hidden underneath):
+
+```bash
+KN_SHELL_BAR_LAYER=overlay ./scripts/dev.sh --watch
+```
+
+This uses layer `Overlay`, `ExclusiveZone.None` and `margin-top = -40` (see `BarLayer` in
+`ShellScope.kt`), so the bar is not pushed down by waybar's exclusive zone.
+
+**Keep both visible** (ours on top, waybar directly below): add one line to
+`~/.config/waybar/config.jsonc` and restart waybar:
+
+```jsonc
+"margin-top": 40,
+```
+
+```bash
+killall waybar; (waybar >/dev/null 2>&1 &)
+KN_SHELL_BAR_LAYER=overlay ./scripts/dev.sh --watch
+```
+
+Result: our bar occupies `0..40`, waybar `40..80`. (Layer-shell exclusive zones accumulate
+in creation order, so restarting waybar *after* the shell also puts it below — but that
+order breaks every time `dev.sh` restarts the shell, hence the explicit margin.)
+
 ### Run modes (`KN_SHELL_MODE`)
 
 | Value | Behaviour |
