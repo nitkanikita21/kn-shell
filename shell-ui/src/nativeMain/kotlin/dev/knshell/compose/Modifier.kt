@@ -377,6 +377,9 @@ internal class InlineStyle(private val widget: CPointer<GtkWidget>) {
     /** Opt-in size tween used by [Modifier.behavior]; see [SizeAnimator]. */
     internal val sizeAnimator = SizeAnimator()
 
+    /** Click/hover/cursor wiring (see Interaction.kt). */
+    internal val interaction = InteractionState(widget)
+
     private var provider: CPointer<GtkCssProvider>? = null
     private var className: String? = null
     private var lastCss: String? = null
@@ -431,6 +434,10 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var vexpand: Boolean? = null
     var halign: UInt? = null
     var behavior: BehaviorElement? = null
+    var clickHandler: (() -> Unit)? = null
+    var hoverEnter: (() -> Unit)? = null
+    var hoverExit: (() -> Unit)? = null
+    var cursorName: String? = null
     var valign: UInt? = null
     val rules = mutableListOf<Pair<String, String>>()
 
@@ -567,6 +574,15 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
 
             is BehaviorElement -> behavior = element
 
+            is ClickElement -> clickHandler = element.handler
+
+            is HoverElement -> {
+                hoverEnter = element.onEnter
+                hoverExit = element.onExit
+            }
+
+            is CursorElement -> cursorName = element.name
+
             is RawStyleElement -> rules += element.selector to element.declarations
         }
     }
@@ -592,4 +608,5 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     valign?.let { gtk_widget_set_valign(widget, it) }
 
     inlineStyle.setRules(rules)
+    inlineStyle.interaction.bind(clickHandler, hoverEnter, hoverExit, cursorName)
 }

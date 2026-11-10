@@ -266,6 +266,9 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `centerHorizontally()` | horizontal `GTK_ALIGN_CENTER` |
 | `opacity(value)` | `gtk_widget_set_opacity` |
 | `clipOverflow()` | `gtk_widget_set_overflow(GTK_OVERFLOW_HIDDEN)` — clip children to the allocation |
+| `onClick { … }` | click gesture on any widget (Label, Icon, Box, …) |
+| `onHover(onEnter, onExit)` | hover enter/exit callbacks |
+| `cursor(name)` / `pointerCursor()` | mouse cursor while hovering (`pointer`, `text`, `default`, …) |
 | `rawStyle(selector, declarations)` | escape hatch: arbitrary CSS scoped to the widget |
 
 ### Radius examples

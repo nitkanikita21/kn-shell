@@ -45,16 +45,28 @@ fun VSpace(height: Int) = Space(width = 0, height = height)
 
 /** A Nerd Font glyph at [size] pixels; optionally coloured and colour-animated. */
 @Composable
-fun Icon(glyph: String, size: Int = 13, color: Color? = null, transitionMs: Int = 0) {
-    var modifier = Modifier.fontSize(size)
+fun Icon(
+    glyph: String,
+    modifier: Modifier = Modifier,
+    size: Int = 13,
+    color: Color? = null,
+    transitionMs: Int = 0,
+) {
+    var modifier = modifier.fontSize(size)
     if (color != null) modifier = modifier.textColor(color, transitionMs)
     Label(glyph, modifier)
 }
 
 /** A label at [size] pixels; optionally coloured and colour-animated. */
 @Composable
-fun Text(text: String, size: Int = 13, color: Color? = null, transitionMs: Int = 0) {
-    var modifier = Modifier.fontSize(size)
+fun Text(
+    text: String,
+    modifier: Modifier = Modifier,
+    size: Int = 13,
+    color: Color? = null,
+    transitionMs: Int = 0,
+) {
+    var modifier = modifier.fontSize(size)
     if (color != null) modifier = modifier.textColor(color, transitionMs)
     Label(text, modifier)
 }
