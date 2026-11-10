@@ -45,3 +45,26 @@ if (gobleyRustUp.exists()) {
         rustUp.set(gobleyRustUp)
     }
 }
+
+// Gobley's cargo tasks do not declare the Rust sources as Gradle inputs, so an edited
+// `.rs` file leaves cargoBuild UP-TO-DATE and the stale static library ends up in the
+// Kotlin/Native binary (silent: the app keeps running old service code).
+// Declare the real inputs; cargo itself is incremental, so this is cheap.
+tasks.matching { it.name.startsWith("cargoBuild") }.configureEach {
+    if (this is Task) {
+        inputs.dir(project.layout.projectDirectory.dir("src")).withPathSensitivity(PathSensitivity.RELATIVE)
+        inputs.file(project.layout.projectDirectory.file("Cargo.toml"))
+        inputs.file(project.layout.projectDirectory.file("Cargo.lock")).optional()
+    }
+}
+
+// The Rust archive is included into the final binary through cinterop; make the archive
+// an explicit input so a rebuilt library invalidates the cinterop klib and the link.
+val rustDebugArchive = project.layout.buildDirectory.file(
+    "../target/x86_64-unknown-linux-gnu/debug/libkn_shell_core.a",
+)
+tasks.matching { it.name.startsWith("cinteropRust") }.configureEach {
+    if (this is Task) {
+        inputs.file(rustDebugArchive).optional()
+    }
+}

@@ -115,6 +115,10 @@ KN_SHELL_MODE=panel ./scripts/dev.sh --watch
 ./gradlew build
 ```
 
+`scripts/dev.sh` notices Rust source changes and cleans the native build dirs before
+rebuilding: incremental links were observed to reuse a stale Rust static library, silently
+running old service code (e.g. the workspace list staying empty for seconds at startup).
+
 Measured on this machine (one changed Kotlin file): **debug 12 s**, **release 82–95 s** —
 release pays for whole-program LTO. `scripts/dev.sh` builds
 `linkDebugExecutableLinuxX64` and runs `debugExecutable/shell-app.kexe`; with `--watch` it

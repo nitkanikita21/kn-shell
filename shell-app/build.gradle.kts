@@ -31,3 +31,14 @@ tasks.register("run") {
     description = "Builds the shell (Rust + UniFFI + Kotlin/Native) and launches it."
     dependsOn("runReleaseExecutableLinuxX64")
 }
+
+// The executable must be relinked whenever the Rust static library changes; link tasks do
+// not model that dependency on their own (see rust-core/build.gradle.kts).
+val rustArchive = rootProject.layout.projectDirectory.file(
+    "rust-core/target/x86_64-unknown-linux-gnu/debug/libkn_shell_core.a",
+)
+tasks.matching { it.name.startsWith("linkDebug") || it.name.startsWith("linkRelease") }.configureEach {
+    if (this is Task) {
+        inputs.file(rustArchive).optional()
+    }
+}
