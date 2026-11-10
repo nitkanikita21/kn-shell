@@ -114,7 +114,7 @@ fun MyModule() {
 `ShellServices` listener writes `flow.value` → `collect` in `LaunchedEffect` runs on
 `GLibDispatcher` and writes Compose state → the next 16 ms tick calls
 `Snapshot.sendApplyNotifications()`, the Recomposer recomposes and the applier calls `gtk_*`
-on the GTK thread. The same tick advances animations (`withFrameNanos`): time-based `durationMs` + `Easing` or spring; callbacks
+on the GTK thread. The same tick advances animations (`withFrameNanos`): time-based `durationMs` + `Easing`, spring, or a shared `Animate { t -> … }` progress; callbacks
 never touch GTK, so UI code needs no locking.
 
 `ShellServices.start()` subscribes all listeners — `startKnShell()` does it, embedders must

@@ -83,6 +83,36 @@ fun Volume() {
 }
 ```
 
+### Synchronised animations
+
+Independent `animateFloatAsState` calls each own a frame loop: starting them from the same
+recomposition is usually in phase, but nothing guarantees it. When several values must move
+together (an indicator sliding between slots, a pill growing while its colour changes),
+derive them from **one shared progress**:
+
+```kotlin
+Animate(active = workspace.active, durationMs = 180) { t ->
+    Box(
+        Modifier
+            .size(lerp(28, 40, t), 28)
+            .radius(14)
+            .background(lerpColor(Catppuccin.Surface3, Catppuccin.Mauve, t)),
+    ) {
+        Text(workspace.name)
+    }
+}
+```
+
+`Animate` drives exactly one `withFrameNanos` loop and one easing curve; `lerp` / `lerpColor`
+read the same `t`, so every value is in phase by construction — no drift, no per-value
+spring/overshoot. This is the QML `ParallelAnimation` idea as data.
+
+Hoist the progress to a common ancestor when siblings must share it (e.g. a highlight pill
+sliding between fixed slots: `x = lerp(oldIndex, newIndex, t)`).
+
+Tip: colours can also be left to GTK's `transitionMs`; use the shared `t` for geometry and
+let the CSS transition handle colour, which avoids one CSS update per frame.
+
 ## The bar itself
 
 ```kotlin
