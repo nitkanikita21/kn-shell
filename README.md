@@ -11,7 +11,7 @@ A minimal Wayland desktop shell where:
 The shell runs on the author's Hyprland 0.56 / Wayland session and was verified phase by phase
 (see [Verification log](#verification-log)).
 
-![Layer-shell panel](docs/screenshots/phase5-panel-layer-shell.png)
+![Layer-shell top bar](docs/screenshots/topbar-layer.png)
 
 ---
 
@@ -124,6 +124,22 @@ pactl set-sink-volume @DEFAULT_SINK@ 40%   # the panel slider follows the sink
 
 Screenshots: [`docs/screenshots/`](docs/screenshots) — layer-shell bar, windowed panel,
 circle animation, and the headless bar.
+
+### The bar
+
+The default mode is a **waybar-like top bar** (`KN_SHELL_MODE=panel`, the default):
+
+* **start** — music pill (title + live cairo equalizer animated with Compose springs) and an updates pill;
+* **center** — workspace chips (dot → chip width spring, active chip highlighted, click focuses the workspace);
+* **end** — network, volume pill with slider, CPU and memory (numbers smoothly animated towards the measured values),
+  clock with a blinking colon, power button.
+
+Styling follows the reference waybar: Catppuccin Mocha palette, rounded `rgba(22,25,37,0.9)` pills with
+shadow, JetBrainsMono Nerd Font, CSS hover transitions. When the real waybar is running, the layer
+surface is placed below it (exclusive zone); stop waybar to see the bar at the very top edge.
+
+Screenshots: [`docs/screenshots/topbar-layer.png`](docs/screenshots/topbar-layer.png),
+[`docs/screenshots/topbar-vs-waybar.png`](docs/screenshots/topbar-vs-waybar.png).
 
 ### How the composition is driven
 
