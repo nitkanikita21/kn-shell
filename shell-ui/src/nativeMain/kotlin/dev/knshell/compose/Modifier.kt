@@ -200,6 +200,16 @@ fun Modifier.fillMaxWidth(): Modifier = with(ExpandElement(horizontal = true, ve
     AlignElement(horizontal = GTK_ALIGN_FILL, vertical = null),
 )
 
+/** Take all available vertical space (`vexpand` + vertical `GTK_ALIGN_FILL`). */
+fun Modifier.fillMaxHeight(): Modifier = with(ExpandElement(horizontal = false, vertical = true)).with(
+    AlignElement(horizontal = null, vertical = GTK_ALIGN_FILL),
+)
+
+/** Take all available space in both directions. */
+fun Modifier.fillMaxSize(): Modifier = with(ExpandElement(horizontal = true, vertical = true)).with(
+    AlignElement(horizontal = GTK_ALIGN_FILL, vertical = GTK_ALIGN_FILL),
+)
+
 fun Modifier.centerVertically(): Modifier = with(AlignElement(horizontal = null, vertical = GTK_ALIGN_CENTER))
 
 fun Modifier.opacity(value: Float): Modifier = with(OpacityElement(value))
