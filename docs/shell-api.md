@@ -257,6 +257,7 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `size(w, h)` / `width(w)` / `height(h)` | `gtk_widget_set_size_request` |
 | `fillMaxWidth()` | `hexpand` + horizontal `GTK_ALIGN_FILL` |
 | `centerVertically()` | vertical `GTK_ALIGN_CENTER` |
+| `centerHorizontally()` | horizontal `GTK_ALIGN_CENTER` |
 | `opacity(value)` | `gtk_widget_set_opacity` |
 | `clipOverflow()` | `gtk_widget_set_overflow(GTK_OVERFLOW_HIDDEN)` — clip children to the allocation |
 | `rawStyle(selector, declarations)` | escape hatch: arbitrary CSS scoped to the widget |
@@ -302,6 +303,28 @@ allocates space, pass `Modifier.fillMaxSize()` explicitly.
 Verified semantics: a `GtkOverlay` whose main child is empty measures 0×0 even with a 17px
 overlay label. Use it for badges, counters, icons over fixed-size shapes; keep regular
 `Label` where the text *should* size its container.
+
+### Keeping a container width constant
+
+If a child animates its width, the parent (`GtkBox`) width changes every frame. Reserve a
+fixed slot per child and animate inside it:
+
+```kotlin
+Row(spacing = 0, modifier = Modifier.padding(horizontal = 8, vertical = 4)) {
+    list.forEach { workspace ->
+        key(workspace.name) {
+            Box(Modifier.width(48).height(28)) {   // slot: constant 48px
+                WorkspaceChip(workspace)           // chip: 16 → 32 px, centered
+            }
+        }
+    }
+}
+```
+
+The row width is now `slots * 48 + padding * 2` and never changes when the active item
+moves; only the chip inside its slot animates (`Modifier.centerHorizontally()` keeps it
+centered). This also removes the parent-layout jitter caused by several simultaneous width
+animations.
 
 ## Extending
 

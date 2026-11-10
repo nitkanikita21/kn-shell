@@ -217,6 +217,9 @@ fun Modifier.fillMaxSize(): Modifier = with(ExpandElement(horizontal = true, ver
 
 fun Modifier.centerVertically(): Modifier = with(AlignElement(horizontal = null, vertical = GTK_ALIGN_CENTER))
 
+/** Centers a child horizontally inside its parent [Row] (or any allocating box). */
+fun Modifier.centerHorizontally(): Modifier = with(AlignElement(horizontal = GTK_ALIGN_CENTER, vertical = null))
+
 fun Modifier.opacity(value: Float): Modifier = with(OpacityElement(value))
 
 fun Modifier.rawStyle(selector: String, declarations: String): Modifier = with(RawStyleElement(selector, declarations))
