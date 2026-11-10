@@ -106,4 +106,8 @@ fun main() = Shell.run {
 }
 ```
 
+The shell ships with an empty skeleton: add modules to the `Bar` slots and the layer surface
+sizes itself to the content (a completely empty bar falls back to GTK's default surface
+height). `BarTheme.barHeight` / `BarWindowSpec.height` define the target bar height.
+
 Windows, services and actions are documented in [shell-api.md](shell-api.md).

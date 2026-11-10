@@ -57,6 +57,7 @@ fun startKnShell() {
 private fun ShellBar() {
     Bar(
         theme = BarTheme.Mocha,
+        // Add your modules here.
         start = {},
         center = {},
         end = {},

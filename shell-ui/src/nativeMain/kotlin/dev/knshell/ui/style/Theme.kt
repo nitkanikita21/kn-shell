@@ -28,6 +28,7 @@ data class BarTheme(
     val gap: Int = 5,
     val fontFamily: String = "JetBrainsMono Nerd Font",
     val fontSize: Int = 13,
+    val barHeight: Int = 40,
 ) {
     companion object {
         /** Catppuccin Mocha — the palette the shell ships with. */

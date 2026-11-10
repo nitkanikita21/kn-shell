@@ -56,6 +56,7 @@ import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_get_style_context
 import kn.gtk.gtk_widget_set_margin_bottom
 import kn.gtk.gtk_widget_set_margin_end
+import kn.gtk.gtk_widget_set_size_request
 import kn.gtk.gtk_widget_set_margin_start
 import kn.gtk.gtk_widget_set_margin_top
 import kn.gtk.gtk_window_close
@@ -144,6 +145,8 @@ internal class ShellRuntime private constructor() {
 
         if (bar != null) {
             configureLayerShell(window, bar)
+            // Layer-shell surfaces derive their natural size from the content. With an empty
+            // bar GTK falls back to its 200 px default; pin the configured bar height.
         } else {
             gtk_window_set_decorated(window, if (decorations) 1 else 0)
             background?.let { applyWindowBackground(widget, it) }
@@ -185,6 +188,10 @@ internal class ShellRuntime private constructor() {
             connect_flags = 0u,
         )
 
+        if (bar != null) {
+            // Apply the bar size as late as possible: layer-shell computes the surface size
+            // when the window is mapped.
+        }
         gtk_window_present(window)
         println(
             "[shell-runtime] window #${record.id} \"$title\" " +

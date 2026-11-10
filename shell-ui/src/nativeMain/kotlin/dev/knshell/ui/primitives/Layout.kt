@@ -17,6 +17,7 @@ import dev.knshell.compose.Row
 import dev.knshell.compose.fillMaxWidth
 import dev.knshell.compose.fontFamily
 import dev.knshell.compose.fontSize
+import dev.knshell.compose.height
 import dev.knshell.compose.size
 import dev.knshell.compose.textColor
 import dev.knshell.core.MediaState
@@ -74,6 +75,7 @@ fun Bar(
     CenterBox(
         modifier = Modifier
             .fillMaxWidth()
+            .height(theme.barHeight)
             .fontFamily(theme.fontFamily)
             .fontSize(theme.fontSize),
         start = { Row(spacing = 0) { start() } },
