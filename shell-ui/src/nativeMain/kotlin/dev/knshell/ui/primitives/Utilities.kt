@@ -65,8 +65,10 @@ fun Text(
     size: Int = 13,
     color: Color? = null,
     transitionMs: Int = 0,
+    ellipsize: Boolean = false,
+    maxWidthChars: Int = -1,
 ) {
     var modifier = modifier.fontSize(size)
     if (color != null) modifier = modifier.textColor(color, transitionMs)
-    Label(text, modifier)
+    Label(text, modifier, ellipsize = ellipsize, maxWidthChars = maxWidthChars)
 }

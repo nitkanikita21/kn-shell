@@ -251,6 +251,7 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `hoverTextColor(color)` / `checkedTextColor(color)` | text colour for `:hover` / `:checked` |
 | `focusRing(color, width = 2, offset = 0)` | keyboard focus outline for `:focus-visible` |
 | `minWidth(px)` / `minHeight(px)` / `minSize(w, h)` | CSS minimums after the plain reset removed the theme's |
+| `maxWidth(px)` / `maxHeight(px)` / `maxSize(w, h)` | cap an **explicit** `width()/height()/size()` request (GTK requests are minimums; natural content cannot be clamped here) |
 | `textColor(color, transitionMs = 0)` / `fontSize(px)` / `fontFamily(name)` / `bold()` | CSS text declarations; `transitionMs` animates the text colour |
 | `transition(ms)` | native GTK transition for colour-like props (color/background/border/shadow/opacity) |
 | `gradient(colors…, angleDeg)` / `radialGradient(colors…)` | CSS gradient background |
@@ -352,6 +353,7 @@ Label(
     ellipsize = true,     // truncate with "…" when the width is constrained
     align = 0f,           // 0 = left, 0.5 = center, 1 = right
     maxLines = 2,         // -1 = unlimited (needs wrap)
+    maxWidthChars = 26,   // font-aware width clamp + automatic "…"; -1 = off
 )
 ```
 
@@ -361,6 +363,11 @@ helper):
 ```kotlin
 Markup("<b>CPU</b> <span foreground='#e06c75'>54°C</span>  <i>fan</i> 720rpm")
 ```
+
+Note on truncation: `ellipsize = true` alone does nothing until the label's allocation is
+smaller than its natural width. Use `maxWidthChars` — it lowers the label minimum, so Pango
+draws "…" at the right place for the current font. Pixel `maxWidth(...)` only caps explicit
+`size()` requests (see the layout table above).
 
 Supported markup includes `<b>`, `<i>`, `<u>`, `<s>`, `<big>`, `<small>`, `<tt>`,
 `<span foreground=… background=… size=… font_family=…>`. CSS modifiers still apply to the

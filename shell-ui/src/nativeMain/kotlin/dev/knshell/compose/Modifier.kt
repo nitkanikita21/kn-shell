@@ -120,6 +120,19 @@ internal data class FocusRingElement(val color: Color, val width: Int, val offse
 /** CSS minimum size, applied after the reset removed the theme's defaults. */
 internal data class MinSizeElement(val width: Int?, val height: Int?) : ModifierElement
 
+/**
+ * Upper bound for an **explicit** size request.
+ *
+ * GTK has no `max-width`/`max-height`: `gtk_widget_set_size_request` is a minimum, so a
+ * widget with big natural content cannot be shrunk from here. This element therefore clamps
+ * the value you set with `width()`/`height()`/`size()`:
+ * `Modifier.size(1000).maxWidth(220)` results in a 220 px request.
+ *
+ * For text use `Label(maxWidthChars = N)`: it lowers the label's *minimum* width, so Pango
+ * ellipsizes ("…"). Pixel max on arbitrary content is not expressible in GTK.
+ */
+internal data class MaxSizeElement(val width: Int?, val height: Int?) : ModifierElement
+
 /** Typed styling of the GtkScale sub-nodes: trough, highlight and slider (knob). */
 internal data class SliderThemeElement(
     val troughColor: Color?,
@@ -327,6 +340,15 @@ fun Modifier.minHeight(px: Int): Modifier = with(MinSizeElement(null, px))
 /** Both minimums. */
 fun Modifier.minSize(width: Int, height: Int): Modifier = with(MinSizeElement(width, height))
 
+/** Caps an explicit `width()`/`size()` request. Text: use `Label(maxWidthChars)`. */
+fun Modifier.maxWidth(px: Int): Modifier = with(MaxSizeElement(px, null))
+
+/** Caps an explicit `height()`/`size()` request. */
+fun Modifier.maxHeight(px: Int): Modifier = with(MaxSizeElement(null, px))
+
+/** Both maximums. */
+fun Modifier.maxSize(width: Int, height: Int): Modifier = with(MaxSizeElement(width, height))
+
 /** Corner radius in CSS pixels, independent of any background. */
 fun Modifier.radius(px: Int): Modifier = with(RadiusElement("border-radius: ${px}px;"))
 
@@ -454,6 +476,8 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var marginVertical = 0
     var width: Int? = null
     var height: Int? = null
+    var maxWidth: Int? = null
+    var maxHeight: Int? = null
     var opacity: Float? = null
     var hexpand: Boolean? = null
     var vexpand: Boolean? = null
@@ -548,6 +572,14 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
                 if (declarations.isNotBlank()) rules += "" to declarations
             }
 
+            is MaxSizeElement -> {
+                // No CSS is emitted: GTK has no max-width/max-height properties.
+                // Collected into locals; the clamp is applied below after merge with
+                // the explicit size.
+                maxWidth = maxWidth ?: element.width
+                maxHeight = maxHeight ?: element.height
+            }
+
             is SliderThemeElement -> {
                 element.troughColor?.let { color ->
                     val height = element.troughHeight
@@ -633,12 +665,16 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     gtk_widget_set_margin_bottom(widget, marginVertical)
 
     if (width != null || height != null) {
+        // GTK size requests are minimums, so a max can only cap what we ask for
+        // explicitly; natural content is constrained elsewhere (see Label.maxWidthChars).
+        val resolvedWidth = width?.let { maxWidth?.let { max -> minOf(it, max) } ?: it }
+        val resolvedHeight = height?.let { maxHeight?.let { max -> minOf(it, max) } ?: it }
         val behavior = behavior
         if (behavior != null) {
-            inlineStyle.sizeAnimator.animate(widget, width, height, behavior.durationMs, behavior.easing, behavior.axis)
+            inlineStyle.sizeAnimator.animate(widget, resolvedWidth, resolvedHeight, behavior.durationMs, behavior.easing, behavior.axis)
         } else {
             inlineStyle.sizeAnimator.cancel()
-            gtk_widget_set_size_request(widget, width ?: -1, height ?: -1)
+            gtk_widget_set_size_request(widget, resolvedWidth ?: -1, resolvedHeight ?: -1)
         }
     }
     opacity?.let { gtk_widget_set_opacity(widget, it.toDouble()) }

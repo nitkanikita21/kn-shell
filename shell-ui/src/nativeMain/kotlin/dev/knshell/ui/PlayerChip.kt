@@ -29,6 +29,10 @@ import kotlinx.coroutines.delay
 // restarts invisibly and the animation is seamless.
 private val SheenBase = Color.hex(0x9A9AA2)   // slightly lighter grey
 
+/** Fixed long title used while testing the layout (no dependency on the player). */
+private const val TEST_TRACK =
+    "SadSvit - Прощавай, це дуже довга назва треку яка точно не влізе в чип"
+
 private fun smoothstep(edge: Float, value: Float): Float {
     val t = (value / edge).coerceIn(0f, 1f)
     return t * t * (3f - 2f * t)
@@ -46,7 +50,8 @@ fun PlayerChip(
     onClick: (() -> Unit)? = null,
 ) {
     val media by ShellServices.media.collectAsState()
-    val track = title ?: media.title.ifBlank { "Nothing playing" }
+    // Constant text on purpose: the layout must clamp it, independent of player metadata.
+    val track = title ?: TEST_TRACK
 
     // Phase is read in composition, so each step re-emits the CSS gradient with the
     // highlight band at a new position. The band fades out near both ends of the cycle,
@@ -80,7 +85,7 @@ fun PlayerChip(
             .pointerCursor()
             .onClick { onClick?.invoke() ?: ShellServices.togglePlayPause() }
             .align(v = Align.Center)
-            .padding(horizontal = 14, vertical = 4),
+            .padding(horizontal = 14, vertical = 2),
     ) {
         CavaEqualizer(
             width = 80,
@@ -92,6 +97,8 @@ fun PlayerChip(
             text = "${media.artist ?: ""} - $track",
             modifier = Modifier.fontSize(12).textColor(Grayscale.Surface),
             align = 0f,
+            ellipsize = true,
+            maxWidthChars = 26,
         )
     }
 }

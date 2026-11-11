@@ -54,6 +54,7 @@ import kn.gtk.gtk_label_new
 import kn.gtk.gtk_label_set_ellipsize
 import kn.gtk.gtk_label_set_lines
 import kn.gtk.gtk_label_set_markup
+import kn.gtk.gtk_label_set_max_width_chars
 import kn.gtk.gtk_label_set_wrap
 import kn.gtk.gtk_label_set_xalign
 import kn.gtk.gtk_label_set_label
@@ -181,6 +182,21 @@ class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
     /** Maximum number of lines (-1 = unlimited, needs wrapping). */
     fun setLines(lines: Int) {
         gtk_label_set_lines(widget.reinterpret<GtkLabel>(), lines)
+    }
+
+    /**
+     * Clamps the label width in average characters and enables end-ellipsis.
+     * Unlike pixel clamps this follows the label's own font, so "…" appears exactly where
+     * the text stops fitting — no manual per-font tuning. Pass -1 to disable.
+     */
+    fun setMaxWidthChars(chars: Int) {
+        gtk_label_set_max_width_chars(widget.reinterpret<GtkLabel>(), chars)
+        if (chars >= 0) {
+            gtk_label_set_ellipsize(
+                widget.reinterpret<GtkLabel>(),
+                PangoEllipsizeMode.PANGO_ELLIPSIZE_END,
+            )
+        }
     }
 }
 
@@ -427,7 +443,9 @@ fun CenterBox(modifier: Modifier = Modifier, start: @Composable () -> Unit, cent
  * [markup] enables Pango markup (`<b>bold</b>`, `<i>`, `<u>`, `<s>`,
  * `<span foreground="#ff0000">`, `<big>`, `<small>`, …); [wrap] allows multi-line text,
  * [ellipsize] truncates it with an ellipsis when the width is constrained, [align] is the
- * horizontal text alignment inside the label (0 = left, 0.5 = center, 1 = right).
+ * horizontal text alignment inside the label (0 = left, 0.5 = center, 1 = right),
+ * [maxWidthChars] clamps the width in characters and forces end-ellipsis (font-aware,
+ * unlike pixel clamps).
  */
 @Composable
 fun Label(
@@ -438,6 +456,7 @@ fun Label(
     ellipsize: Boolean = false,
     align: Float = 0.5f,
     maxLines: Int = -1,
+    maxWidthChars: Int = -1,
 ) {
     ComposeNode<GtkLabelNode, GtkApplier>(
         factory = { GtkLabelNode().plain() },
@@ -448,6 +467,7 @@ fun Label(
             set(ellipsize) { value -> setEllipsize(value) }
             set(align) { value -> setXAlign(value) }
             set(maxLines) { value -> setLines(value) }
+            set(maxWidthChars) { value -> setMaxWidthChars(value) }
             set(modifier) { value -> applyModifier(value) }
         },
     )
