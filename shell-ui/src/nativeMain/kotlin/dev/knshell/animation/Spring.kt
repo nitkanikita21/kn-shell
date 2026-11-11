@@ -128,3 +128,11 @@ fun animateFloatAsState(
 
     return value
 }
+
+/** Stable code for the native animated-size layout manager (0 linear, 1 out-cubic, 2 in-out-cubic). */
+internal val Easing.easingCode: UInt
+    get() = when (this) {
+        Easing.Linear -> 0u
+        Easing.OutCubic -> 1u
+        Easing.InOutCubic -> 2u
+    }

@@ -164,10 +164,17 @@ AnimatedWidth(
 }
 ```
 
-It wraps the content in a transparent `GtkScrolledWindow` (scrollbars off,
-`propagate-natural-width/height = false`), measures the content's natural size and tweens
-the wrapper width, so the viewport clips/reveals the content while the width changes. The
-wrapper is the styled surface (background/radius/padding go on the container).
+It is backed by a native **`GtkLayoutManager` implemented in C**
+(`rust-core/src/kn_animated_size_layout.c`): `measure()` reports the animated width as both
+minimum and natural, so the parent allocates exactly that value — growth animates just like
+shrinking, which a `size_request` cannot express. The child keeps its natural size and the
+container clips it (`overflow: hidden`), so content is revealed instead of being reflowed on
+every frame. The container is the styled surface (background/radius/padding go on it).
+
+The layout manager is C on purpose: subclassing `GtkLayoutManager` through `gtk4-rs` inside
+the Kotlin/Native process corrupted the GObject type state (widgets became invalid right
+after attaching it), while `G_DEFINE_TYPE` has neither the double-initialisation problem nor
+the Rust subclass wrappers.
 
 ### Gradients and effects
 

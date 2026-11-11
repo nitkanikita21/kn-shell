@@ -11,6 +11,7 @@
 //! The UI thread never calls into the services from GTK callbacks directly; state is
 //! written from the Rust threads and Compose recomposition happens on the GLib loop.
 
+mod animated_layout;
 mod audio;
 mod media;
 mod spectrum;
