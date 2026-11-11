@@ -21,6 +21,7 @@ import kn.gtk.GtkWidget
 import kn.gtk.cairo_t
 import kn.gtk.g_signal_connect_data
 import kn.gtk.gtk_box_append
+import kn.gtk.gtk_box_insert_child_after
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 import kn.gtk.GTK_ALIGN_CENTER
@@ -80,6 +81,16 @@ internal fun <T : GtkNode> T.plain(): T {
 }
 
 open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
+    /**
+     * Order-aware insert: GTK appends by default, which breaks conditional siblings — the
+     * new widget must land *before* the child that currently follows [index].
+     */
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
+        val box = widget.reinterpret<GtkBox>()
+        val previous = children.getOrNull(index - 1)?.widget
+        gtk_box_insert_child_after(box, child, previous)
+    }
+
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_box_append(widget.reinterpret<GtkBox>(), child)
     }

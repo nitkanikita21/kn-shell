@@ -27,7 +27,7 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
     open fun insertChild(index: Int, child: GtkNode) {
         val safeIndex = index.coerceIn(0, children.size)
         children.add(safeIndex, child)
-        attachChild(child.widget)
+        attachChildAt(safeIndex, child.widget)
     }
 
     open fun removeChild(index: Int, count: Int) {
@@ -60,6 +60,17 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
         children.forEach { it.cancelAnimations() }
         children.forEach { detachChild(it.widget) }
         children.clear()
+    }
+
+    /**
+     * Inserts [child] at [index] in the parent's child order. Containers that care about
+     * order (GtkBox) override this; others keep the default append behaviour.
+     *
+     * Compose inserts siblings by index, so ignoring the index would misplace widgets as
+     * soon as a conditional child swaps type (`if (playing) Equalizer() else Icon()`).
+     */
+    protected open fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
+        attachChild(child)
     }
 
     protected open fun attachChild(child: CPointer<GtkWidget>) {}
