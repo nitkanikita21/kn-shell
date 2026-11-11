@@ -20,7 +20,7 @@ GtkApplier : AbstractApplier<GtkNode>
 GTK4 + gtk4-layer-shell ── wlr-layer-shell surface (wlroots compositors)
       ▲
       │ UniFFI callback interfaces (called from Rust threads)
-rust-core: windows (sctk) · workspaces (Hyprland IPC) · media (MPRIS)
+rust-core: windows (sctk) · workspaces (Hyprland IPC) · media (MPRIS via playerctl)
            audio (pactl) · system (/proc)
 ```
 
@@ -90,7 +90,7 @@ background.
 | --- | --- | --- | --- |
 | `windows` | `List<WindowInfo>` | `ext-foreign-toplevel-list-v1` events | one event round-trip |
 | `workspaces` | `List<WorkspaceInfo>` | Hyprland event socket | ~1 frame |
-| `media` | `MediaState` | MPRIS poll | ≤ 700 ms |
+| `media` | `MediaState` | `playerctl --follow` (event-driven) | on every MPRIS change |
 | `volume` | `Int` (0–150) | `pactl get-sink-volume` poll | ≤ 500 ms |
 | `system` | `SystemStats` | `/proc/stat`, `/proc/meminfo` poll | ≤ 1 s |
 
@@ -414,7 +414,8 @@ built from `Row` / `Column` / `Space` / `Icon` / `Text` and the Modifier DSL; co
 * **Layer-shell needs wlroots.** On GNOME/Mutter bars become normal windows, and requested
   `width`/`height` are hints because the compositor stretches anchored surfaces.
 * **External tools:** `hyprctl` (workspaces/actions), `pactl` (audio), `playerctl`
-  (play/pause fallback), MPRIS/DBus (media).
+  (play/pause), MPRIS/DBus (media).
 * **Polling:** media 700 ms, audio 500 ms, system 1 s; only windows and workspaces are
-  event-driven (workspace fallback poll 400 ms). MPRIS uses the first available player.
+  event-driven (workspace fallback poll 400 ms). Media streams MPRIS changes through
+  `playerctl --follow`, so play/pause and metadata reach the UI immediately.
 * **Keyboard mode `NONE`** never takes focus; use `ON_DEMAND`/`EXCLUSIVE` for typing.

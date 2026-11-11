@@ -40,7 +40,7 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 │ rust-core (Rust staticlib)                                        │
 │  WindowService    ← ext-foreign-toplevel-list-v1 via sctk 0.21   │
 │  WorkspaceService ← Hyprland IPC event socket (poll fallback)    │
-│  MediaService     ← MPRIS via mpris 2.1 (blocking libdbus)       │
+│  MediaService     ← MPRIS via playerctl --follow                 │
 │  AudioService     ← PipeWire through pipewire-pulse via pactl    │
 │  SystemService    ← /proc/stat + /proc/meminfo                   │
 └──────────────────────────────────────────────────────────────────┘
@@ -65,7 +65,7 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
   * Fedora: `dnf install gtk4-devel gtk4-layer-shell`
 * Rust toolchain **with rustup** (Gobley registers the Cargo target through rustup)
 * JDK 17+ to run Gradle (JDK 21 recommended)
-* `pkg-config`, `libdbus` (for the MPRIS crate)
+* `cava` (audio visualiser), `playerctl` (MPRIS metadata/transport)
 * `pactl` (PulseAudio client, works with `pipewire-pulse`) for the audio service
 * Network access on first build (Gradle deps, ~1 GB Kotlin/Native toolchain, crates)
 
