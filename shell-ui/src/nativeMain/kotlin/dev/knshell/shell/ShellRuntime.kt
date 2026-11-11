@@ -278,6 +278,27 @@ internal class ShellRuntime private constructor() {
         /** The process-wide runtime; created lazily on first use. */
         fun instance(): ShellRuntime = instance ?: ShellRuntime().also { instance = it }
     }
+
+    /**
+     * Mounts a nested Compose composition into an arbitrary GTK container (used by
+     * popovers). The returned composition is parented to the same [Recomposer] as the
+     * windows, so services and state updates reach it on the shared frame.
+     *
+     * The caller owns the returned composition and may dispose it when the container is
+     * torn down.
+     */
+    internal fun mountCompose(
+        container: CPointer<GtkWidget>,
+        content: @Composable () -> Unit,
+    ): Composition {
+        ensureGtk()
+        val composition = Composition(
+            applier = GtkApplier(GtkBoxNode(container)),
+            parent = recomposer,
+        )
+        composition.setContent(content)
+        return composition
+    }
 }
 
 /** A window mounted on the runtime; tracked until its close-request fires. */

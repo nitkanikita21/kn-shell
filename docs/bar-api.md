@@ -175,6 +175,34 @@ Tips:
 * true blur/glow shaders (`GskGLShader` / `gtk_snapshot_push_gl_shader`) are possible but
   require the GL renderer and a custom GSK node — not wired up yet.
 
+### Hover popover
+
+`HoverPopover` anchors a real `GtkPopover` to the trigger and opens it on hover (short
+delay, auto-hide when the pointer leaves both trigger and popover):
+
+```kotlin
+HoverPopover(
+    delayMs = 120,
+    hideDelayMs = 250,
+    content = {
+        Box(
+            Modifier
+                .padding(horizontal = 14, vertical = 10)
+                .background(Grayscale.Surface, radius = 12),
+        ) {
+            Text("Volume panel", color = Grayscale.Foreground)
+        }
+    },
+) {
+    Icon("\uF028", modifier = Modifier.pointerCursor())
+}
+```
+
+How it works: the popover body hosts a **separate Compose composition** (mounted into the
+popover through the shared `Recomposer`), so it can read `Shell.services` like any window.
+The popover surface is plain (reset class), so give your content root a background,
+padding and radius — otherwise it stays transparent.
+
 ### Audio visualiser (CAVA)
 
 `CavaEqualizer` draws a real audio spectrum: the Rust `spectrum` service spawns a `cava`
