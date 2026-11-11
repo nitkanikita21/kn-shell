@@ -149,6 +149,26 @@ The tween runs on the widget node (plain GTK calls, no Compose recomposition). T
 application snaps to the initial value; removing the widget cancels its tween. Colours are
 better handled by `transition(ms)` / `transitionMs` (native GTK transitions).
 
+**GTK limitation of the auto mode.** `gtk_widget_set_size_request` is a *minimum*, so the
+Modifier can animate shrinking (request above the natural width) but **not growth**: when
+content grows, its natural width wins and the widget jumps. For smooth animation in both
+directions use the container, which disables natural-size propagation:
+
+```kotlin
+AnimatedWidth(
+    durationMs = 200,
+    modifier = Modifier.radius(8).background(Grayscale.Surface).padding(horizontal = 14),
+) {
+    if (playing) CavaEqualizer(width = 80, height = 20) else Icon("\uF04C")
+    Label(title)
+}
+```
+
+It wraps the content in a transparent `GtkScrolledWindow` (scrollbars off,
+`propagate-natural-width/height = false`), measures the content's natural size and tweens
+the wrapper width, so the viewport clips/reveals the content while the width changes. The
+wrapper is the styled surface (background/radius/padding go on the container).
+
 ### Gradients and effects
 
 Static gradients are native GTK CSS (no frame loop):
