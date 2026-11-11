@@ -16,6 +16,7 @@ import kn.gtk.GtkBox
 import kn.gtk.GtkOrientation
 import kn.gtk.GtkWidget
 import kn.gtk.gtk_box_append
+import kn.gtk.gtk_box_insert_child_after
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 
@@ -70,6 +71,13 @@ internal class GtkAnimatedWidthNode(
 
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_box_append(widget.reinterpret<GtkBox>(), child)
+    }
+
+    /** Order-aware insert: a conditional child (equalizer <-> icon) must keep its slot. */
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
+        val box = widget.reinterpret<GtkBox>()
+        val previous = children.getOrNull(index - 1)?.widget
+        gtk_box_insert_child_after(box, child, previous)
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {
