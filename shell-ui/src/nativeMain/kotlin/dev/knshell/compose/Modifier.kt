@@ -424,12 +424,16 @@ internal class InlineStyle(private val widget: CPointer<GtkWidget>) {
     /** Opt-in size tween used by [Modifier.behavior]; see [SizeAnimator]. */
     internal val sizeAnimator = SizeAnimator()
 
+    /** Content-driven variant used when the chain has no explicit width()/height(). */
+    internal val autoSizeAnimator = AutoSizeAnimator()
+
     /** Click/hover/cursor wiring (see Interaction.kt). */
     internal val interaction = InteractionState(widget)
 
     private var provider: CPointer<GtkCssProvider>? = null
     private var className: String? = null
     private var lastCss: String? = null
+
 
     fun setRules(rules: List<Pair<String, String>>) {
         if (rules.isEmpty()) return
@@ -664,17 +668,26 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     gtk_widget_set_margin_top(widget, marginVertical)
     gtk_widget_set_margin_bottom(widget, marginVertical)
 
-    if (width != null || height != null) {
-        // GTK size requests are minimums, so a max can only cap what we ask for
-        // explicitly; natural content is constrained elsewhere (see Label.maxWidthChars).
-        val resolvedWidth = width?.let { maxWidth?.let { max -> minOf(it, max) } ?: it }
-        val resolvedHeight = height?.let { maxHeight?.let { max -> minOf(it, max) } ?: it }
-        val behavior = behavior
-        if (behavior != null) {
-            inlineStyle.sizeAnimator.animate(widget, resolvedWidth, resolvedHeight, behavior.durationMs, behavior.easing, behavior.axis)
+    if (behavior != null && width == null && height == null) {
+        // Content-driven size: the animator measures the natural size and tweens to it,
+        // like QML's "Behavior on width" (no explicit width()/size() needed).
+        inlineStyle.sizeAnimator.cancel()
+        inlineStyle.autoSizeAnimator.attach(widget, behavior)
+    } else {
+        inlineStyle.autoSizeAnimator.cancel()
+        if (width != null || height != null) {
+            // GTK size requests are minimums, so a max can only cap what we ask for
+            // explicitly; natural content is constrained elsewhere (see Label.maxWidthChars).
+            val resolvedWidth = width?.let { maxWidth?.let { max -> minOf(it, max) } ?: it }
+            val resolvedHeight = height?.let { maxHeight?.let { max -> minOf(it, max) } ?: it }
+            if (behavior != null) {
+                inlineStyle.sizeAnimator.animate(widget, resolvedWidth, resolvedHeight, behavior.durationMs, behavior.easing, behavior.axis)
+            } else {
+                inlineStyle.sizeAnimator.cancel()
+                gtk_widget_set_size_request(widget, resolvedWidth ?: -1, resolvedHeight ?: -1)
+            }
         } else {
             inlineStyle.sizeAnimator.cancel()
-            gtk_widget_set_size_request(widget, resolvedWidth ?: -1, resolvedHeight ?: -1)
         }
     }
     opacity?.let { gtk_widget_set_opacity(widget, it.toDouble()) }

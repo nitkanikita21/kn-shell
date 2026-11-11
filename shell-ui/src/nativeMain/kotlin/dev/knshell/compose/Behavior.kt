@@ -6,29 +6,35 @@ import dev.knshell.animation.Easing
 import dev.knshell.animation.eased
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kn.gtk.GtkRequisition
 import kn.gtk.GtkWidget
+import kn.gtk.gtk_widget_get_preferred_size
 import kn.gtk.gtk_widget_set_size_request
 import kotlin.math.roundToInt
 
 /**
  * Opt-in, QML-like `Behavior on width/height`.
  *
- * Attach it to a widget where *you* want it; from then on any change of `size()`, `width()`
- * or `height()` in that Modifier chain is tweened instead of jumping:
+ * Two modes, chosen by the Modifier chain:
+ *  - **explicit**: when the chain also has `width()` / `height()` / `size()`, their changes
+ *    are tweened;
+ *  - **auto**: when the chain has no explicit size (content-driven width), the widget's
+ *    natural size is measured and tweened on every content change — this is what Qt's
+ *    `Behavior on width { NumberAnimation {} }` does.
  *
  * ```kotlin
- * Box(
- *     Modifier
- *         .behavior(durationMs = 180, easing = Easing.OutCubic)
- *         .size(if (active) 34 else 24, 24),
- * )
+ * // content-driven width still animates
+ * Box(Modifier.widthBehavior().padding(14)) { Label(title) }
+ *
+ * // explicit size
+ * Box(Modifier.sizeBehavior().size(if (active) 34 else 24, 24))
  * ```
  *
- * The tween runs on the widget node (GTK calls only), not through Compose recomposition —
- * cheaper than `animateFloatAsState` and it works for values that are computed inline.
- *
- * Limits: only the size request is animated (width/height); the first application snaps to
- * the initial value; colours are better served by [transition] (native GTK transitions).
+ * The tween runs on the widget node (GTK calls only), not through Compose recomposition.
+ * Limits: only the size request is animated; colours are better served by [transition].
  */
 /** Which axis a [BehaviorElement] animates. */
 internal enum class BehaviorAxis { Width, Height, Both }
@@ -39,15 +45,15 @@ internal data class BehaviorElement(
     val axis: BehaviorAxis,
 ) : ModifierElement
 
-/** Opt-in `Behavior on width`: later `width()`/`size()` width changes are tweened. */
+/** Opt-in `Behavior on width`. */
 fun Modifier.widthBehavior(durationMs: Int = 180, easing: Easing = Easing.OutCubic): Modifier =
     with(BehaviorElement(durationMs, easing, BehaviorAxis.Width))
 
-/** Opt-in `Behavior on height`: later `height()`/`size()` height changes are tweened. */
+/** Opt-in `Behavior on height`. */
 fun Modifier.heightBehavior(durationMs: Int = 180, easing: Easing = Easing.OutCubic): Modifier =
     with(BehaviorElement(durationMs, easing, BehaviorAxis.Height))
 
-/** Opt-in `Behavior on size`: both width and height changes are tweened. */
+/** Opt-in `Behavior on size`. */
 fun Modifier.sizeBehavior(durationMs: Int = 180, easing: Easing = Easing.OutCubic): Modifier =
     with(BehaviorElement(durationMs, easing, BehaviorAxis.Both))
 
@@ -55,8 +61,14 @@ fun Modifier.sizeBehavior(durationMs: Int = 180, easing: Easing = Easing.OutCubi
 fun Modifier.behavior(durationMs: Int = 180, easing: Easing = Easing.OutCubic): Modifier =
     sizeBehavior(durationMs, easing)
 
-/** Per-widget size tween driven by [SizeBehaviorRegistry] on the shared frame clock. */
-internal class SizeAnimator {
+/** Something the shared frame clock advances; animators unregister when [active] is false. */
+internal interface SizeTween {
+    fun tick(nanos: Long)
+    val active: Boolean
+}
+
+/** Per-widget tween for **explicit** size requests (see [SizeAnimator.animate]). */
+internal class SizeAnimator : SizeTween {
     private var widget: CPointer<GtkWidget>? = null
     private var durationMs = 180
     private var easing: Easing = Easing.OutCubic
@@ -73,6 +85,8 @@ internal class SizeAnimator {
 
     internal var running = false
         private set
+
+    override val active: Boolean get() = running
 
     fun animate(
         widget: CPointer<GtkWidget>,
@@ -132,7 +146,7 @@ internal class SizeAnimator {
         SizeBehaviorRegistry.remove(this)
     }
 
-    fun tick(nanos: Long) {
+    override fun tick(nanos: Long) {
         if (!running) return
         if (pendingStart) {
             pendingStart = false
@@ -163,25 +177,166 @@ internal class SizeAnimator {
     }
 }
 
-/** Active size tweens; ticked from the shared GLib frame clock (16 ms). */
-internal object SizeBehaviorRegistry {
-    private val animators = mutableListOf<SizeAnimator>()
+/**
+ * Per-widget tween for **content-driven** size.
+ *
+ * The natural size cannot be observed while our own size request is in effect (GTK clamps
+ * the minimum to the request), so the measurement temporarily clears the request, asks
+ * `gtk_widget_get_preferred_size`, and restores the animated request before returning —
+ * the layout never sees the cleared value.
+ *
+ * Measurement is throttled (~10 Hz) when idle; while tweening it runs every frame.
+ */
+internal class AutoSizeAnimator : SizeTween {
+    private var widget: CPointer<GtkWidget>? = null
+    private var durationMs = 180
+    private var easing: Easing = Easing.OutCubic
+    private var axis = BehaviorAxis.Both
 
-    fun add(animator: SizeAnimator) {
-        if (animators.none { it === animator }) animators += animator
+    private var initialized = false
+    private var animating = false
+    private var pendingStart = false
+    private var startNanos = 0L
+    private var frames = 0
+
+    private var currentW = -1f
+    private var currentH = -1f
+    private var targetW = -1f
+    private var targetH = -1f
+    private var fromW = -1f
+    private var fromH = -1f
+
+    private var cancelled = false
+    override val active: Boolean get() = !cancelled
+
+    fun attach(widget: CPointer<GtkWidget>, behavior: BehaviorElement) {
+        val firstTime = this.widget != widget || cancelled
+        this.widget = widget
+        this.durationMs = behavior.durationMs.coerceAtLeast(1)
+        this.easing = behavior.easing
+        this.axis = behavior.axis
+        if (firstTime) {
+            cancelled = false
+            initialized = false
+            animating = false
+            frames = 0
+            currentW = -1f
+            currentH = -1f
+            SizeBehaviorRegistry.add(this)
+        }
     }
 
-    fun remove(animator: SizeAnimator) {
-        animators.removeAll { it === animator }
+    fun cancel() {
+        cancelled = true
+        SizeBehaviorRegistry.remove(this)
+    }
+
+    override fun tick(nanos: Long) {
+        if (cancelled) return
+        val w = widget ?: return
+
+        if (!initialized) {
+            val measured = measure(w) ?: return // wait for a real layout
+            if (measured.first <= 0 && measured.second <= 0) return
+            currentW = measured.first
+            currentH = measured.second
+            targetW = measured.first
+            targetH = measured.second
+            initialized = true
+            apply(w)
+            return
+        }
+
+        frames += 1
+        val shouldProbe = animating || frames % 6 == 0
+        if (shouldProbe) {
+            val measured = measure(w)
+            if (measured != null) {
+                val newW = if (axis != BehaviorAxis.Height) measured.first else targetW
+                val newH = if (axis != BehaviorAxis.Width) measured.second else targetH
+                if (newW != targetW || newH != targetH) {
+                    fromW = currentW
+                    fromH = currentH
+                    targetW = newW
+                    targetH = newH
+                    if (!animating) {
+                        pendingStart = true
+                        animating = true
+                    }
+                }
+            }
+        }
+
+        if (!animating) return
+        if (pendingStart) {
+            pendingStart = false
+            startNanos = nanos
+        }
+        val progress = ((nanos - startNanos) / 1_000_000f / durationMs).coerceIn(0f, 1f)
+        val eased = easing.eased(progress)
+        currentW = lerpSize(fromW, targetW, eased)
+        currentH = lerpSize(fromH, targetH, eased)
+        if (progress >= 1f) {
+            currentW = targetW
+            currentH = targetH
+            animating = false
+        }
+        apply(w)
+    }
+
+    private fun lerpSize(from: Float, to: Float, t: Float): Float =
+        if (from < 0f || to < 0f) to else from + (to - from) * t
+
+    private fun apply(w: CPointer<GtkWidget>) {
+        val widthPx = if (currentW < 0f) -1 else currentW.roundToInt()
+        val heightPx = if (currentH < 0f) -1 else currentH.roundToInt()
+        gtk_widget_set_size_request(w, widthPx, heightPx)
+    }
+
+    /**
+     * Natural size with our request temporarily lifted, so the measurement is not clamped
+     * by the value we are animating. The request is restored before returning.
+     */
+    private fun measure(w: CPointer<GtkWidget>): Pair<Float, Float>? {
+        gtk_widget_set_size_request(w, -1, -1)
+        var width = -1f
+        var height = -1f
+        memScoped {
+            val req = alloc<GtkRequisition>()
+            gtk_widget_get_preferred_size(w, null, req.ptr)
+            width = req.width.toFloat()
+            height = req.height.toFloat()
+        }
+        val restoreW = if (currentW < 0f) -1 else currentW.roundToInt()
+        val restoreH = if (currentH < 0f) -1 else currentH.roundToInt()
+        gtk_widget_set_size_request(w, restoreW, restoreH)
+        return width to height
+    }
+}
+
+/** Active size tweens; ticked from the shared GLib frame clock (16 ms). */
+internal object SizeBehaviorRegistry {
+    private val tweens = mutableListOf<SizeTween>()
+
+    fun add(tween: SizeTween) {
+        if (tweens.none { it === tween }) tweens += tween
+    }
+
+    fun remove(tween: SizeTween) {
+        tweens.removeAll { it === tween }
     }
 
     fun tick(nanos: Long) {
-        if (animators.isEmpty()) return
-        var index = animators.size - 1
+        if (tweens.isEmpty()) return
+        var index = tweens.size - 1
         while (index >= 0) {
-            val animator = animators[index]
-            animator.tick(nanos)
-            if (!animator.running) animators.removeAt(index)
+            val tween = tweens[index]
+            if (!tween.active) {
+                tweens.removeAt(index)
+            } else {
+                tween.tick(nanos)
+                if (!tween.active) tweens.removeAt(index)
+            }
             index -= 1
         }
     }

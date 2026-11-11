@@ -119,17 +119,35 @@ Attach `widthBehavior(...)` (or `heightBehavior` / `sizeBehavior`) to the widget
 exactly like QML `Behavior on width`:
 
 ```kotlin
+// explicit target
 Box(
     Modifier
         .widthBehavior(durationMs = 180, easing = Easing.OutCubic)
         .size(if (active) 34 else 24, 24),
 )
+
+// content-driven width — no size() needed, works like QML too
+Row(
+    Modifier
+        .widthBehavior()
+        .padding(horizontal = 14),
+) {
+    CavaEqualizer(width = 80, height = 20)
+    Label(title)
+}
 ```
 
-From then on every change of `size()`, `width()` or `height()` in that chain is tweened on
-the widget node (plain GTK calls, no Compose recomposition). The first application snaps to
-the initial value; removing the widget cancels its tween. Colours are better handled by
-`transition(ms)` / `transitionMs` (native GTK transitions).
+Two modes:
+
+* **explicit** — a `size()`/`width()`/`height()` target changes and is tweened;
+* **auto** — no explicit size in the chain: the animator measures the natural size
+  (`gtk_widget_get_preferred_size` with the size request temporarily lifted, so the
+  measurement is not clamped) and tweens to it. It probes every 6 frames when idle and
+  every frame while tweening.
+
+The tween runs on the widget node (plain GTK calls, no Compose recomposition). The first
+application snaps to the initial value; removing the widget cancels its tween. Colours are
+better handled by `transition(ms)` / `transitionMs` (native GTK transitions).
 
 ### Gradients and effects
 
