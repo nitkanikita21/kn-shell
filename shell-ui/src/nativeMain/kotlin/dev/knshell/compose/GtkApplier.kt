@@ -43,7 +43,6 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
     /** Stops any in-flight tween; called before the widget leaves the tree. */
     internal open fun cancelAnimations() {
         inlineStyle.sizeAnimator.cancel()
-        inlineStyle.autoSizeAnimator.cancel()
         children.forEach { it.cancelAnimations() }
     }
 
