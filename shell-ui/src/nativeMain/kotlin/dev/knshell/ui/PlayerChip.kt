@@ -22,7 +22,10 @@ import dev.knshell.compose.padding
 import dev.knshell.compose.pointerCursor
 import dev.knshell.compose.radius
 import dev.knshell.compose.textColor
+import dev.knshell.compose.AnimatedWidth
 import dev.knshell.services.ShellServices
+import dev.knshell.ui.primitives.Icon
+import dev.knshell.ui.primitives.Space
 import kotlinx.coroutines.delay
 
 // Lighter silver base with a white sheen band that fades out at both ends, so the loop
@@ -44,6 +47,11 @@ private fun smoothstep(edge: Float, value: Float): Float {
 fun PlayerChip(
     title: String? = null,
     onClick: (() -> Unit)? = null,
+    equalizerWidth: Int = 80,
+    equalizerHeight: Int = 20,
+    equalizerBars: Int = 6,
+    equalizerColor: Color = Grayscale.Surface,
+    titleColor: Color? = null,
 ) {
     val media by ShellServices.media.collectAsState()
     val track = title ?: media.title.ifBlank { "Nothing playing" }
@@ -70,27 +78,43 @@ fun PlayerChip(
         Color.Transparent to 1f,
     )
 
-    Row(
+    // Animated sheen only while there is something to play; otherwise a static silver base.
+    val sheen = if (media.playing) {
+        Modifier.gradientStops(*sheenStops, angleDeg = 100f)
+    } else {
+        Modifier.background(Grayscale.Surface)
+    }
+
+    // AnimatedWidth (not widthBehavior): a Modifier can only enforce a minimum size, so
+    // growth would jump; the container disables natural-size propagation, which makes the
+    // animated width authoritative in both directions.
+    AnimatedWidth(
+        durationMs = 200,
+        spacing = 10,
         modifier = Modifier
-            .align(v = Align.Fill)
             .align(v = Align.Center)
             .radius(8)
             .background(SheenBase)
-            .gradientStops(*sheenStops, angleDeg = 100f)
+            .then(sheen)
             .pointerCursor()
             .onClick { onClick?.invoke() ?: ShellServices.togglePlayPause() }
-            .align(v = Align.Center)
             .padding(horizontal = 14, vertical = 2),
     ) {
-        CavaEqualizer(
-            width = 80,
-            height = 20,
-            bars = 6,
-            color = Grayscale.Surface,
-        )
+        if (media.playing) {
+            CavaEqualizer(
+                width = equalizerWidth,
+                height = equalizerHeight,
+                bars = equalizerBars,
+                color = equalizerColor,
+            )
+        } else {
+            Icon("\uF04C")
+        }
         Label(
             text = "${media.artist ?: ""} - $track",
-            modifier = Modifier.fontSize(12).textColor(Grayscale.Surface),
+            modifier = Modifier
+                .fontSize(12)
+                .textColor(titleColor ?: if (media.playing) Grayscale.Surface else Grayscale.Foreground),
             align = 0f,
             ellipsize = true,
             maxWidthChars = 32,

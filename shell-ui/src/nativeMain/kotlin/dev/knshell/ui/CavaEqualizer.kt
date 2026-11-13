@@ -72,12 +72,17 @@ private fun drawEqualizer(
         cairo_fill(cr)
     }
 
-    val count = minOf(requestedBars, values.size).coerceAtLeast(1)
+    val count = requestedBars.coerceIn(1, 128)
     val gap = 1.5
     val barWidth = ((width - gap * (count - 1)) / count).coerceAtLeast(1.0)
 
+    // Bucket the whole spectrum into `count` bars (average per group) instead of taking the
+    // first N values. Without this, a 6-bar and an 8-bar equalizer would show different
+    // slices of the spectrum and look unrelated even though the data is identical.
+    val bucketLevels = bucketLevels(values, count)
+
     for (index in 0 until count) {
-        val level = values[index].coerceIn(0, 100) / 100.0
+        val level = bucketLevels[index]
         val barHeight = (height - 1.0) * level
         if (barHeight <= 0.0) continue
         cairo_set_source_rgba(
@@ -90,4 +95,29 @@ private fun drawEqualizer(
         cairo_rectangle(cr, index * (barWidth + gap), height - barHeight, barWidth, barHeight)
         cairo_fill(cr)
     }
+}
+
+/**
+ * Averages [values] (e.g. 16 CAVA bins, 0..100) into [count] bars.
+ * Each bucket covers `[i*source/count, (i+1)*source/count)`, so every bar count samples the
+ * full spectrum and larger counts only add detail.
+ */
+private fun bucketLevels(values: List<Int>, count: Int): DoubleArray {
+    val result = DoubleArray(count)
+    val source = values.size
+    if (source == 0) return result
+    for (index in 0 until count) {
+        val start = index * source / count
+        val end = (((index + 1) * source / count).coerceAtLeast(start + 1)).coerceAtMost(source)
+        var sum = 0.0
+        var samples = 0
+        var i = start
+        while (i < end) {
+            sum += values[i].coerceIn(0, 100)
+            samples++
+            i++
+        }
+        result[index] = if (samples == 0) 0.0 else sum / samples / 100.0
+    }
+    return result
 }
