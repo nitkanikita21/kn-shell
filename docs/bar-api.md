@@ -164,6 +164,11 @@ AnimatedWidth(
 }
 ```
 
+`AnimatedBox(vertical = false|true, spacing = …, axis = AnimatedAxis.Width|Height)` is the
+general form: it is a full Row/Column container (orientation, spacing, any number of
+children) whose main axis animates. `AnimatedWidth { … }` and `AnimatedHeight { … }` are
+the short aliases.
+
 It is backed by a native **`GtkLayoutManager` implemented in C**
 (`rust-core/src/kn_animated_size_layout.c`): `measure()` reports the animated width as both
 minimum and natural, so the parent allocates exactly that value — growth animates just like

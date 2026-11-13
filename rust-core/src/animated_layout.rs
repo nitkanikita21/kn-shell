@@ -9,14 +9,30 @@ extern "C" {
         widget: *mut core::ffi::c_void,
         duration_ms: u32,
         easing: u32,
+        spacing: u32,
+        axis: u32,
     );
 }
 
 /// Attaches the animated layout manager to `widget` (raw `GtkWidget*` as `u64`).
 #[uniffi::export]
-pub fn attach_animated_size_layout(widget: u64, duration_ms: u32, easing: u32) {
+pub fn attach_animated_size_layout(
+    widget: u64,
+    duration_ms: u32,
+    easing: u32,
+    spacing: u32,
+    axis: u32,
+) {
     if widget == 0 {
         return;
     }
-    unsafe { kn_attach_animated_size_layout(widget as *mut core::ffi::c_void, duration_ms, easing) }
+    unsafe {
+        kn_attach_animated_size_layout(
+            widget as *mut core::ffi::c_void,
+            duration_ms,
+            easing,
+            spacing,
+            axis,
+        )
+    }
 }

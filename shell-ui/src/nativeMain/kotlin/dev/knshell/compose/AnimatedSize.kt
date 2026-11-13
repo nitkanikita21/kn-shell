@@ -20,28 +20,56 @@ import kn.gtk.gtk_box_insert_child_after
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 
+/** Which axis of [AnimatedBox] is animated. */
+enum class AnimatedAxis { Width, Height }
+
 /**
- * Width that animates on content changes in **both** directions.
+ * Full Row/Column-like container whose main axis animates on content changes.
  *
- * Backed by a native `GtkLayoutManager` (written in C, `rust-core/src/kn_animated_size_layout.c`):
- * its `measure()` reports the animated width as both minimum and natural, so the parent
- * allocates exactly that value — growth animates just like shrinking, which a plain
- * `size_request` cannot do (it is a minimum only). The child keeps its natural size and the
- * container clips it, so the content is revealed instead of being reflowed every frame.
+ * Backed by a native `GtkLayoutManager` (C, `rust-core/src/kn_animated_size_layout.c`):
+ * `measure()` reports the animated size as both minimum and natural, so the parent allocates
+ * exactly that value — growth animates just like shrinking, which a `size_request` cannot
+ * express. Children keep their natural size along the main axis and the container clips
+ * them, so content is revealed instead of being reflowed every frame.
  *
  * ```kotlin
- * AnimatedWidth(
- *     durationMs = 200,
- *     modifier = Modifier.radius(8).background(Grayscale.Surface).padding(horizontal = 14),
- * ) {
- *     if (playing) CavaEqualizer(width = 80, height = 20) else Icon("\\uF04C")
+ * AnimatedBox(vertical = false, spacing = 8, modifier = Modifier.padding(horizontal = 14)) {
+ *     if (playing) CavaEqualizer(width = 80, height = 20) else Icon("\uF04C")
  *     Label(title)
  * }
  * ```
  *
- * [durationMs] and [easing] are applied when the widget is created (the layout manager is
- * attached once); changing them later does not retarget a running animation.
+ * [durationMs], [easing], [spacing] and [vertical] are applied when the widget is created
+ * (the layout manager is attached once); changing them later does not retarget the running
+ * animation.
  */
+@Composable
+fun AnimatedBox(
+    vertical: Boolean = false,
+    modifier: Modifier = Modifier,
+    durationMs: Int = 180,
+    easing: Easing = Easing.OutCubic,
+    spacing: Int = 0,
+    axis: AnimatedAxis = if (vertical) AnimatedAxis.Height else AnimatedAxis.Width,
+    content: @Composable () -> Unit,
+) {
+    ComposeNode<GtkAnimatedBoxNode, GtkApplier>(
+        factory = {
+            GtkAnimatedBoxNode(durationMs, easing, spacing, vertical, axis).plain()
+        },
+        update = {
+            set(modifier) { value -> applyModifier(value) }
+            // spacing/vertical/axis are baked into the native layout manager at creation.
+            set(spacing) { }
+            set(vertical) { }
+            set(axis) { }
+        },
+    ) {
+        content()
+    }
+}
+
+/** Row whose width animates with its content. */
 @Composable
 fun AnimatedWidth(
     modifier: Modifier = Modifier,
@@ -49,25 +77,56 @@ fun AnimatedWidth(
     easing: Easing = Easing.OutCubic,
     spacing: Int = 0,
     content: @Composable () -> Unit,
-) {
-    ComposeNode<GtkAnimatedWidthNode, GtkApplier>(
-        factory = { GtkAnimatedWidthNode(durationMs, easing, spacing).plain() },
-        update = {
-            set(modifier) { value -> applyModifier(value) }
-            // spacing is not settable here: the custom layout manager replaces GtkBoxLayout
-            // (gtk_box_set_spacing would assert), so AnimatedWidth lays children out itself.
-            set(spacing) { }
-        },
-    ) {
-        content()
-    }
-}
+) = AnimatedBox(
+    vertical = false,
+    modifier = modifier,
+    durationMs = durationMs,
+    easing = easing,
+    spacing = spacing,
+    axis = AnimatedAxis.Width,
+    content = content,
+)
 
-internal class GtkAnimatedWidthNode(
+/** Column whose height animates with its content. */
+@Composable
+fun AnimatedHeight(
+    modifier: Modifier = Modifier,
+    durationMs: Int = 180,
+    easing: Easing = Easing.OutCubic,
+    spacing: Int = 0,
+    content: @Composable () -> Unit,
+) = AnimatedBox(
+    vertical = true,
+    modifier = modifier,
+    durationMs = durationMs,
+    easing = easing,
+    spacing = spacing,
+    axis = AnimatedAxis.Height,
+    content = content,
+)
+
+internal class GtkAnimatedBoxNode(
     durationMs: Int,
     easing: Easing,
     spacing: Int,
-) : GtkNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, spacing)!!) {
+    vertical: Boolean,
+    axis: AnimatedAxis,
+) : GtkNode(
+    gtk_box_new(
+        if (vertical) GtkOrientation.GTK_ORIENTATION_VERTICAL else GtkOrientation.GTK_ORIENTATION_HORIZONTAL,
+        spacing,
+    )!!,
+) {
+
+    init {
+        attachAnimatedSizeLayout(
+            widget.rawValue.toLong().toULong(),
+            durationMs.coerceAtLeast(16).toUInt(),
+            easing.easingCode,
+            spacing.coerceAtLeast(0).toUInt(),
+            if (axis == AnimatedAxis.Height) 1u else 0u,
+        )
+    }
 
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_box_append(widget.reinterpret<GtkBox>(), child)
@@ -83,13 +142,4 @@ internal class GtkAnimatedWidthNode(
     override fun detachChild(child: CPointer<GtkWidget>) {
         gtk_box_remove(widget.reinterpret<GtkBox>(), child)
     }
-
-    init {
-        attachAnimatedSizeLayout(
-            widget.rawValue.toLong().toULong(),
-            durationMs.coerceAtLeast(16).toUInt(),
-            easing.easingCode,
-        )
-    }
-
 }

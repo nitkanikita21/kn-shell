@@ -1,19 +1,25 @@
 /*
- * GtkLayoutManager implementation that animates a container's width towards the natural
- * width of its child, in both directions.
+ * GtkLayoutManager: a Row/Column-like container whose main axis animates.
  *
- * A plain size request is a *minimum*, so growth cannot be animated from Kotlin. Reporting
- * the animated width from measure() (as both minimum and natural) makes the parent allocate
- * exactly that value; the child keeps its own natural width and the container clips it.
+ * A plain size request is a *minimum*, so when content grows the natural size wins and the
+ * widget jumps. This layout manager reports the animated size as both minimum and natural
+ * in measure(), so the parent allocates exactly that value in both directions; children are
+ * laid out along the main axis at their natural size and the container clips (overflow
+ * hidden), so content is revealed instead of being reflowed every frame.
  *
- * Deliberately written in C: subclassing GObject from gtk4-rs inside the Kotlin/Native
- * process corrupted the GObject type state (all widgets became invalid after attaching the
- * layout manager). Plain G_DEFINE_TYPE has neither the double-initialisation problem nor
- * the Rust subclass trait wrappers.
+ * axis: 0 = horizontal main axis (animates width), 1 = vertical main axis (animates height).
+ *
+ * Deliberately C: subclassing GtkLayoutManager through gtk4-rs inside the Kotlin/Native
+ * process corrupted the GObject type state (every widget became invalid after attaching the
+ * layout manager). G_DEFINE_TYPE has neither the double-initialisation problem nor the Rust
+ * subclass trait wrappers.
  */
 
 #include <gtk/gtk.h>
 #include <math.h>
+
+#define KN_AXIS_WIDTH 0
+#define KN_AXIS_HEIGHT 1
 
 typedef struct _KnAnimatedSizeLayout KnAnimatedSizeLayout;
 typedef struct _KnAnimatedSizeLayoutClass KnAnimatedSizeLayoutClass;
@@ -21,16 +27,18 @@ typedef struct _KnAnimatedSizeLayoutClass KnAnimatedSizeLayoutClass;
 struct _KnAnimatedSizeLayout {
     GtkLayoutManager parent_instance;
 
-    double current_w;
-    double from_w;
-    double target_w;
+    double current; /* animated size along the main axis */
+    double from;
+    double target;
 
     guint duration_ms;
     guint easing;
+    guint spacing;
+    guint axis;
 
     gboolean initialized;
     gboolean have_probe;
-    double probe_w;
+    double probe;
     gboolean animating;
     gint64 start_us;
 };
@@ -40,6 +48,14 @@ struct _KnAnimatedSizeLayoutClass {
 };
 
 G_DEFINE_TYPE(KnAnimatedSizeLayout, kn_animated_size_layout, GTK_TYPE_LAYOUT_MANAGER)
+
+static GtkOrientation kn_axis_orientation(const KnAnimatedSizeLayout *self) {
+    return self->axis == KN_AXIS_HEIGHT ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL;
+}
+
+static GtkOrientation kn_cross_orientation(const KnAnimatedSizeLayout *self) {
+    return self->axis == KN_AXIS_HEIGHT ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL;
+}
 
 /* 0 = linear, 1 = out-cubic, 2 = in-out-cubic (same codes as Kotlin Easing). */
 static double kn_ease(guint kind, double t) {
@@ -57,6 +73,16 @@ static double kn_ease(guint kind, double t) {
     }
 }
 
+static int kn_measure_child(GtkWidget *child, GtkOrientation orientation, int for_size) {
+    int minimum = 0;
+    int natural = 0;
+    int minimum_baseline = -1;
+    int natural_baseline = -1;
+    gtk_widget_measure(child, orientation, for_size,
+                       &minimum, &natural, &minimum_baseline, &natural_baseline);
+    return natural;
+}
+
 static void kn_animated_size_layout_measure(GtkLayoutManager *manager,
                                             GtkWidget *widget,
                                             GtkOrientation orientation,
@@ -66,24 +92,22 @@ static void kn_animated_size_layout_measure(GtkLayoutManager *manager,
                                             int *minimum_baseline,
                                             int *natural_baseline) {
     KnAnimatedSizeLayout *self = (KnAnimatedSizeLayout *) manager;
-    if (orientation == GTK_ORIENTATION_HORIZONTAL) {
-        int value = self->current_w > 0.0 ? (int) lround(self->current_w) : 0;
+    GtkOrientation main_orientation = kn_axis_orientation(self);
+
+    if (orientation == main_orientation) {
+        int value = self->current > 0.0 ? (int) lround(self->current) : 0;
         *minimum = value;
         *natural = value;
     } else {
-        GtkWidget *child = gtk_widget_get_first_child(widget);
-        int height = 0;
-        if (child != NULL) {
-            int min_h = 0;
-            int nat_h = 0;
-            int min_b = -1;
-            int nat_b = -1;
-            gtk_widget_measure(child, GTK_ORIENTATION_VERTICAL, -1,
-                               &min_h, &nat_h, &min_b, &nat_b);
-            height = nat_h;
+        int cross = 0;
+        for (GtkWidget *child = gtk_widget_get_first_child(widget);
+             child != NULL;
+             child = gtk_widget_get_next_sibling(child)) {
+            int child_cross = kn_measure_child(child, orientation, -1);
+            if (child_cross > cross) cross = child_cross;
         }
-        *minimum = height;
-        *natural = height;
+        *minimum = cross;
+        *natural = cross;
     }
 
     *minimum_baseline = -1;
@@ -95,22 +119,31 @@ static void kn_animated_size_layout_allocate(GtkLayoutManager *manager,
                                              int width,
                                              int height,
                                              int baseline) {
-    (void) manager;
+    KnAnimatedSizeLayout *self = (KnAnimatedSizeLayout *) manager;
     (void) baseline;
 
-    GtkWidget *child = gtk_widget_get_first_child(widget);
-    if (child == NULL) return;
+    GtkOrientation main_orientation = kn_axis_orientation(self);
+    int cross_size = self->axis == KN_AXIS_HEIGHT ? width : height;
 
-    int min_w = 0;
-    int nat_w = 0;
-    int min_b = -1;
-    int nat_b = -1;
-    gtk_widget_measure(child, GTK_ORIENTATION_HORIZONTAL, height,
-                       &min_w, &nat_w, &min_b, &nat_b);
+    int position = 0;
+    for (GtkWidget *child = gtk_widget_get_first_child(widget);
+         child != NULL;
+         child = gtk_widget_get_next_sibling(child)) {
+        int child_main = kn_measure_child(child, main_orientation, cross_size);
+        if (child_main < 1) child_main = 1;
 
-    /* Keep the content at its natural size; the container clips while the width animates. */
-    int child_width = MAX(nat_w, width);
-    gtk_widget_allocate(child, child_width, height, -1, NULL);
+        int child_width = self->axis == KN_AXIS_HEIGHT ? width : child_main;
+        int child_height = self->axis == KN_AXIS_HEIGHT ? child_main : height;
+
+        graphene_point_t point = self->axis == KN_AXIS_HEIGHT
+                                     ? GRAPHENE_POINT_INIT(0.0f, (float) position)
+                                     : GRAPHENE_POINT_INIT((float) position, 0.0f);
+        GskTransform *transform = gsk_transform_translate(NULL, &point);
+        /* gtk_widget_allocate takes ownership of the transform (transfer full). */
+        gtk_widget_allocate(child, child_width, child_height, -1, transform);
+
+        position += child_main + (int) self->spacing;
+    }
 }
 
 static void kn_animated_size_layout_class_init(KnAnimatedSizeLayoutClass *klass) {
@@ -120,51 +153,61 @@ static void kn_animated_size_layout_class_init(KnAnimatedSizeLayoutClass *klass)
 }
 
 static void kn_animated_size_layout_init(KnAnimatedSizeLayout *self) {
-    self->current_w = -1.0;
-    self->from_w = -1.0;
-    self->target_w = -1.0;
+    self->current = -1.0;
+    self->from = -1.0;
+    self->target = -1.0;
+    self->probe = -1.0;
     self->duration_ms = 180;
     self->easing = 1;
+    self->spacing = 0;
+    self->axis = KN_AXIS_WIDTH;
     self->initialized = FALSE;
     self->have_probe = FALSE;
-    self->probe_w = -1.0;
     self->animating = FALSE;
     self->start_us = 0;
 }
 
-static void kn_update(KnAnimatedSizeLayout *self, GtkWidget *widget) {
-    GtkWidget *child = gtk_widget_get_first_child(widget);
-    if (child == NULL) return;
+/* Natural main-axis size of the whole row/column (children + spacing). */
+static double kn_natural_main_size(KnAnimatedSizeLayout *self, GtkWidget *widget) {
+    GtkOrientation main_orientation = kn_axis_orientation(self);
+    int total = 0;
+    int count = 0;
+    for (GtkWidget *child = gtk_widget_get_first_child(widget);
+         child != NULL;
+         child = gtk_widget_get_next_sibling(child)) {
+        total += kn_measure_child(child, main_orientation, -1);
+        count++;
+    }
+    if (count > 1) total += (int) self->spacing * (count - 1);
+    return (double) total;
+}
 
-    int min_w = 0;
-    int nat_w = 0;
-    int min_b = -1;
-    int nat_b = -1;
-    gtk_widget_measure(child, GTK_ORIENTATION_HORIZONTAL, -1,
-                       &min_w, &nat_w, &min_b, &nat_b);
-    double natural = (double) nat_w;
+static void kn_update(KnAnimatedSizeLayout *self, GtkWidget *widget) {
+    if (gtk_widget_get_first_child(widget) == NULL) return;
+
+    double natural = kn_natural_main_size(self, widget);
 
     if (!self->initialized) {
         if (!gtk_widget_get_mapped(widget)) return;
-        if (natural <= 0.0) return; /* wait for the first real layout */
-        if (!self->have_probe || fabs(natural - self->probe_w) > 0.5) {
-            /* The first frames can measure a partly-laid-out child; wait until the
-             * natural width is stable before snapping, otherwise the chip starts from
-             * a bogus width and visibly grows once. */
-            self->probe_w = natural;
+        if (natural <= 0.0) return;
+        if (!self->have_probe || fabs(natural - self->probe) > 0.5) {
+            /* The first frames can measure a partially laid out child; wait until the
+             * natural size is stable before snapping, otherwise the container starts from
+             * a bogus size and visibly jumps once. */
+            self->probe = natural;
             self->have_probe = TRUE;
             return;
         }
         self->initialized = TRUE;
-        self->current_w = natural;
-        self->target_w = natural;
+        self->current = natural;
+        self->target = natural;
         gtk_widget_queue_resize(widget);
         return;
     }
 
-    if (fabs(natural - self->target_w) > 0.5) {
-        self->from_w = self->current_w;
-        self->target_w = natural;
+    if (fabs(natural - self->target) > 0.5) {
+        self->from = self->current;
+        self->target = natural;
         self->start_us = g_get_monotonic_time();
         self->animating = TRUE;
     }
@@ -173,9 +216,9 @@ static void kn_update(KnAnimatedSizeLayout *self, GtkWidget *widget) {
         double elapsed = (double) (g_get_monotonic_time() - self->start_us) / 1e6;
         double duration = self->duration_ms > 0 ? (double) self->duration_ms / 1000.0 : 0.001;
         double progress = elapsed / duration;
-        self->current_w = self->from_w + (self->target_w - self->from_w) * kn_ease(self->easing, progress);
+        self->current = self->from + (self->target - self->from) * kn_ease(self->easing, progress);
         if (progress >= 1.0) {
-            self->current_w = self->target_w;
+            self->current = self->target;
             self->animating = FALSE;
         }
         gtk_widget_queue_resize(widget);
@@ -193,12 +236,18 @@ static void kn_tick_destroy(gpointer user_data) {
 }
 
 /* Called from Rust over UniFFI; `widget` is a raw GtkWidget* (main thread only). */
-void kn_attach_animated_size_layout(GtkWidget *widget, unsigned int duration_ms, unsigned int easing) {
+void kn_attach_animated_size_layout(GtkWidget *widget,
+                                    unsigned int duration_ms,
+                                    unsigned int easing,
+                                    unsigned int spacing,
+                                    unsigned int axis) {
     if (!GTK_IS_WIDGET(widget)) return;
 
     KnAnimatedSizeLayout *layout = g_object_new(kn_animated_size_layout_get_type(), NULL);
     layout->duration_ms = duration_ms == 0 ? 180 : duration_ms;
     layout->easing = easing;
+    layout->spacing = spacing;
+    layout->axis = axis == KN_AXIS_HEIGHT ? KN_AXIS_HEIGHT : KN_AXIS_WIDTH;
 
     gtk_widget_set_layout_manager(widget, GTK_LAYOUT_MANAGER(layout));
     gtk_widget_set_overflow(widget, GTK_OVERFLOW_HIDDEN);
