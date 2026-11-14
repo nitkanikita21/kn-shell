@@ -2,7 +2,7 @@ package dev.knshell.shell
 
 import dev.knshell.core.hyprctlDispatch
 import dev.knshell.core.spawnCommand
-import dev.knshell.services.ShellServices
+import dev.knshell.services.Services
 
 /**
  * Entry point of the shell runtime — the Quickshell-like API surface.
@@ -22,13 +22,13 @@ import dev.knshell.services.ShellServices
  */
 object Shell {
 
-    /** Reactive services published by the Rust backend. */
-    val services: ShellServices = ShellServices
+    /** Reactive services published by the Rust backend (see [Services]). */
+    val services = Services
 
     /** Compositor actions (Hyprland IPC). */
     object Hyprland {
         /** Focuses a workspace by name, with the legacy dispatcher fallback in Rust. */
-        fun focusWorkspace(name: String) = ShellServices.focusWorkspace(name)
+        fun focusWorkspace(name: String) = Services.workspaces.focus(name)
 
         /** Runs a raw Lua dispatcher, e.g. `hl.dsp.focus({ workspace = "2" })`. */
         fun dispatch(lua: String) = hyprctlDispatch(lua)
@@ -48,7 +48,7 @@ object Shell {
     fun run(content: ShellScope.() -> Unit) {
         // Bring up the reactive backend once; subscriptions are idempotent. Without this
         // no Rust service is subscribed and every flow stays empty.
-        ShellServices.start()
+        Services.startAll()
         val current = runtime
         ShellScope(current).content()
 

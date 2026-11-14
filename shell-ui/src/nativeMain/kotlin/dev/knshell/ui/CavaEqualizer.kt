@@ -8,7 +8,7 @@ import androidx.compose.runtime.getValue
 import dev.knshell.compose.Canvas
 import dev.knshell.compose.Color
 import dev.knshell.compose.Modifier
-import dev.knshell.services.ShellServices
+import dev.knshell.services.Services
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kn.gtk.cairo_fill
@@ -37,7 +37,7 @@ fun CavaEqualizer(
     color: Color = Color.hex(0x111111),
     background: Color? = null,
 ) {
-    val spectrum by ShellServices.spectrum.collectAsState()
+    val spectrum by Services.spectrum.state.collectAsState()
 
     // Read in composition: the draw lambda receives a snapshot, so a state change here is
     // what schedules the next redraw (same rule as for any Canvas animation).

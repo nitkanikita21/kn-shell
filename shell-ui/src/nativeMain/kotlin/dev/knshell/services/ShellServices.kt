@@ -1,111 +1,37 @@
 package dev.knshell.services
 
-import dev.knshell.core.MediaListener
-import dev.knshell.core.SpectrumListener
-import dev.knshell.core.SystemListener
+import dev.knshell.core.MediaState
 import dev.knshell.core.SystemStats
 import dev.knshell.core.WorkspaceInfo
-import dev.knshell.core.WorkspaceListener
-import dev.knshell.core.MediaState
-import dev.knshell.core.VolumeListener
 import dev.knshell.core.WindowInfo
-import dev.knshell.core.WindowListener
-import dev.knshell.core.subscribeMedia
-import dev.knshell.core.subscribeVolume
-import dev.knshell.core.subscribeWindows
-import dev.knshell.core.subscribeSystem
-import dev.knshell.core.subscribeSpectrum
-import dev.knshell.core.subscribeWorkspaces
-import dev.knshell.core.setVolume
-import dev.knshell.core.togglePlayPause
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
- * Kotlin-side facade over the Rust services.
+ * Backward-compatible facade over [Services]; prefer the per-service API.
  *
- * The UniFFI callback objects are stored in [retained] so that Kotlin/Native does not
- * garbage-collect them while Rust still holds references (UniFFI keeps the native side
- * alive, but the Kotlin object must stay reachable).
+ * ```kotlin
+ * // old                          // new
+ * ShellServices.media             Services.media.state
+ * ShellServices.togglePlayPause() Services.media.togglePlayPause()
+ * ShellServices.workspaces        Services.workspaces.state
+ * ```
  */
+@Deprecated(
+    "Use dev.knshell.services.Services (Services.media.state, Services.workspaces.state, …)",
+    ReplaceWith("dev.knshell.services.Services"),
+)
 object ShellServices {
-    val windows = MutableStateFlow<List<WindowInfo>>(emptyList())
-    val volume = MutableStateFlow(0)
-    val media = MutableStateFlow(MediaState("", "", false, "", false))
-    val workspaces = MutableStateFlow<List<WorkspaceInfo>>(emptyList())
-    val system = MutableStateFlow(SystemStats(0, 0))
-    /** CAVA bars, 0..100, 16 values by default. */
-    val spectrum = MutableStateFlow<List<Int>>(List(16) { 0 })
+    val windows: StateFlow<List<WindowInfo>> get() = Services.windows.state
+    val volume: StateFlow<Int> get() = Services.volume.state
+    val media: StateFlow<MediaState> get() = Services.media.state
+    val workspaces: StateFlow<List<WorkspaceInfo>> get() = Services.workspaces.state
+    val system: StateFlow<SystemStats> get() = Services.system.state
+    val spectrum: StateFlow<List<Int>> get() = Services.spectrum.state
 
-    private val retained = mutableListOf<Any>()
-    private var started = false
+    fun setVolume(volume: Int) = Services.volume.setVolume(volume)
+    fun togglePlayPause() = Services.media.togglePlayPause()
+    fun focusWorkspace(name: String) = Services.workspaces.focus(name)
 
-    /** Sets the default sink volume (0-150 %) through the Rust AudioService. */
-    fun setVolume(volume: Int) = dev.knshell.core.setVolume(volume)
-
-    /** Toggles play/pause on the active MPRIS player. */
-    fun togglePlayPause() = dev.knshell.core.togglePlayPause()
-
-    /** Focuses a workspace by name via the compositor IPC. */
-    fun focusWorkspace(name: String) = dev.knshell.core.focusWorkspace(name)
-
-    fun start() {
-        if (started) return
-        started = true
-
-        val windowListener = object : WindowListener {
-            override fun onWindows(windows: List<WindowInfo>) {
-                this@ShellServices.windows.value = windows
-                val summary = windows.joinToString(separator = " | ") { "${it.appId} :: ${it.title}" }
-                println("[services/windows] ${windows.size} toplevel(s): $summary")
-            }
-        }
-        retained += windowListener
-        subscribeWindows(windowListener)
-
-        val volumeListener = object : VolumeListener {
-            override fun onVolume(volume: Int) {
-                this@ShellServices.volume.value = volume
-                println("[services/audio] default sink volume = $volume%")
-            }
-        }
-        retained += volumeListener
-        subscribeVolume(volumeListener)
-
-        val mediaListener = object : MediaListener {
-            override fun onMedia(state: MediaState) {
-                this@ShellServices.media.value = state
-                println(
-                    "[services/media] player=${state.player} playing=${state.playing} " +
-                        "title=\"${state.title}\" artist=\"${state.artist}\" available=${state.available}"
-                )
-            }
-        }
-        retained += mediaListener
-        subscribeMedia(mediaListener)
-
-        val workspaceListener = object : WorkspaceListener {
-            override fun onWorkspaces(workspaces: List<WorkspaceInfo>) {
-                this@ShellServices.workspaces.value = workspaces
-                println("[services/workspaces] " + workspaces.joinToString { if (it.active) "[${it.name}]" else it.name })
-            }
-        }
-        retained += workspaceListener
-        subscribeWorkspaces(workspaceListener)
-
-        val systemListener = object : SystemListener {
-            override fun onStats(stats: SystemStats) {
-                this@ShellServices.system.value = stats
-            }
-        }
-        retained += systemListener
-        subscribeSystem(systemListener)
-
-        val spectrumListener = object : SpectrumListener {
-            override fun onSpectrum(bars: List<Int>) {
-                this@ShellServices.spectrum.value = bars
-            }
-        }
-        retained += spectrumListener
-        subscribeSpectrum(spectrumListener)
-    }
+    /** Starts every service; lazy access already starts what you touch. */
+    fun start() = Services.startAll()
 }

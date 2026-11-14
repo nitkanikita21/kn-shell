@@ -12,25 +12,31 @@ import dev.knshell.compose.CenterBox
 import dev.knshell.compose.Color
 import dev.knshell.compose.Label
 import dev.knshell.compose.Align
+import dev.knshell.compose.AnimatedWidth
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.align
 import dev.knshell.compose.Overlay
 import dev.knshell.compose.Row
 import dev.knshell.compose.background
+import dev.knshell.compose.fillHeight
 import dev.knshell.compose.fontFamily
 import dev.knshell.compose.fontSize
 import dev.knshell.compose.fontWeight
+import dev.knshell.compose.height
 import dev.knshell.compose.onClick
 import dev.knshell.compose.radius
 import dev.knshell.compose.size
 import dev.knshell.compose.padding
 import dev.knshell.compose.pointerCursor
 import dev.knshell.compose.textColor
+import dev.knshell.compose.vExpand
+import dev.knshell.compose.width
 import dev.knshell.compose.widthBehavior
 import dev.knshell.core.WorkspaceInfo
-import dev.knshell.services.ShellServices
+import dev.knshell.services.Services
 import dev.knshell.ui.primitives.HSpace
 import dev.knshell.ui.primitives.Icon
+import dev.knshell.ui.primitives.Spacer
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Clock
 import kotlinx.datetime.LocalDateTime
@@ -65,7 +71,7 @@ fun LeftIsland() {
             .padding(24, 8)
             .background(Olive.Background)
             .radius(0, 0, 16, 0)
-            .align(v = Align.Center)
+            .align(v = Align.Start)
     ) {
         PlayerChip()
     }
@@ -76,12 +82,12 @@ fun RightIsland() {
     Row(
         16,
         Modifier
-            .padding(24, 0)
+            .padding(24, 8)
             .background(Olive.Background)
-            .radius(0, 0, 16, 0)
-            .align(v = Align.Center)
+            .radius(0, 0, 0, 16)
+            .align(v = Align.Start)
     ) {
-
+        PlayerChip()
     }
 }
 
@@ -90,11 +96,10 @@ fun CenterIsland() {
     Row(
         16,
         Modifier
-            .padding(horizontal = 24, vertical = 0)
+            .padding(24, 8)
             .background(Olive.Background)
             .radius(0, 0, 16, 16)
-            .align(v = Align.Fill)
-            .align(v = Align.Center)
+            .align(v = Align.Start)
     ) {
         Notification()
         Workspaces()
@@ -104,7 +109,7 @@ fun CenterIsland() {
 
 @Composable
 fun Workspaces() {
-    val workspaces by ShellServices.workspaces.collectAsState()
+    val workspaces by Services.workspaces.state.collectAsState()
 
     Row(
         spacing = 4,
@@ -141,10 +146,12 @@ val shotClockFormat = LocalDateTime.Format {
     hour(); char(':'); minute()
 }
 val longClockFormat = LocalDateTime.Format {
-    dayOfMonth(); char(' '); dayOfWeek(DayOfWeekNames.ENGLISH_ABBREVIATED); chars(" ");
-    monthName(MonthNames.ENGLISH_ABBREVIATED); chars(" | ");
+    hour(); char(':'); minute(); chars("   ");
 
-    hour(); char(':'); minute()
+    dayOfMonth(); char(' '); dayOfWeek(DayOfWeekNames.ENGLISH_ABBREVIATED); chars(" ");
+    monthName(MonthNames.ENGLISH_ABBREVIATED);
+
+
 }
 
 @Composable
@@ -160,7 +167,7 @@ private fun Clock() {
         }
     }
 
-    Row(spacing = 10) {
+    AnimatedWidth(spacing = 10) {
         Icon("\uF43A")
 
         Label(
@@ -169,6 +176,7 @@ private fun Clock() {
                 .textColor(Grayscale.Accent)
                 .onClick { isShortFormat = !isShortFormat }
                 .pointerCursor()
+                .widthBehavior()
         )
     }
 }

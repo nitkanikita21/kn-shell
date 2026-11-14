@@ -23,7 +23,7 @@ import dev.knshell.compose.pointerCursor
 import dev.knshell.compose.radius
 import dev.knshell.compose.textColor
 import dev.knshell.compose.AnimatedWidth
-import dev.knshell.services.ShellServices
+import dev.knshell.services.Services
 import dev.knshell.ui.primitives.Icon
 import dev.knshell.ui.primitives.Space
 import kotlinx.coroutines.delay
@@ -53,7 +53,7 @@ fun PlayerChip(
     equalizerColor: Color = Grayscale.Surface,
     titleColor: Color? = null,
 ) {
-    val media by ShellServices.media.collectAsState()
+    val media by Services.media.state.collectAsState()
     val track = title ?: media.title.ifBlank { "Nothing playing" }
 
     // Phase is read in composition, so each step re-emits the CSS gradient with the
@@ -97,7 +97,7 @@ fun PlayerChip(
             .background(SheenBase)
             .then(sheen)
             .pointerCursor()
-            .onClick { onClick?.invoke() ?: ShellServices.togglePlayPause() }
+            .onClick { onClick?.invoke() ?: Services.media.togglePlayPause() }
             .padding(horizontal = 14, vertical = 2),
     ) {
         if (media.playing) {

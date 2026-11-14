@@ -10,7 +10,7 @@ bar yourself from generic layout, utilities, the Modifier DSL and reactive servi
 | layout | `Row`, `Column`, `Box`, `CenterBox` — `dev.knshell.compose` |
 | utilities | `Space`, `HSpace`, `VSpace`, `Spacer`, `Icon`, `Text` — `dev.knshell.ui.primitives` |
 | styling | Modifier DSL (`padding`, `margin`, `background`, `textColor`, `fontSize`, …) + `Catppuccin` palette |
-| data | `Shell.services` — `StateFlow`s (`workspaces`, `media`, `volume`, `system`, `windows`) |
+| data | `Services` — `StateFlow`s (`Services.workspaces.state`, `Services.media.state`, …) |
 | runtime | `Shell.run { barWindow { … } }` |
 
 ## A clock module
@@ -51,7 +51,7 @@ fun Clock() {
 @Composable
 fun Volume() {
     var volume by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { Shell.services.volume.collect { volume = it } }
+    LaunchedEffect(Unit) { Services.volume.state.collect { volume = it } }
 
     Row(
         spacing = 6,
@@ -77,7 +77,7 @@ fun Volume() {
                     knobColor = Catppuccin.Text,
                     knobSize = 12,
                 ),
-        ) { Shell.services.setVolume(it.toInt()) }
+        ) { Services.volume.setVolume(it.toInt()) }
         Text(volume.toString() + "%")
     }
 }
@@ -249,7 +249,7 @@ HoverPopover(
 ```
 
 How it works: the popover body hosts a **separate Compose composition** (mounted into the
-popover through the shared `Recomposer`), so it can read `Shell.services` like any window.
+popover through the shared `Recomposer`), so it can read `Services` like any window.
 The popover surface is plain (reset class), so give your content root a background,
 padding and radius — otherwise it stays transparent.
 
@@ -257,7 +257,7 @@ padding and radius — otherwise it stays transparent.
 
 `CavaEqualizer` draws a real audio spectrum: the Rust `spectrum` service spawns a `cava`
 child with a generated raw-ASCII config and publishes 16 bar values (`0..100`) at 30 fps
-through `ShellServices.spectrum`.
+through `Services.spectrum.state`.
 
 ```kotlin
 Row(spacing = 8) {
@@ -272,7 +272,7 @@ Requirements: `cava` must be installed (`pacman -S cava`); the service feeds it 
 flat. A plain widget for custom drawing:
 
 ```kotlin
-val bars by ShellServices.spectrum.collectAsState()
+val bars by Services.spectrum.state.collectAsState()
 Canvas(96, 20) { cr, w, h -> /* draw bars from 0..100 values */ }
 ```
 

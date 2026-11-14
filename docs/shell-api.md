@@ -83,16 +83,19 @@ background.
 
 ## Reactive services
 
-`Shell.services` is `dev.knshell.services.ShellServices`; every service is a
-`MutableStateFlow` filled from Rust:
+`Services` (`dev.knshell.services.Services`) is the framework-style entry point: each
+service is a small object with a `state: StateFlow` fed from Rust plus its own actions.
+Services start **lazily on first access**, so touching `Services.media` subscribes it, and
+their UniFFI listener objects stay alive for the process lifetime.
 
-| Flow | Type | Source | Latency |
+| Service | Flow | Type | Source |
 | --- | --- | --- | --- |
-| `windows` | `List<WindowInfo>` | `ext-foreign-toplevel-list-v1` events | one event round-trip |
-| `workspaces` | `List<WorkspaceInfo>` | Hyprland event socket | ~1 frame |
-| `media` | `MediaState` | `playerctl --follow` (event-driven) | on every MPRIS change |
-| `volume` | `Int` (0–150) | `pactl get-sink-volume` poll | ≤ 500 ms |
-| `system` | `SystemStats` | `/proc/stat`, `/proc/meminfo` poll | ≤ 1 s |
+| `Services.windows` | `state` | `List<WindowInfo>` | `ext-foreign-toplevel-list-v1` events |
+| `Services.workspaces` | `state` | `List<WorkspaceInfo>` | Hyprland event socket |
+| `Services.media` | `state` | `MediaState` | `playerctl --follow` (event-driven) |
+| `Services.volume` | `state` | `Int` (0–150) | `pactl` poll |
+| `Services.system` | `state` | `SystemStats` | `/proc` poll |
+| `Services.spectrum` | `state` | `List<Int>` (16 × 0..100) | CAVA raw stream |
 
 Workspaces are event-driven: the service listens on
 `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock` and re-reads
@@ -104,23 +107,28 @@ polling fallback also works when the shell was started outside the compositor en
 ```kotlin
 @Composable
 fun MyModule() {
-    var volume by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { Shell.services.volume.collect { volume = it } }
-    Label("$volume%")
+    val volume by Services.volume.state.collectAsState()
+    val media by Services.media.state.collectAsState()
+
+    Label("$volume%  ${media.artist} - ${media.title}",
+        modifier = Modifier.onClick { Services.media.togglePlayPause() })
 }
 ```
 
+Actions live on the service itself: `Services.volume.setVolume(45)`,
+`Services.media.togglePlayPause()`, `Services.workspaces.focus("2")`.
+
 **StateFlow → Compose path:** Rust invokes a UniFFI callback on its own thread → the
-`ShellServices` listener writes `flow.value` → `collect` in `LaunchedEffect` runs on
+the service's listener writes `flow.value` → `collect` in `LaunchedEffect` runs on
 `GLibDispatcher` and writes Compose state → the next 16 ms tick calls
 `Snapshot.sendApplyNotifications()`, the Recomposer recomposes and the applier calls `gtk_*`
 on the GTK thread. The same tick advances animations (`withFrameNanos`): time-based `durationMs` + `Easing`, spring, or a shared `Animate { t -> … }` progress; callbacks
 never touch GTK, so UI code needs no locking.
 
-`ShellServices.start()` subscribes all listeners — `startKnShell()` does it, embedders must
-call it before `Shell.run`. Listener objects are retained for the process lifetime to match
-the Rust registries. Facade actions: `setVolume(Int)`, `togglePlayPause()`,
-`focusWorkspace(name)`.
+`Services.startAll()` subscribes everything; `Shell.run` calls it, and lazy access already
+starts the services a module touches. The old `ShellServices` facade still exists as a
+deprecated shim (`ShellServices.media` → `Services.media.state`) so existing code keeps
+compiling, with `Shell.services` now referring to `Services`.
 
 ## Actions
 
@@ -138,7 +146,7 @@ and never blocks the shell.
 ## Utilities
 
 The library ships **no bar, no modules and no theme**. Layout comes from the generic
-widgets, data from `Shell.services`, styling from the Modifier DSL, and a few utilities
+widgets, data from `Services`, styling from the Modifier DSL, and a few utilities
 remove boilerplate:
 
 `dev.knshell.ui.primitives`:
@@ -171,8 +179,7 @@ Services are plain `StateFlow`s — collect them into Compose state yourself:
 ```kotlin
 @Composable
 fun Volume() {
-    var volume by remember { mutableStateOf(0) }
-    LaunchedEffect(Unit) { Shell.services.volume.collect { volume = it } }
+    val volume by Services.volume.state.collectAsState()
 
     Row(
         spacing = 6,
@@ -183,7 +190,7 @@ fun Volume() {
         Icon("\uF028")
         Text(volume.toString() + "%")
         Slider(value = volume.toFloat(), min = 0f, max = 100f, step = 5f) {
-            Shell.services.setVolume(it.toInt())
+            Services.volume.setVolume(it.toInt())
         }
     }
 }
@@ -382,9 +389,11 @@ Numbers: `dev.knshell.ui` has `Float.format(decimals)`, `.whole()`, `.percent(de
 state struct, a `#[uniffi::export(callback_interface)]` trait (`Send + Sync`), a listener
 registry (`OnceLock<Mutex<Vec<Arc<dyn BatteryListener>>>>`), a `broadcast_*` that clones the
 list and invokes it, one named thread started on first subscription, and an exported
-`subscribe_battery(listener: Box<dyn BatteryListener>)`. Then add a `MutableStateFlow` to
-`ShellServices`, retain the Kotlin listener object, subscribe in `start()` and collect the
-flow in a composable. Gobley regenerates the `dev.knshell.core` bindings on build.
+`subscribe_battery(listener: Box<dyn BatteryListener>)`. Then add a
+`ShellService` implementation in `shell-ui/.../services/` (a `MutableStateFlow` in the
+object, its UniFFI listener retained, `subscribe_*` in `start()`), register it in
+`Services` with `by lazy { … .also { it.start() } }` and collect its `state` in a
+composable. Gobley regenerates the `dev.knshell.core` bindings on build.
 
 **Widget node.** Subclass `GtkNode` in `shell-ui/.../compose/Widgets.kt`, implement
 `attachChild`/`detachChild` if it has children, and emit it with `ComposeNode`. The applier
@@ -402,7 +411,7 @@ fun Spinner(modifier: Modifier = Modifier) = ComposeNode<GtkSpinnerNode, GtkAppl
 
 **Bar module.** Add a composable in your own file (there are no built-in visual modules)
 built from `Row` / `Column` / `Space` / `Icon` / `Text` and the Modifier DSL; collect
-`Shell.services.*` if it needs live data.
+``Services.*` if it needs live data.
 
 ## Limitations and caveats
 
