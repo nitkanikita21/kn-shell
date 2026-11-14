@@ -15,7 +15,7 @@ import dev.knshell.compose.radius
 import dev.knshell.compose.textColor
 import dev.knshell.core.NotificationInfo
 import dev.knshell.services.Services
-import dev.knshell.shell.HoverPopover
+import dev.knshell.shell.Popover
 import dev.knshell.ui.Grayscale
 import dev.knshell.ui.primitives.Icon
 
@@ -24,11 +24,11 @@ private const val ICON_HAS_NEW = "\uDB84\uDD6B"
 private const val ICON_DND = "\uDB80\uDC9B"
 
 /**
- * Notification bell.
+ * Notification centre: a **click** popover (not hover, unlike tooltips).
  *
- * * click — toggles do-not-disturb;
- * * hover — popover with the newest notifications (click one to dismiss, "clear all" row at
- *   the bottom). Data comes from [Services.notifications], which watches the session bus.
+ * * click the bell — open/close the panel;
+ * * click outside — close (GTK autohide);
+ * * inside: DND toggle, newest notifications (click one to close it), "clear all".
  */
 @Composable
 fun Notification() {
@@ -41,33 +41,39 @@ fun Notification() {
         else -> ICON_EMPTY
     }
 
-    HoverPopover(
-        delayMs = 150,
-        hideDelayMs = 350,
-        content = { NotificationList(notifications) },
+    Popover(
+        openOnHover = false,
+        openOnClick = true,
+        content = { NotificationPanel(notifications, dnd) },
     ) {
         Icon(
             icon,
             size = 16,
-            modifier = Modifier
-                .onClick { Services.notifications.toggleDoNotDisturb() }
-                .pointerCursor(),
+            modifier = Modifier.pointerCursor(),
         )
     }
 }
 
 @Composable
-private fun NotificationList(notifications: List<NotificationInfo>) {
+private fun NotificationPanel(notifications: List<NotificationInfo>, dnd: Boolean) {
     Box(
         modifier = Modifier
             .padding(horizontal = 14, vertical = 10)
             .background(Grayscale.Surface, radius = 10),
     ) {
         Column(spacing = 6) {
+            Label(
+                text = if (dnd) "Do not disturb: on" else "Do not disturb: off",
+                modifier = Modifier
+                    .textColor(Grayscale.Accent)
+                    .onClick { Services.notifications.toggleDoNotDisturb() }
+                    .pointerCursor(),
+            )
+
             if (notifications.isEmpty()) {
                 Label(
                     text = "No notifications",
-                    modifier = Modifier.textColor(Grayscale.Accent),
+                    modifier = Modifier.textColor(Grayscale.Foreground),
                 )
             } else {
                 notifications.take(6).forEach { notification ->

@@ -225,37 +225,31 @@ Tips:
 * true blur/glow shaders (`GskGLShader` / `gtk_snapshot_push_gl_shader`) are possible but
   require the GL renderer and a custom GSK node — not wired up yet.
 
-### Hover popover
+### Popovers (hover / click / manual)
 
-`HoverPopover` anchors a real `GtkPopover` to the trigger and opens it on hover (short
-delay, auto-hide when the pointer leaves both trigger and popover):
+`Popover` anchors a real `GtkPopover` to its trigger. Three ways to open it (hover and click
+can be combined):
 
 ```kotlin
-HoverPopover(
-    delayMs = 120,
-    hideDelayMs = 250,
-    content = {
-        Box(
-            Modifier
-                .padding(horizontal = 14, vertical = 10)
-                .background(Grayscale.Surface, radius = 12),
-        ) {
-            Text("Volume panel", color = Grayscale.Foreground)
-        }
-    },
-) {
-    Icon("\uF028", modifier = Modifier.pointerCursor())
-}
+// tooltip-like: opens on hover
+Popover(content = { InfoPanel() }) { Icon("\uF028", modifier = Modifier.pointerCursor()) }
+
+// notification centre: opens on click, closes on outside click
+Popover(openOnHover = false, openOnClick = true, content = { NotificationPanel() }) { Bell() }
+
+// manual control
+val menu = remember { PopoverController() }
+Popover(openOnHover = false, openOnClick = false, controller = menu,
+        content = { MenuPanel() }) { Icon("\uF0C9") }
+// menu.open() / menu.close() / menu.toggle() / menu.isOpen
 ```
 
-The popover surface is fully reset (transparent `popover`/`contents`/`arrow`, no border,
-shadow or padding, no arrow), so only your content draws. Set `KN_POPOVER_DEBUG=1` to pop
-every popover once at startup — handy for checking layout without a mouse.
-
-How it works: the popover body hosts a **separate Compose composition** (mounted into the
-popover through the shared `Recomposer`), so it can read `Services` like any window.
-The popover surface is plain (reset class), so give your content root a background,
-padding and radius — otherwise it stays transparent.
+The content is a **separate Compose composition** mounted when the popover opens (and
+disposed when it closes, so the next open negotiates its size from scratch). The surface is
+fully reset (transparent `popover`/`contents`/`arrow`, no border, shadow, padding or arrow),
+so the content root owns background/padding/radius. `KN_POPOVER_DEBUG=1` pops each popover
+once at startup for layout checks (only one popover is visible at a time in normal use —
+with the debug flag several open together, which GTK flags as a benign critical).
 
 ### Audio visualiser (CAVA)
 

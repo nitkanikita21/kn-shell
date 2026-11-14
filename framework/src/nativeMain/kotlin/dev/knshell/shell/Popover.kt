@@ -22,6 +22,7 @@ import kotlinx.cinterop.staticCFunction
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
 import kn.gtk.GtkBox
+import kn.gtk.GtkEventController
 import kn.gtk.GtkOrientation
 import kn.gtk.GtkPopover
 import kn.gtk.GtkWidget
@@ -32,6 +33,7 @@ import kn.gtk.gtk_box_append
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 import kn.gtk.gtk_event_controller_motion_new
+import kn.gtk.gtk_gesture_click_new
 import kn.gtk.gtk_popover_new
 import kn.gtk.gtk_popover_popdown
 import kn.gtk.gtk_popover_popup
@@ -84,26 +86,80 @@ popover.$POPOVER_CLASS arrow {
 }
 """.trimIndent()
 
+/** Imperative handle for opening/closing a [Popover] (manual mode). */
+class PopoverController {
+    internal var target: GtkHoverPopoverNode? = null
+
+    /** True while the popover is visible. */
+    val isOpen: Boolean get() = target?.isShown == true
+
+    fun open() {
+        target?.showNow()
+    }
+
+    fun close() {
+        target?.hideNow()
+    }
+
+    fun toggle() {
+        if (isOpen) close() else open()
+    }
+
+    internal fun attach(node: GtkHoverPopoverNode) {
+        target = node
+    }
+
+    internal fun detach() {
+        target = null
+    }
+}
+
 /**
- * Hover popover: a `GtkPopover` anchored to the trigger, shown on hover with a short delay
- * and hidden when the pointer leaves both the trigger and the popover.
+ * Popover anchored to its trigger, with three ways to open it:
  *
- * The popover content is a **separate Compose composition** mounted into the popover body,
- * so it recomposes with services like any window. The popover surface is plain (the reset
- * class is applied); give the content root a background/padding yourself.
+ * * **hover** (`openOnHover = true`, default) — shown after [delayMs], hidden after the
+ *   pointer leaves both trigger and popover (tooltips);
+ * * **click** (`openOnClick = true`) — toggled by clicking the trigger, closed by clicking
+ *   outside (notification centre);
+ * * **manual** — pass a [PopoverController] and call `open()`/`close()`/`toggle()`.
+ *
+ * Hover and click can be combined. The content is a **separate Compose composition**, so it
+ * recomposes with services like any window. The popover surface is transparent (reset CSS),
+ * so the content root owns background/padding/radius.
  *
  * ```kotlin
- * HoverPopover(
- *     content = {
- *         Box(Modifier.padding(12).background(Grayscale.Surface, radius = 10)) {
- *             Text("Volume panel")
- *         }
- *     },
- * ) {
- *     Icon("\uF028", modifier = Modifier.pointerCursor())
- * }
+ * Popover(openOnClick = true, content = { NotificationList() }) { BellIcon() }
  * ```
  */
+@Composable
+fun Popover(
+    modifier: Modifier = Modifier,
+    openOnHover: Boolean = true,
+    openOnClick: Boolean = false,
+    delayMs: Int = 120,
+    hideDelayMs: Int = 250,
+    controller: PopoverController? = null,
+    content: @Composable () -> Unit,
+    anchor: @Composable () -> Unit,
+) {
+    ComposeNode<GtkHoverPopoverNode, GtkApplier>(
+        factory = {
+            GtkHoverPopoverNode(delayMs, hideDelayMs, openOnHover, openOnClick).also { node ->
+                node.contentState.value = content
+                node.controller = controller
+                controller?.attach(node)
+            }
+        },
+        update = {
+            set(modifier) { value -> applyModifier(value) }
+            set(content) { value -> contentState.value = value }
+        },
+    ) {
+        anchor()
+    }
+}
+
+/** Back-compat wrapper: a [Popover] that opens on hover. */
 @Composable
 fun HoverPopover(
     modifier: Modifier = Modifier,
@@ -111,24 +167,27 @@ fun HoverPopover(
     hideDelayMs: Int = 250,
     content: @Composable () -> Unit,
     trigger: @Composable () -> Unit,
-) {
-    ComposeNode<GtkHoverPopoverNode, GtkApplier>(
-        factory = {
-            GtkHoverPopoverNode(delayMs, hideDelayMs).also { it.contentState.value = content }
-        },
-        update = {
-            set(modifier) { value -> applyModifier(value) }
-            set(content) { value -> contentState.value = value }
-        },
-    ) {
-        trigger()
-    }
-}
+) = Popover(
+    modifier = modifier,
+    openOnHover = true,
+    openOnClick = false,
+    delayMs = delayMs,
+    hideDelayMs = hideDelayMs,
+    content = content,
+    anchor = trigger,
+)
 
 internal class GtkHoverPopoverNode(
     private val delayMs: Int,
     private val hideDelayMs: Int,
+    private val openOnHover: Boolean,
+    private val openOnClick: Boolean,
 ) : GtkNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!) {
+
+    internal var controller: PopoverController? = null
+
+    /** True while the popover is visible. */
+    internal val isShown: Boolean get() = shown
 
     /** Latest content lambda; the mounted composition reads it, so updates propagate. */
     internal val contentState = mutableStateOf<@Composable () -> Unit>({})
@@ -142,6 +201,8 @@ internal class GtkHoverPopoverNode(
     private var shown = false
     private var showSource = 0u
     private var hideSource = 0u
+    private var popupSource = 0u
+    private var pendingPopup = false
     private var closedByUser = false
 
     @Suppress("unused")
@@ -154,6 +215,11 @@ internal class GtkHoverPopoverNode(
 
     private val hideCallback = staticCFunction { data: COpaquePointer? ->
         data?.asStableRef<GtkHoverPopoverNode>()?.get()?.hideNow()
+        0 // G_SOURCE_REMOVE
+    }
+
+    private val popupCallback = staticCFunction { data: COpaquePointer? ->
+        data?.asStableRef<GtkHoverPopoverNode>()?.get()?.popupNow()
         0 // G_SOURCE_REMOVE
     }
 
@@ -172,7 +238,9 @@ internal class GtkHoverPopoverNode(
             // can close the popover right after popup() and the hover logic reopens it,
             // which looks like blinking. Closing is driven by the hover timers instead.
             gtk_popover_set_has_arrow(typed, 0)
-            gtk_popover_set_autohide(typed, 0)
+            // Click popovers rely on GTK autohide to close on outside clicks; hover popovers
+            // keep it off (autohide + layer-shell caused popdown/popup blinking).
+            gtk_popover_set_autohide(typed, if (openOnClick && !openOnHover) 1 else 0)
             // Re-parenting is the GTK4 way to anchor a popover to a widget.
             gtk_widget_set_parent(popupWidget, widget)
 
@@ -190,8 +258,11 @@ internal class GtkHoverPopoverNode(
             )
         }
 
-        attachHover(widget)
-        if (popover != null) attachHover(popover)
+        if (openOnHover) {
+            attachHover(widget)
+            if (popover != null) attachHover(popover)
+        }
+        if (openOnClick) attachClick(widget)
 
         // Development aid: KN_POPOVER_DEBUG=1 pops every popover once, so layout and
         // styling can be checked without moving the pointer.
@@ -217,7 +288,10 @@ internal class GtkHoverPopoverNode(
             // a content update (wifi details arriving, changing rates) is clipped inside the
             // old allocation. Queue a resize on every content recomposition.
             SideEffect {
-                popover?.let { gtk_widget_queue_resize(it) }
+                // Resize the content box, not the popover: queueing a resize on the popover
+                // while GTK is mid-positioning can hit gtk_widget_is_ancestor on a stale
+                // relative-to widget. The popover follows its content size anyway.
+                gtk_widget_queue_resize(contentBox)
             }
         }
     }
@@ -234,6 +308,36 @@ internal class GtkHoverPopoverNode(
         gtk_css_provider_load_from_string(provider, POPOVER_CSS)
         gtk_style_context_add_provider_for_display(display, provider.reinterpret(), 700u)
         popoverCssInstalled = true
+    }
+
+    private fun attachClick(target: CPointer<GtkWidget>) {
+        val gesture = gtk_gesture_click_new() ?: return
+        val ref = selfRef
+        val pressed = staticCFunction { _: COpaquePointer?, _: Int, _: Double, _: Double, data: COpaquePointer? ->
+            data?.asStableRef<GtkHoverPopoverNode>()?.get()?.onTriggerClicked()
+            Unit
+        }
+        g_signal_connect_data(
+            instance = gesture.reinterpret(),
+            detailed_signal = "pressed",
+            c_handler = pressed.reinterpret(),
+            data = ref.asCPointer(),
+            destroy_data = null,
+            connect_flags = 0u,
+        )
+        gtk_widget_add_controller(target, gesture.reinterpret<GtkEventController>())
+    }
+
+    private fun onTriggerClicked() {
+        cancelledShow()
+        cancelledHide()
+        if (shown) hideNow() else showNow()
+    }
+
+    override fun cancelAnimations() {
+        super.cancelAnimations()
+        controller?.detach()
+        controller = null
     }
 
     private fun attachHover(target: CPointer<GtkWidget>) {
@@ -300,17 +404,35 @@ internal class GtkHoverPopoverNode(
         }
     }
 
-    private fun showNow() {
+    internal fun showNow() {
         showSource = 0u
+        if (popover == null || shown || pendingPopup) return
+        ensureComposition()
+        // The popover negotiates its size from the child during popup(); mounting the
+        // composition and popping in the same call measures a not-yet-laid-out tree (tiny
+        // popover) and can trip GTK's ancestor check. Wait one frame instead.
+        pendingPopup = true
+        popupSource = g_timeout_add(16u, popupCallback, selfRef.asCPointer())
+    }
+
+    internal fun popupNow() {
+        popupSource = 0u
+        pendingPopup = false
         val popup = popover ?: return
         if (shown) return
-        ensureComposition()
         gtk_popover_popup(popup.reinterpret<GtkPopover>())
         shown = true
     }
 
-    private fun hideNow() {
+    internal fun hideNow() {
         hideSource = 0u
+        if (pendingPopup) {
+            pendingPopup = false
+            if (popupSource != 0u) {
+                g_source_remove(popupSource)
+                popupSource = 0u
+            }
+        }
         val popup = popover ?: return
         if (!shown) return
         gtk_popover_popdown(popup.reinterpret<GtkPopover>())
@@ -324,6 +446,10 @@ internal class GtkHoverPopoverNode(
     private fun onClosedByUser() {
         shown = false
         cancelledShow()
+        // The surface was dismissed by GTK (outside click); drop the composition so the next
+        // open negotiates its size from scratch.
+        composition?.dispose()
+        composition = null
     }
 
 }
