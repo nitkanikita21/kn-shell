@@ -28,20 +28,20 @@ import dev.knshell.ui.primitives.Icon
 /**
  * Network module, waybar-style.
  *
- * Collapsed (in the bar): connection icon + combined In/Out throughput.
- * Expanded (hover popover): interface, SSID/signal, IP and separate In / Out rates + totals.
- * Clicking the speed toggles throughput ⇄ cumulative I/O.
+ * Collapsed (bar): connection icon + combined In/Out throughput.
+ * Expanded (click): separate In and Out throughput in the bar.
+ * Hover popover: interface, SSID/signal, IP, and In/Out with rates and cumulative totals.
  */
 @Composable
 fun Network() {
     val network by Services.network.state.collectAsState()
-    var showTotals by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
 
-    val combined = if (showTotals) {
-        formatBytes(network.totalRxBytes.toLong() + network.totalTxBytes.toLong())
-    } else {
-        formatBytesPerSec(network.rxBytesPerSec.toLong() + network.txBytesPerSec.toLong())
-    }
+    val down = formatBytesPerSec(network.rxBytesPerSec.toLong())
+    val up = formatBytesPerSec(network.txBytesPerSec.toLong())
+    val combined = formatBytesPerSec(
+        network.rxBytesPerSec.toLong() + network.txBytesPerSec.toLong(),
+    )
 
     HoverPopover(
         delayMs = 250,
@@ -49,13 +49,31 @@ fun Network() {
     ) {
         AnimatedWidth(spacing = 10) {
             Icon(networkIcon(network), size = 15)
-            Label(
-                text = "\u2195 $combined",
-                modifier = Modifier
-                    .textColor(Grayscale.Accent)
-                    .onClick { showTotals = !showTotals }
-                    .pointerCursor(),
-            )
+
+            if (expanded) {
+                Label(
+                    text = "\u2193 $down",
+                    modifier = Modifier
+                        .textColor(Grayscale.Foreground)
+                        .onClick { expanded = false }
+                        .pointerCursor(),
+                )
+                Label(
+                    text = "\u2191 $up",
+                    modifier = Modifier
+                        .textColor(Grayscale.Accent)
+                        .onClick { expanded = false }
+                        .pointerCursor(),
+                )
+            } else {
+                Label(
+                    text = "\u2195 $combined",
+                    modifier = Modifier
+                        .textColor(Grayscale.Accent)
+                        .onClick { expanded = true }
+                        .pointerCursor(),
+                )
+            }
         }
     }
 }
@@ -66,7 +84,7 @@ private fun networkIcon(network: NetworkState): String = when (network.connectio
     else -> "\uF071"
 }
 
-/** Waybar's `tooltip-format` analogue: details kept out of the bar itself. */
+/** Waybar's `tooltip-format` analogue: details live only in the popover. */
 @Composable
 private fun NetworkDetails(network: NetworkState) {
     Box(
