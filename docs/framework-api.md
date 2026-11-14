@@ -59,7 +59,7 @@ is an implementation detail and may change.
 | `battery` | `BatteryState` | — |
 | `hyprland` | `activeWindow: ActiveWindow?`, `currentSubmap: String` | — |
 | `network` | `NetworkState` (rx/tx rates, cumulative totals, interface, type, SSID, signal, IP) | — |
-| `notifications` | `state: List<NotificationInfo>`, `doNotDisturb: Boolean`, `isServer: Boolean` | `toggleDoNotDisturb()`, `dismiss(id)`, `invokeAction(id, action)`, `clear()` |
+| `notifications` | `state: List<NotificationInfo>` (icon + actions included), `doNotDisturb`, `isServer` | `toggleDoNotDisturb()` (server-side suppression), `dismiss(id)`, `invokeAction(id, action)`, `clear()` |
 
 `ShellServices` is a deprecated compatibility shim over `Services`.
 
@@ -70,7 +70,7 @@ is an implementation detail and may change.
 
 ### `dev.knshell.ui`
 
-`primitives`: `Space`, `HSpace`, `VSpace`, `Spacer`, `Icon`, `Text`; `Format`: `Float.format`,
+`primitives`: `Space`, `HSpace`, `VSpace`, `Spacer`, `Icon`, `Text`, `Image`; `Format`: `Float.format`,
 `percent`, `whole`, `floorInt`, `ceilInt`, `formatBytesPerSec`; `bucketLevels` for spectrum
 visualisers.
 

@@ -5,6 +5,7 @@ import dev.knshell.core.NotificationListener
 import dev.knshell.core.notificationsClose
 import dev.knshell.core.notificationsInvokeAction
 import dev.knshell.core.notificationsIsServer
+import dev.knshell.core.notificationsSetDnd
 import dev.knshell.core.subscribeNotifications
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -56,9 +57,11 @@ class NotificationsService internal constructor() : ShellService {
     /** True when the shell owns `org.freedesktop.Notifications` (control available). */
     val isServer: Boolean get() = notificationsIsServer()
 
-    /** Toggles do-not-disturb. */
+    /** Toggles do-not-disturb; the server then suppresses new notifications while on. */
     fun toggleDoNotDisturb() {
-        dnd.value = !dnd.value
+        val next = !dnd.value
+        dnd.value = next
+        notificationsSetDnd(next)
     }
 
     /**

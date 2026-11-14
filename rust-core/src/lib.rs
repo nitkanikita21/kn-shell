@@ -34,6 +34,13 @@ pub struct WindowInfo {
     pub app_id: String,
 }
 
+/// One action attached to a notification (`key` is sent back on invoke, `label` is shown).
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct NotificationAction {
+    pub key: String,
+    pub label: String,
+}
+
 /// One desktop notification observed on the session bus.
 #[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct NotificationInfo {
@@ -44,6 +51,10 @@ pub struct NotificationInfo {
     /// `1` normal, `2` critical (freedesktop hints).
     pub urgency: u8,
     pub timestamp_ms: u64,
+    /// `image-path` hint or the app icon (file path or icon name, may be empty).
+    pub icon: String,
+    /// Action buttons in display order.
+    pub actions: Vec<NotificationAction>,
 }
 
 /// Current network throughput across all non-loopback interfaces.

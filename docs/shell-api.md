@@ -99,7 +99,7 @@ their UniFFI listener objects stay alive for the process lifetime.
 | `Services.battery` | `state` | `BatteryState` | `/sys/class/power_supply` poll (2 s) |
 | `Services.hyprland` | `activeWindow`, `currentSubmap` | `ActiveWindow?`, `String` | Hyprland event socket + safety refresh |
 | `Services.network` | `state` | `NetworkState` (rx/tx rates, totals, interface, `connection_type`, `ssid`, `signal_strength`, `ip_address`) | `/proc/net/dev` on the default-route interface (1 s) + `ip`/`nmcli` details (5 s) |
-| `Services.notifications` | `state`, `doNotDisturb` | `List<NotificationInfo>`, `Boolean` | server mode: own `org.freedesktop.Notifications`; observer mode: `dbus-monitor` |
+| `Services.notifications` | `state` (id, app, summary, body, urgency, icon, actions), `doNotDisturb` | `List<NotificationInfo>`, `Boolean` | server: own `org.freedesktop.Notifications` (expiry timers, DND, actions, closed events); observer fallback: `dbus-monitor` |
 
 Workspaces are event-driven: the service listens on
 `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock` and re-reads

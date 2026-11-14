@@ -4,31 +4,42 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import dev.knshell.compose.Box
+import dev.knshell.compose.Color
 import dev.knshell.compose.Column
 import dev.knshell.compose.Label
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.Row
+import dev.knshell.compose.Align
+import dev.knshell.compose.align
 import dev.knshell.compose.background
+import dev.knshell.compose.fontWeight
 import dev.knshell.compose.onClick
 import dev.knshell.compose.padding
 import dev.knshell.compose.pointerCursor
 import dev.knshell.compose.radius
+import dev.knshell.compose.size
 import dev.knshell.compose.textColor
+import dev.knshell.compose.width
 import dev.knshell.core.NotificationInfo
 import dev.knshell.services.Services
 import dev.knshell.shell.Popover
 import dev.knshell.ui.Grayscale
 import dev.knshell.ui.primitives.Icon
+import dev.knshell.ui.primitives.Image
 
 private const val ICON_EMPTY = "\uDB80\uDC9A"
 private const val ICON_HAS_NEW = "\uDB84\uDD6B"
 private const val ICON_DND = "\uDB80\uDC9B"
 
+/** Close button glyph shown on every card. */
+private const val ICON_CLOSE = "\uF00D"
+
 /**
  * Notification centre: a **click** popover (not hover, unlike tooltips).
  *
- * * click the bell — open/close the panel;
- * * click outside — close (GTK autohide);
- * * inside: DND toggle, newest notifications (click one to close it), "clear all".
+ * Each notification is a card: icon (file paths from `image-path`/`app-icon` are rendered,
+ * icon names fall back to a glyph), app + summary, body, action buttons (click invokes the
+ * action through the server) and a close button. Urgent notifications use the accent colour.
  */
 @Composable
 fun Notification() {
@@ -46,11 +57,7 @@ fun Notification() {
         openOnClick = true,
         content = { NotificationPanel(notifications, dnd) },
     ) {
-        Icon(
-            icon,
-            size = 16,
-            modifier = Modifier.pointerCursor(),
-        )
+        Icon(icon, size = 16, modifier = Modifier.pointerCursor())
     }
 }
 
@@ -61,14 +68,23 @@ private fun NotificationPanel(notifications: List<NotificationInfo>, dnd: Boolea
             .padding(horizontal = 14, vertical = 10)
             .background(Grayscale.Surface, radius = 10),
     ) {
-        Column(spacing = 6) {
-            Label(
-                text = if (dnd) "Do not disturb: on" else "Do not disturb: off",
+        Column(spacing = 8) {
+            Row(
+                spacing = 10,
                 modifier = Modifier
-                    .textColor(Grayscale.Accent)
                     .onClick { Services.notifications.toggleDoNotDisturb() }
                     .pointerCursor(),
-            )
+            ) {
+                Icon(
+                    if (dnd) ICON_DND else ICON_EMPTY,
+                    size = 14,
+                    color = if (dnd) Grayscale.Accent else Grayscale.Foreground,
+                )
+                Label(
+                    text = if (dnd) "Do not disturb: on" else "Do not disturb: off",
+                    modifier = Modifier.textColor(Grayscale.Accent),
+                )
+            }
 
             if (notifications.isEmpty()) {
                 Label(
@@ -77,24 +93,7 @@ private fun NotificationPanel(notifications: List<NotificationInfo>, dnd: Boolea
                 )
             } else {
                 notifications.take(6).forEach { notification ->
-                    Box(
-                        modifier = Modifier
-                            .onClick { Services.notifications.dismiss(notification.id) }
-                            .pointerCursor(),
-                    ) {
-                        Column(spacing = 2) {
-                            Label(
-                                text = "${notification.app}  ${notification.summary}",
-                                modifier = Modifier.textColor(Grayscale.Foreground),
-                            )
-                            if (notification.body.isNotBlank()) {
-                                Label(
-                                    text = notification.body,
-                                    modifier = Modifier.textColor(Grayscale.Accent),
-                                )
-                            }
-                        }
-                    }
+                    NotificationCard(notification)
                 }
                 if (notifications.size > 6) {
                     Label(
@@ -113,3 +112,70 @@ private fun NotificationPanel(notifications: List<NotificationInfo>, dnd: Boolea
         }
     }
 }
+
+/** One notification card: icon, text, actions and a close button. */
+@Composable
+private fun NotificationCard(notification: NotificationInfo) {
+    val urgent = notification.urgency >= 2u.toUByte()
+    Box(
+        modifier = Modifier
+            .width(340)
+            .padding(8)
+            .background(Grayscale.Background, radius = 8),
+    ) {
+        Row(spacing = 10) {
+            NotificationIcon(notification)
+
+            Column(spacing = 3, modifier = Modifier.width(258)) {
+                Label(
+                    text = "${notification.app}  ${notification.summary}",
+                    modifier = Modifier
+                        .textColor(if (urgent) Grayscale.Accent else Grayscale.Foreground)
+                        .fontWeight(600),
+                )
+                if (notification.body.isNotBlank()) {
+                    Label(
+                        text = notification.body,
+                        modifier = Modifier.textColor(Grayscale.Accent),
+                    )
+                }
+                if (notification.actions.isNotEmpty()) {
+                    Row(spacing = 10) {
+                        notification.actions.forEach { action ->
+                            Label(
+                                text = action.label,
+                                modifier = Modifier
+                                    .textColor(ACTION_COLOR)
+                                    .onClick {
+                                        Services.notifications.invokeAction(notification.id, action.key)
+                                    }
+                                    .pointerCursor(),
+                            )
+                        }
+                    }
+                }
+            }
+
+            Label(
+                text = ICON_CLOSE,
+                modifier = Modifier
+                    .align(v = Align.Start)
+                    .textColor(Grayscale.Accent)
+                    .onClick { Services.notifications.dismiss(notification.id) }
+                    .pointerCursor(),
+            )
+        }
+    }
+}
+
+@Composable
+private fun NotificationIcon(notification: NotificationInfo) {
+    val icon = notification.icon
+    if (icon.isNotBlank() && icon.startsWith("/")) {
+        Image(icon, Modifier.radius(6), width = 28, height = 28)
+    } else {
+        Icon(ICON_HAS_NEW, size = 18, color = Grayscale.Accent)
+    }
+}
+
+private val ACTION_COLOR = Color.hex(0x9ECBFF)

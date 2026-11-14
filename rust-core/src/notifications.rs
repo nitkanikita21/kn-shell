@@ -27,6 +27,9 @@ use crate::{publish_notification, publish_notification_closed, NotificationInfo}
 
 static STARTED: OnceLock<()> = OnceLock::new();
 static SERVER_ACTIVE: AtomicBool = AtomicBool::new(false);
+static DND: AtomicBool = AtomicBool::new(false);
+
+const DEFAULT_EXPIRE_MS: i32 = 5000;
 
 const BUS_NAME: &str = "org.freedesktop.Notifications";
 
@@ -38,6 +41,18 @@ const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
 const INTERFACE: &str = "org.freedesktop.Notifications";
 const WATCH_MATCH: &str =
     "type='method_call',interface='org.freedesktop.Notifications',member='Notify'";
+
+fn closed_signal(id: u32, reason: u32) -> Message {
+    Message::new_signal(OBJECT_PATH, INTERFACE, "NotificationClosed")
+        .expect("signal")
+        .append2(id, reason)
+}
+
+fn action_signal(id: u32, action: &str) -> Message {
+    Message::new_signal(OBJECT_PATH, INTERFACE, "ActionInvoked")
+        .expect("signal")
+        .append2(id, action.to_string())
+}
 
 /// True when the shell owns the notification bus name (control API is available).
 pub fn is_server() -> bool {
@@ -74,6 +89,27 @@ struct Item {
     urgency: u8,
     actions: Vec<String>,
     timestamp_ms: u64,
+}
+
+fn hint_string(hints: &PropMap, keys: &[&str]) -> String {
+    for key in keys {
+        if let Some(value) = hints.get(*key) {
+            if let Some(text) = value.0.as_str() {
+                return text.to_string();
+            }
+        }
+    }
+    String::new()
+}
+
+fn pairs(flat: Vec<String>) -> Vec<crate::NotificationAction> {
+    flat.chunks(2)
+        .filter_map(|chunk| {
+            let key = chunk.first()?.clone();
+            let label = chunk.get(1).cloned().unwrap_or_else(|| key.clone());
+            Some(crate::NotificationAction { key, label })
+        })
+        .collect()
 }
 
 fn now_ms() -> u64 {
@@ -145,7 +181,7 @@ fn run_server() -> bool {
             ("id",),
             |ctx,
              state: &mut Arc<Mutex<ServerState>>,
-             (app_name, replaces_id, _icon, summary, body, actions, hints, _expire): (
+             (app_name, replaces_id, app_icon, summary, body, actions, hints, expire_timeout): (
                 String,
                 u32,
                 String,
@@ -156,6 +192,9 @@ fn run_server() -> bool {
                 i32,
             )|
              -> Result<(u32,), dbus_crossroads::MethodErr> {
+                let image = hint_string(&hints, &["image-path", "image_path"]);
+                let icon = if image.is_empty() { app_icon.clone() } else { image };
+                let action_items = pairs(actions.clone());
                 let urgency = hints
                     .get("urgency")
                     .and_then(|variant| variant.0.as_i64())
@@ -182,6 +221,15 @@ fn run_server() -> bool {
                 );
                 drop(guard);
 
+                // Do-not-disturb: accept the notification (clients get a valid id) but do not
+                // surface it — close it immediately from the server side.
+                if DND.load(Ordering::Relaxed) {
+                    eprintln!("[rust/notifications] suppressed by DND id={id}");
+                    close_notification(state, id, 3);
+                    ctx.push_msg(closed_signal(id, 3));
+                    return Ok((id,));
+                }
+
                 eprintln!(
                     "[rust/notifications] Notify id={id} app=\"{app_name}\" summary=\"{summary}\""
                 );
@@ -192,7 +240,22 @@ fn run_server() -> bool {
                     body,
                     urgency,
                     timestamp_ms: now_ms(),
+                    icon,
+                    actions: action_items,
                 });
+
+                // Expiry: 0 means "never", -1 means the server default.
+                if expire_timeout != 0 {
+                    let timeout = if expire_timeout < 0 {
+                        DEFAULT_EXPIRE_MS
+                    } else {
+                        expire_timeout
+                    };
+                    std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(timeout as u64));
+                        proxy_call("KnExpireNotification", (id,));
+                    });
+                }
                 let _ = ctx;
                 Ok((id,))
             },
@@ -202,8 +265,10 @@ fn run_server() -> bool {
             "CloseNotification",
             ("id",),
             (),
-            |_ctx, state: &mut Arc<Mutex<ServerState>>, (id,): (u32,)| -> Result<(), dbus_crossroads::MethodErr> {
-                close_notification(state, id, 2);
+            |ctx, state: &mut Arc<Mutex<ServerState>>, (id,): (u32,)| -> Result<(), dbus_crossroads::MethodErr> {
+                if close_notification(state, id, 2) {
+                    ctx.push_msg(closed_signal(id, 2));
+                }
                 Ok(())
             },
         );
@@ -213,12 +278,47 @@ fn run_server() -> bool {
             "KnInvokeAction",
             ("id", "action_key"),
             (),
-            |_ctx,
+            |ctx,
              state: &mut Arc<Mutex<ServerState>>,
              (id, action_key): (u32, String)|
              -> Result<(), dbus_crossroads::MethodErr> {
-                close_notification(state, id, 2);
+                ctx.push_msg(action_signal(id, &action_key));
+                if close_notification(state, id, 2) {
+                    ctx.push_msg(closed_signal(id, 2));
+                }
                 Ok(())
+            },
+        );
+
+        builder.method(
+            "KnExpireNotification",
+            ("id",),
+            (),
+            |ctx, state: &mut Arc<Mutex<ServerState>>, (id,): (u32,)| -> Result<(), dbus_crossroads::MethodErr> {
+                if close_notification(state, id, 1) {
+                    ctx.push_msg(closed_signal(id, 1));
+                }
+                Ok(())
+            },
+        );
+
+        builder.method(
+            "KnSetDnd",
+            ("enabled",),
+            (),
+            |_ctx, _state: &mut Arc<Mutex<ServerState>>, (enabled,): (bool,)| -> Result<(), dbus_crossroads::MethodErr> {
+                DND.store(enabled, Ordering::Relaxed);
+                eprintln!("[rust/notifications] DND = {enabled}");
+                Ok(())
+            },
+        );
+
+        builder.method(
+            "KnGetDnd",
+            (),
+            ("enabled",),
+            |_ctx, _state: &mut Arc<Mutex<ServerState>>, ()| -> Result<(bool,), dbus_crossroads::MethodErr> {
+                Ok((DND.load(Ordering::Relaxed),))
             },
         );
 
@@ -237,10 +337,10 @@ fn run_server() -> bool {
     }
 }
 
-fn close_notification(state: &mut Arc<Mutex<ServerState>>, id: u32, reason: u32) {
+fn close_notification(state: &mut Arc<Mutex<ServerState>>, id: u32, reason: u32) -> bool {
     let mut guard = state.lock().unwrap();
     let Some(item) = guard.items.remove(&id) else {
-        return;
+        return false;
     };
     drop(guard);
     eprintln!(
@@ -248,6 +348,7 @@ fn close_notification(state: &mut Arc<Mutex<ServerState>>, id: u32, reason: u32)
         item.app
     );
     publish_notification_closed(id as u64, reason);
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +389,22 @@ pub fn notifications_is_server() -> bool {
     is_server()
 }
 
+/// Enables/disables do-not-disturb: while enabled, `Notify` calls are accepted but
+/// immediately closed with reason 3 and never surfaced.
+#[uniffi::export]
+pub fn notifications_set_dnd(enabled: bool) {
+    DND.store(enabled, Ordering::Relaxed);
+    if is_server() {
+        proxy_call("KnSetDnd", (enabled,));
+    }
+}
+
+/// Current do-not-disturb state.
+#[uniffi::export]
+pub fn notifications_is_dnd() -> bool {
+    DND.load(Ordering::Relaxed)
+}
+
 // ---------------------------------------------------------------------------
 // Fallback: passive watcher (no bus name -> no control)
 // ---------------------------------------------------------------------------
@@ -318,7 +435,11 @@ fn spawn_monitor() -> Option<Child> {
 #[derive(Default)]
 struct Capture {
     active: bool,
+    /// app name, app icon, summary, body
     strings: Vec<String>,
+    actions: Vec<String>,
+    after_body: bool,
+    in_hints: bool,
     urgency: u8,
     expecting_urgency_value: bool,
 }
@@ -377,30 +498,56 @@ fn read_events(child: &mut Child) {
             continue;
         }
         let trimmed = line.trim_start();
-        if trimmed.is_empty() || trimmed.starts_with("array [") || trimmed.starts_with("dict entry(") {
+        if trimmed.is_empty() {
             continue;
         }
+
+        if trimmed.starts_with("array [") {
+            // First array after the four strings is `actions`, the second is `hints`.
+            if capture.strings.len() >= 4 {
+                capture.after_body = true;
+            }
+            continue;
+        }
+        if trimmed.starts_with("dict entry(") {
+            if capture.after_body {
+                capture.in_hints = true;
+            }
+            continue;
+        }
+
         if let Some(value) = quoted(trimmed) {
-            if value == "urgency" {
-                capture.expecting_urgency_value = true;
+            if capture.in_hints {
+                if value == "urgency" {
+                    capture.expecting_urgency_value = true;
+                }
                 continue;
             }
-            if capture.strings.len() < 4 {
+            if capture.after_body {
+                capture.actions.push(value);
+            } else if capture.strings.len() < 4 {
                 capture.strings.push(value);
             }
             continue;
         }
+
         if capture.expecting_urgency_value && trimmed.contains("byte ") {
-            capture.urgency = trimmed.rsplit("byte ").next().unwrap_or("1").trim().parse().unwrap_or(1);
+            capture.urgency = trimmed
+                .rsplit("byte ")
+                .next()
+                .unwrap_or("1")
+                .trim()
+                .parse()
+                .unwrap_or(1);
             capture.expecting_urgency_value = false;
             continue;
         }
+
         if trimmed.starts_with("int32 ") && capture.strings.len() >= 4 {
-            let mut strings = capture.strings.iter();
-            let app = strings.next().cloned().unwrap_or_default();
-            let _icon = strings.next();
-            let summary = strings.next().cloned().unwrap_or_default();
-            let body = strings.next().cloned().unwrap_or_default();
+            let app = capture.strings.first().cloned().unwrap_or_default();
+            let icon = capture.strings.get(1).cloned().unwrap_or_default();
+            let summary = capture.strings.get(2).cloned().unwrap_or_default();
+            let body = capture.strings.get(3).cloned().unwrap_or_default();
             publish_notification(NotificationInfo {
                 id: FALLBACK_ID.fetch_add(1, Ordering::Relaxed) as u64 + 1,
                 app,
@@ -408,6 +555,8 @@ fn read_events(child: &mut Child) {
                 body,
                 urgency: capture.urgency,
                 timestamp_ms: now_ms(),
+                icon,
+                actions: pairs(capture.actions.clone()),
             });
             capture = Capture::default();
         }

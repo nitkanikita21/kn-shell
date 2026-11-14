@@ -251,6 +251,43 @@ so the content root owns background/padding/radius. `KN_POPOVER_DEBUG=1` pops ea
 once at startup for layout checks (only one popover is visible at a time in normal use —
 with the debug flag several open together, which GTK flags as a benign critical).
 
+### Notification card
+
+Cards are just composition — `Services.notifications.state` gives id, app, summary, body,
+urgency, icon path and actions:
+
+```kotlin
+@Composable
+fun NotificationCard(n: NotificationInfo) {
+    Row(spacing = 10, modifier = Modifier.width(340).padding(8).background(Grayscale.Background, radius = 8)) {
+        if (n.icon.startsWith("/")) {
+            Image(n.icon, Modifier.radius(6), width = 28, height = 28)
+        } else {
+            Icon("\uDB84\uDD6B", size = 18, color = Grayscale.Accent)
+        }
+        Column(spacing = 3, modifier = Modifier.width(258)) {
+            Label("${n.app}  ${n.summary}", modifier = Modifier.textColor(Grayscale.Foreground).fontWeight(600))
+            if (n.body.isNotBlank()) Label(n.body, modifier = Modifier.textColor(Grayscale.Accent))
+            if (n.actions.isNotEmpty()) {
+                Row(spacing = 10) {
+                    n.actions.forEach { a ->
+                        Label(a.label, modifier = Modifier.textColor(ACTION_COLOR)
+                            .onClick { Services.notifications.invokeAction(n.id, a.key) }
+                            .pointerCursor())
+                    }
+                }
+            }
+        }
+        Label("\uF00D", modifier = Modifier.textColor(Grayscale.Accent)
+            .onClick { Services.notifications.dismiss(n.id) }.pointerCursor())
+    }
+}
+```
+
+`Image` is a framework primitive that scales the file at load time
+(`gdk_pixbuf_new_from_file_at_scale` → `GdkTexture` → `GtkPicture`), so a huge logo does not
+stretch the row.
+
 ### Audio visualiser (CAVA)
 
 `CavaEqualizer` draws a real audio spectrum: the Rust `spectrum` service spawns a `cava`
