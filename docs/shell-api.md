@@ -390,12 +390,12 @@ state struct, a `#[uniffi::export(callback_interface)]` trait (`Send + Sync`), a
 registry (`OnceLock<Mutex<Vec<Arc<dyn BatteryListener>>>>`), a `broadcast_*` that clones the
 list and invokes it, one named thread started on first subscription, and an exported
 `subscribe_battery(listener: Box<dyn BatteryListener>)`. Then add a
-`ShellService` implementation in `shell-ui/.../services/` (a `MutableStateFlow` in the
+`ShellService` implementation in `framework/.../services/` (a `MutableStateFlow` in the
 object, its UniFFI listener retained, `subscribe_*` in `start()`), register it in
 `Services` with `by lazy { … .also { it.start() } }` and collect its `state` in a
 composable. Gobley regenerates the `dev.knshell.core` bindings on build.
 
-**Widget node.** Subclass `GtkNode` in `shell-ui/.../compose/Widgets.kt`, implement
+**Widget node.** Subclass `GtkNode` in `framework/.../compose/Widgets.kt`, implement
 `attachChild`/`detachChild` if it has children, and emit it with `ComposeNode`. The applier
 inserts children bottom-up (children before parents), which is what GTK needs.
 

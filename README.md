@@ -18,11 +18,11 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ shell-app (Kotlin/Native executable)                             │
-│   main() → startKnShell()                                        │
+│   main() → startKnShell()  + example bar (TestBar, chips)         │
 └───────────────▲──────────────────────────────────────────────────┘
                 │
 ┌───────────────┴──────────────────────────────────────────────────┐
-│ shell-ui (Kotlin/Native library)                                 │
+│ framework (Kotlin/Native library)                                 │
 │                                                                   │
 │  Compose Runtime              GtkApplier            GTK4 + cinterop│
 │  ┌────────────────┐      ┌──────────────────┐    ┌───────────────┐│
@@ -51,8 +51,8 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 | Module | Contents |
 |---|---|
 | `rust-core/` | Rust crate, UniFFI exports, services, Gobley cargo/uniffi plugins |
-| `shell-ui/` | GTK4 C interop, `GtkApplier`, Compose DSL, shell runtime (`Shell.run`), layer-shell, spring animation, reactive services facade, UI primitives (`ui/primitives`) and style helpers (`ui/style`) |
-| `shell-app/` | `main()` — starts the shell |
+| `framework/` | GTK4 C interop, `GtkApplier`, Compose DSL, Modifier/animation, shell runtime (`Shell.run`, layer-shell), reactive `Services`, UI primitives (`ui/primitives`) — the reusable library, no bar |
+| `shell-app/` | thin entrypoint (`main()` → `startKnShell()`) plus the example bar: `TestBar`, `PlayerChip`, `CavaEqualizer`, palette |
 
 ---
 
@@ -287,15 +287,15 @@ waybar to see the bar at the very top edge.
    `gtk-kn` is archived on GitHub (read-only mirror of a GitLab project), is **not published to any
    Maven repository** (only buildable from source into `mavenLocal`), and **does not contain a
    `compose-gtk4` module** (there is only an unmerged `feature/84-compose` branch).
-   Instead of vendoring ~13 generated binding modules, `shell-ui` declares a **C interop against the
+   Instead of vendoring ~13 generated binding modules, `framework` declares a **C interop against the
    system GTK4 + gtk4-layer-shell** (include paths from `pkg-config`, linker options in `gtk4.def`)
    and implements `GtkNodeApplier` directly — exactly the Phase 1 task ("implement or adapt the
    applier"). GTK 4.22 is installed, newer than what gtk-kn targets.
 2. **Compose `animation` / `animation-core` are not published for `linuxX64`.**
    Only `org.jetbrains.compose.runtime:runtime` ships a linuxX64 klib, so `animateFloatAsState`,
-   `AnimatedContent` and `spring()` from the official artifact are unavailable. `shell-ui` therefore
+   `AnimatedContent` and `spring()` from the official artifact are unavailable. `framework` therefore
    ships a small spring implementation on top of `withFrameNanos`
-   (`shell-ui/.../animation/Spring.kt`), preserving the same semantics.
+   (`framework/.../animation/Spring.kt`), preserving the same semantics.
 3. **Audio uses `pactl` instead of `pipewire-rs`/libpulse bindings.**
    PipeWire's `pipewire-pulse` server speaks the PulseAudio protocol, so `pactl` observes and sets
    the default sink. This avoids ~300 lines of unsafe libpulse mainloop integration for the MVP;
@@ -356,14 +356,15 @@ committed.
 │   ├── src/media.rs              # MPRIS
 │   ├── src/audio.rs              # default sink volume (pactl)
 │   └── src/system.rs             # CPU / memory from /proc
-├── shell-ui/                     # Compose → GTK bridge, shell runtime, primitives
+├── framework/                    # reusable library (no bar, no theme)
 │   ├── src/nativeInterop/cinterop/gtk4.def
 │   └── src/nativeMain/kotlin/dev/knshell/
 │       ├── compose/              # applier, Modifier DSL, widgets, frame clock
-│       ├── shell/                # Shell.run, ShellScope, ShellRuntime
+│       ├── animation/            # spring / easing helpers
+│       ├── shell/                # Shell.run, ShellScope, ShellRuntime, popovers
 │       ├── ui/primitives/        # Space/HSpace/VSpace, Spacer, Icon, Text
-│       └── services/             # ShellServices facade over the Rust backend
-├── shell-app/                    # main()
+│       └── services/             # Services: windows/media/audio/workspaces/system/spectrum
+├── shell-app/                    # main() + example bar (TestBar, PlayerChip, …)
 ├── scripts/dev.sh, scripts/run.sh, scripts/gobley-rustup.sh
 └── docs/shell-api.md, docs/bar-api.md
 ```

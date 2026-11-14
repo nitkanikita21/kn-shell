@@ -17,5 +17,5 @@ dependencyResolutionManagement {
 rootProject.name = "kn-shell"
 
 include(":rust-core")
-include(":shell-ui")
+include(":framework")
 include(":shell-app")

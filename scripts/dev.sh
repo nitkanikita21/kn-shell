@@ -100,11 +100,11 @@ if [[ $WATCH -eq 0 ]]; then
     exit $?
 fi
 
-echo "[dev] watching shell-ui/src, shell-app/src, rust-core/src (Ctrl+C to stop)"
+echo "[dev] watching framework/src, shell-app/src, rust-core/src (Ctrl+C to stop)"
 while true; do
     sleep 1
     CHANGED=0
-    if find shell-ui/src shell-app/src rust-core/src \( -name '*.kt' -o -name '*.rs' \) -newer "$MARK" | grep -q .; then
+    if find framework/src shell-app/src rust-core/src \( -name '*.kt' -o -name '*.rs' \) -newer "$MARK" | grep -q .; then
         CHANGED=1
     fi
     if ! kill -0 "$CHILD_PID" 2>/dev/null; then CHANGED=1; fi

@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.compose)
 }
 
 kotlin {
@@ -17,7 +18,7 @@ kotlin {
 
     sourceSets {
         nativeMain.dependencies {
-            implementation(project(":shell-ui"))
+            implementation(project(":framework"))
             implementation(project(":rust-core"))
         }
     }
