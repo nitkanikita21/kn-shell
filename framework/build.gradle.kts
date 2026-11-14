@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
+    id("org.jetbrains.dokka") version "2.0.0"
 }
 
 // GTK4 + layer-shell are consumed through a hand-written C interop instead of the

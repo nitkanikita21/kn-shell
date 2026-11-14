@@ -88,3 +88,13 @@ is an implementation detail and may change.
 ```
 
 KDoc in the source is the reference for every symbol; this page only fixes the contract.
+
+## Generated KDoc (Dokka)
+
+```bash
+./gradlew :framework:dokkaHtml
+# → framework/build/dokka/html/index.html
+```
+
+Dokka documents the `framework` module only; application code (`shell-app`) is not part of
+the published API.
