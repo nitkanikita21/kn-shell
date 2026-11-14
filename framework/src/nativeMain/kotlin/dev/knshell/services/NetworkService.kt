@@ -10,7 +10,19 @@ import kotlinx.coroutines.flow.asStateFlow
 /** Live network throughput (RX/TX bytes per second, all non-loopback interfaces). */
 class NetworkService internal constructor() : ShellService {
 
-    private val mutable = MutableStateFlow(NetworkState(0uL, 0uL))
+    private val mutable = MutableStateFlow(
+        NetworkState(
+            rxBytesPerSec = 0uL,
+            txBytesPerSec = 0uL,
+            totalRxBytes = 0uL,
+            totalTxBytes = 0uL,
+            `interface` = "",
+            connectionType = "disconnected",
+            ssid = "",
+            signalStrength = 0,
+            ipAddress = "",
+        ),
+    )
 
     val state: StateFlow<NetworkState> = mutable.asStateFlow()
 

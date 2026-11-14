@@ -52,3 +52,16 @@ fun formatBytesPerSec(bytesPerSecond: Long): String {
     }
     return if (index == 0) "${bytesPerSecond} ${units[0]}" else value.toFloat().format(1) + " " + units[index]
 }
+
+/** Human-readable byte amount: `formatBytes(1_500_000) == "1.4 MiB"`. */
+fun formatBytes(bytes: Long): String {
+    if (bytes < 0) return "0 B"
+    val units = listOf("B", "KiB", "MiB", "GiB", "TiB")
+    var value = bytes.toDouble()
+    var index = 0
+    while (value >= 1024.0 && index < units.lastIndex) {
+        value /= 1024.0
+        index++
+    }
+    return if (index == 0) "${bytes} ${units[0]}" else value.toFloat().format(1) + " " + units[index]
+}

@@ -5,8 +5,12 @@
 //! speedtest: it measures whatever the machine is actually transferring.
 
 use std::fs;
+use std::path::Path;
+use std::process::Command;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
+
+use serde_json::Value;
 
 use crate::{publish_network, NetworkState};
 
@@ -89,16 +93,106 @@ fn read_counters(interface: &str) -> (u64, u64) {
     exact.unwrap_or((fallback_rx, fallback_tx))
 }
 
+/// Static connection details; queried rarely because they spawn `ip`/`nmcli`.
+#[derive(Default, Clone)]
+struct Details {
+    connection_type: String,
+    ssid: String,
+    signal: i32,
+    ip: String,
+}
+
+fn interface_kind(interface: &str) -> String {
+    if interface.is_empty() {
+        return "disconnected".to_string();
+    }
+    if Path::new(&format!("/sys/class/net/{interface}/wireless")).exists() {
+        "wifi".to_string()
+    } else {
+        "ethernet".to_string()
+    }
+}
+
+fn query_ip(interface: &str) -> String {
+    let Ok(output) = Command::new("ip")
+        .args(["-j", "-4", "addr", "show", "dev", interface])
+        .output()
+    else {
+        return String::new();
+    };
+    let Ok(value) = serde_json::from_slice::<Value>(&output.stdout) else {
+        return String::new();
+    };
+    value
+        .get(0)
+        .and_then(|entry| entry.get("addr_info"))
+        .and_then(Value::as_array)
+        .and_then(|entries| entries.first())
+        .and_then(|entry| entry.get("local"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// SSID and signal of the currently used wifi network (nmcli, NetworkManager hosts).
+fn query_wifi() -> (String, i32) {
+    let Ok(output) = Command::new("nmcli")
+        .args(["-t", "-f", "IN-USE,SIGNAL,SSID", "dev", "wifi", "list"])
+        .output()
+    else {
+        return (String::new(), 0);
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        // "*:78:My WiFi:5" — SSID may contain dots/colons, so split only twice.
+        let mut parts = line.splitn(3, ':');
+        let in_use = parts.next().unwrap_or_default();
+        if !in_use.contains('*') {
+            continue;
+        }
+        let signal = parts.next().and_then(|v| v.trim().parse::<i32>().ok()).unwrap_or(0);
+        let ssid = parts.next().unwrap_or_default().trim_end_matches(":5").to_string();
+        return (ssid, signal.clamp(0, 100));
+    }
+    (String::new(), 0)
+}
+
+fn query_details(interface: &str) -> Details {
+    let connection_type = interface_kind(interface);
+    let (ssid, signal) = if connection_type == "wifi" {
+        query_wifi()
+    } else {
+        (String::new(), 0)
+    };
+    Details {
+        connection_type,
+        ssid,
+        signal,
+        ip: query_ip(interface),
+    }
+}
+
 fn poll_loop() {
     let mut interface = default_interface().unwrap_or_default();
     let (mut last_rx, mut last_tx) = read_counters(&interface);
     let mut last_at = Instant::now();
+    let mut details = query_details(&interface);
+    let mut ticks = 0u32;
+    let mut logged = false;
 
     loop {
         std::thread::sleep(POLL);
+        ticks += 1;
         // Re-resolve occasionally: the default route can move (wifi -> ethernet, VPN up/down).
         if let Some(current) = default_interface() {
-            interface = current;
+            if current != interface {
+                interface = current;
+                details = query_details(&interface);
+            }
+        }
+        // SSID/signal/IP change rarely; spawning nmcli/ip every second would be wasteful.
+        if ticks % 5 == 0 {
+            details = query_details(&interface);
         }
         let (rx, tx) = read_counters(&interface);
         let now = Instant::now();
@@ -107,10 +201,25 @@ fn poll_loop() {
         let rx_per_sec = ((rx.saturating_sub(last_rx)) as f64 / elapsed) as u64;
         let tx_per_sec = ((tx.saturating_sub(last_tx)) as f64 / elapsed) as u64;
 
-        publish_network(NetworkState {
+        let state = NetworkState {
             rx_bytes_per_sec: rx_per_sec,
             tx_bytes_per_sec: tx_per_sec,
-        });
+            total_rx_bytes: rx,
+            total_tx_bytes: tx,
+            interface: interface.clone(),
+            connection_type: details.connection_type.clone(),
+            ssid: details.ssid.clone(),
+            signal_strength: details.signal,
+            ip_address: details.ip.clone(),
+        };
+        if !logged {
+            logged = true;
+            eprintln!(
+                "[rust/network] {} ({}) ssid=\"{}\" signal={} ip={}",
+                state.interface, state.connection_type, state.ssid, state.signal_strength, state.ip_address
+            );
+        }
+        publish_network(state);
 
         last_rx = rx;
         last_tx = tx;

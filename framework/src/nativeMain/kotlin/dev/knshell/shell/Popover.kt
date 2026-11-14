@@ -159,7 +159,7 @@ internal class GtkHoverPopoverNode(
             Unit
         }
         g_signal_connect_data(
-            instance = target.reinterpret(),
+            instance = motion.reinterpret(),
             detailed_signal = "enter",
             c_handler = enter.reinterpret(),
             data = ref.asCPointer(),
@@ -167,7 +167,7 @@ internal class GtkHoverPopoverNode(
             connect_flags = 0u,
         )
         g_signal_connect_data(
-            instance = target.reinterpret(),
+            instance = motion.reinterpret(),
             detailed_signal = "leave",
             c_handler = leave.reinterpret(),
             data = ref.asCPointer(),

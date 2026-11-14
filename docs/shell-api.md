@@ -98,7 +98,7 @@ their UniFFI listener objects stay alive for the process lifetime.
 | `Services.spectrum` | `state` | `List<Int>` (16 × 0..100) | CAVA raw stream |
 | `Services.battery` | `state` | `BatteryState` | `/sys/class/power_supply` poll (2 s) |
 | `Services.hyprland` | `activeWindow`, `currentSubmap` | `ActiveWindow?`, `String` | Hyprland event socket + safety refresh |
-| `Services.network` | `state` | `NetworkState` (`rx/tx bytes per second`) | `/proc/net/dev`, default-route interface, 1 s |
+| `Services.network` | `state` | `NetworkState` (rx/tx rates, totals, interface, `connection_type`, `ssid`, `signal_strength`, `ip_address`) | `/proc/net/dev` on the default-route interface (1 s) + `ip`/`nmcli` details (5 s) |
 
 Workspaces are event-driven: the service listens on
 `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock` and re-reads

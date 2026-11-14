@@ -38,6 +38,20 @@ pub struct WindowInfo {
 pub struct NetworkState {
     pub rx_bytes_per_sec: u64,
     pub tx_bytes_per_sec: u64,
+    /// Cumulative bytes received on the default-route interface since boot.
+    pub total_rx_bytes: u64,
+    /// Cumulative bytes sent on the default-route interface since boot.
+    pub total_tx_bytes: u64,
+    /// Interface the counters belong to (e.g. `wlo1`).
+    pub interface: String,
+    /// `wifi`, `ethernet` or `disconnected`.
+    pub connection_type: String,
+    /// SSID when on wifi, empty otherwise.
+    pub ssid: String,
+    /// Signal strength in percent (0 when not on wifi).
+    pub signal_strength: i32,
+    /// IPv4 address of the interface, empty when unknown.
+    pub ip_address: String,
 }
 
 /// Battery state from `/sys/class/power_supply`.

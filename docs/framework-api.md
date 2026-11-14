@@ -58,7 +58,7 @@ is an implementation detail and may change.
 | `spectrum` | `List<Int>` (16 × 0..100) | — |
 | `battery` | `BatteryState` | — |
 | `hyprland` | `activeWindow: ActiveWindow?`, `currentSubmap: String` | — |
-| `network` | `NetworkState` (rx/tx bytes per second) | — |
+| `network` | `NetworkState` (rx/tx rates, cumulative totals, interface, type, SSID, signal, IP) | — |
 
 `ShellServices` is a deprecated compatibility shim over `Services`.
 
