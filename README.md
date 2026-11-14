@@ -364,7 +364,16 @@ committed.
 │       ├── shell/                # Shell.run, ShellScope, ShellRuntime, popovers
 │       ├── ui/primitives/        # Space/HSpace/VSpace, Spacer, Icon, Text
 │       └── services/             # Services: windows/media/audio/workspaces/system/spectrum
-├── shell-app/                    # main() + example bar (TestBar, PlayerChip, …)
+├── shell-app/                    # main() + example bar
+│   └── src/nativeMain/kotlin/dev/knshell/
+│       ├── KnShell.kt           # modes: panel (layer-shell) / windowed
+│       └── ui/
+│           ├── Bar.kt           # KnBar: CenterBox with three islands
+│           ├── islands/         # LeftIsland, CenterIsland, RightIsland
+│           ├── modules/         # Workspaces, Clock, Notification
+│           ├── PlayerChip.kt    # media chip (silver sheen + cava)
+│           ├── CavaEqualizer.kt # bucketed spectrum bars
+│           └── Palette.kt       # Grayscale palette
 ├── scripts/dev.sh, scripts/run.sh, scripts/gobley-rustup.sh
 └── docs/shell-api.md, docs/bar-api.md
 ```

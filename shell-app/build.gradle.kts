@@ -20,6 +20,7 @@ kotlin {
         nativeMain.dependencies {
             implementation(project(":framework"))
             implementation(project(":rust-core"))
+            implementation(libs.kotlinx.datetime)
         }
     }
 }

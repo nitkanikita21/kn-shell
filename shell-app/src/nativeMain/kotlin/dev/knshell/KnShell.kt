@@ -17,7 +17,7 @@ import dev.knshell.shell.ExclusiveZone
 import dev.knshell.shell.Margins
 import dev.knshell.shell.Shell
 import dev.knshell.shell.WindowSpec
-import dev.knshell.ui.TestBar
+import dev.knshell.ui.KnBar
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import platform.posix.getenv
@@ -46,7 +46,7 @@ fun startKnShell() {
                         background = Color.hex(0x1E1E2E),
                     ),
                 ) {
-                    TestBar()
+                    KnBar()
                 }
             }
         }
@@ -67,7 +67,7 @@ fun startKnShell() {
                         exclusiveZone = if (overlayDev) ExclusiveZone.None else ExclusiveZone.Auto,
                         namespace = "my-bar",
                     ),
-                ) { TestBar() }
+                ) { KnBar() }
             }
         }
     }
