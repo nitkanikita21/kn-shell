@@ -9,6 +9,7 @@ import dev.knshell.compose.Canvas
 import dev.knshell.compose.Color
 import dev.knshell.compose.Modifier
 import dev.knshell.services.Services
+import dev.knshell.services.bucketLevels
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kn.gtk.cairo_fill
@@ -95,29 +96,4 @@ private fun drawEqualizer(
         cairo_rectangle(cr, index * (barWidth + gap), height - barHeight, barWidth, barHeight)
         cairo_fill(cr)
     }
-}
-
-/**
- * Averages [values] (e.g. 16 CAVA bins, 0..100) into [count] bars.
- * Each bucket covers `[i*source/count, (i+1)*source/count)`, so every bar count samples the
- * full spectrum and larger counts only add detail.
- */
-private fun bucketLevels(values: List<Int>, count: Int): DoubleArray {
-    val result = DoubleArray(count)
-    val source = values.size
-    if (source == 0) return result
-    for (index in 0 until count) {
-        val start = index * source / count
-        val end = (((index + 1) * source / count).coerceAtLeast(start + 1)).coerceAtMost(source)
-        var sum = 0.0
-        var samples = 0
-        var i = start
-        while (i < end) {
-            sum += values[i].coerceIn(0, 100)
-            samples++
-            i++
-        }
-        result[index] = if (samples == 0) 0.0 else sum / samples / 100.0
-    }
-    return result
 }

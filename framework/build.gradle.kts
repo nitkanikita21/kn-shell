@@ -16,6 +16,10 @@ val epoxyCflags: List<String> = providers.exec {
 
 kotlin {
     linuxX64 {
+        // The host GTK 4.22 needs newer glibc symbols than Kotlin/Native's bundled sysroot;
+        // test binaries resolve them at runtime like the app does (see shell-app).
+        binaries.all { linkerOpts("--allow-shlib-undefined") }
+
         compilations.getByName("main").cinterops.create("gtk4") {
             defFile(project.file("src/nativeInterop/cinterop/gtk4.def"))
             compilerOpts(gtkCflags)
@@ -35,6 +39,10 @@ kotlin {
 
         nativeMain.dependencies {
             implementation(project(":rust-core"))
+        }
+
+        nativeTest.dependencies {
+            implementation(kotlin("test"))
         }
     }
 }
