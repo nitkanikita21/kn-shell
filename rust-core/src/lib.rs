@@ -13,6 +13,8 @@
 
 mod animated_layout;
 mod audio;
+mod battery;
+mod hyprland;
 mod media;
 mod spectrum;
 mod system;
@@ -28,6 +30,22 @@ uniffi::setup_scaffolding!();
 pub struct WindowInfo {
     pub title: String,
     pub app_id: String,
+}
+
+/// Battery state from `/sys/class/power_supply`.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct BatteryState {
+    pub present: bool,
+    pub percent: i32,
+    pub charging: bool,
+    pub status: String,
+}
+
+/// Currently focused Hyprland window.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ActiveWindow {
+    pub class: String,
+    pub title: String,
 }
 
 /// Current state of the active MPRIS media player.
@@ -305,4 +323,66 @@ pub(crate) use broadcast_spectrum as publish_spectrum;
 pub fn subscribe_spectrum(listener: Box<dyn SpectrumListener>) {
     spectrum_listeners().lock().unwrap().push(Arc::from(listener));
     spectrum::ensure_started();
+}
+
+
+/// Battery updates (20..=100 %), event-free polling in Rust.
+#[uniffi::export(callback_interface)]
+pub trait BatteryListener: Send + Sync {
+    fn on_battery(&self, state: BatteryState);
+}
+
+pub(crate) fn battery_listeners() -> &'static Mutex<Vec<Arc<dyn BatteryListener>>> {
+    static REGISTRY: OnceLock<Mutex<Vec<Arc<dyn BatteryListener>>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn broadcast_battery(state: BatteryState) {
+    let listeners: Vec<Arc<dyn BatteryListener>> = battery_listeners().lock().unwrap().clone();
+    for listener in listeners {
+        listener.on_battery(state.clone());
+    }
+}
+
+pub(crate) use broadcast_battery as publish_battery;
+
+#[uniffi::export]
+pub fn subscribe_battery(listener: Box<dyn BatteryListener>) {
+    battery_listeners().lock().unwrap().push(Arc::from(listener));
+    battery::ensure_started();
+}
+
+/// Hyprland focus events: active window and submap.
+#[uniffi::export(callback_interface)]
+pub trait HyprlandListener: Send + Sync {
+    fn on_active_window(&self, window: ActiveWindow);
+    fn on_submap(&self, name: String);
+}
+
+pub(crate) fn hyprland_listeners() -> &'static Mutex<Vec<Arc<dyn HyprlandListener>>> {
+    static REGISTRY: OnceLock<Mutex<Vec<Arc<dyn HyprlandListener>>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn broadcast_active_window(window: ActiveWindow) {
+    let listeners: Vec<Arc<dyn HyprlandListener>> = hyprland_listeners().lock().unwrap().clone();
+    for listener in listeners {
+        listener.on_active_window(window.clone());
+    }
+}
+
+fn broadcast_submap(name: String) {
+    let listeners: Vec<Arc<dyn HyprlandListener>> = hyprland_listeners().lock().unwrap().clone();
+    for listener in listeners {
+        listener.on_submap(name.clone());
+    }
+}
+
+pub(crate) use broadcast_active_window as publish_active_window;
+pub(crate) use broadcast_submap as publish_submap;
+
+#[uniffi::export]
+pub fn subscribe_hyprland(listener: Box<dyn HyprlandListener>) {
+    hyprland_listeners().lock().unwrap().push(Arc::from(listener));
+    hyprland::ensure_started();
 }

@@ -24,6 +24,8 @@ object Services {
     val workspaces: WorkspacesService by lazy { WorkspacesService().also { it.start() } }
     val system: SystemService by lazy { SystemService().also { it.start() } }
     val spectrum: SpectrumService by lazy { SpectrumService().also { it.start() } }
+    val battery: BatteryService by lazy { BatteryService().also { it.start() } }
+    val hyprland: HyprlandService by lazy { HyprlandService().also { it.start() } }
 
     /** Starts every service; individual access already starts the ones you touch. */
     fun startAll() {
@@ -33,5 +35,7 @@ object Services {
         workspaces
         system
         spectrum
+        battery
+        hyprland
     }
 }
