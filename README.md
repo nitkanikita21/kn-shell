@@ -370,7 +370,7 @@ committed.
 │       └── ui/
 │           ├── Bar.kt           # KnBar: CenterBox with three islands
 │           ├── islands/         # LeftIsland, CenterIsland, RightIsland
-│           ├── modules/         # Workspaces, Clock, Notification
+│           ├── modules/         # Workspaces, Clock, Notification, Network
 │           ├── PlayerChip.kt    # media chip (silver sheen + cava)
 │           ├── CavaEqualizer.kt # bucketed spectrum bars
 │           └── Palette.kt       # Grayscale palette

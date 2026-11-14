@@ -15,6 +15,7 @@ mod animated_layout;
 mod audio;
 mod battery;
 mod hyprland;
+mod network;
 mod media;
 mod spectrum;
 mod system;
@@ -30,6 +31,13 @@ uniffi::setup_scaffolding!();
 pub struct WindowInfo {
     pub title: String,
     pub app_id: String,
+}
+
+/// Current network throughput across all non-loopback interfaces.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct NetworkState {
+    pub rx_bytes_per_sec: u64,
+    pub tx_bytes_per_sec: u64,
 }
 
 /// Battery state from `/sys/class/power_supply`.
@@ -385,4 +393,31 @@ pub(crate) use broadcast_submap as publish_submap;
 pub fn subscribe_hyprland(listener: Box<dyn HyprlandListener>) {
     hyprland_listeners().lock().unwrap().push(Arc::from(listener));
     hyprland::ensure_started();
+}
+
+
+/// Network throughput updates (once per second).
+#[uniffi::export(callback_interface)]
+pub trait NetworkListener: Send + Sync {
+    fn on_network(&self, state: NetworkState);
+}
+
+pub(crate) fn network_listeners() -> &'static Mutex<Vec<Arc<dyn NetworkListener>>> {
+    static REGISTRY: OnceLock<Mutex<Vec<Arc<dyn NetworkListener>>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn broadcast_network(state: NetworkState) {
+    let listeners: Vec<Arc<dyn NetworkListener>> = network_listeners().lock().unwrap().clone();
+    for listener in listeners {
+        listener.on_network(state.clone());
+    }
+}
+
+pub(crate) use broadcast_network as publish_network;
+
+#[uniffi::export]
+pub fn subscribe_network(listener: Box<dyn NetworkListener>) {
+    network_listeners().lock().unwrap().push(Arc::from(listener));
+    network::ensure_started();
 }

@@ -36,3 +36,19 @@ fun Float.floorInt(): Int = kotlin.math.floor(this).toInt()
 
 /** Smallest integer not less than the value: `42.1f.ceilInt() == 43`. */
 fun Float.ceilInt(): Int = kotlin.math.ceil(this).toInt()
+
+/**
+ * Human-readable throughput: `formatBytesPerSec(1_500_000) == "1.4 MiB/s"`.
+ * Binary units (1024) are used deliberately — this is what network tools report.
+ */
+fun formatBytesPerSec(bytesPerSecond: Long): String {
+    if (bytesPerSecond < 0) return "0 B/s"
+    val units = listOf("B/s", "KiB/s", "MiB/s", "GiB/s", "TiB/s")
+    var value = bytesPerSecond.toDouble()
+    var index = 0
+    while (value >= 1024.0 && index < units.lastIndex) {
+        value /= 1024.0
+        index++
+    }
+    return if (index == 0) "${bytesPerSecond} ${units[0]}" else value.toFloat().format(1) + " " + units[index]
+}

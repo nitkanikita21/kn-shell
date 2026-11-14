@@ -2,18 +2,13 @@ package dev.knshell.ui.islands
 
 import androidx.compose.runtime.Composable
 import dev.knshell.compose.Row
-import dev.knshell.ui.MediaChip
 import dev.knshell.ui.island
+import dev.knshell.ui.modules.Network
 
-/**
- * Right island: media chip.
- *
- * TODO: this duplicates the left island; it is kept to preserve the current design while
- * the bar is being built. A volume/battery module pair would be a better fit here.
- */
+/** Right island: live network throughput. */
 @Composable
 fun RightIsland() {
     Row(16, island(bottomLeft = 16)) {
-        MediaChip()
+        Network()
     }
 }

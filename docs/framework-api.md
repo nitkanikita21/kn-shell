@@ -58,6 +58,7 @@ is an implementation detail and may change.
 | `spectrum` | `List<Int>` (16 × 0..100) | — |
 | `battery` | `BatteryState` | — |
 | `hyprland` | `activeWindow: ActiveWindow?`, `currentSubmap: String` | — |
+| `network` | `NetworkState` (rx/tx bytes per second) | — |
 
 `ShellServices` is a deprecated compatibility shim over `Services`.
 
@@ -69,7 +70,8 @@ is an implementation detail and may change.
 ### `dev.knshell.ui`
 
 `primitives`: `Space`, `HSpace`, `VSpace`, `Spacer`, `Icon`, `Text`; `Format`: `Float.format`,
-`percent`, `whole`, `floorInt`, `ceilInt`; `bucketLevels` for spectrum visualisers.
+`percent`, `whole`, `floorInt`, `ceilInt`, `formatBytesPerSec`; `bucketLevels` for spectrum
+visualisers.
 
 ## Visibility rules
 
