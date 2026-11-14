@@ -26,24 +26,21 @@ import dev.knshell.ui.formatBytesPerSec
 import dev.knshell.ui.primitives.Icon
 
 /**
- * Network module, waybar-style: an icon for the connection type, the SSID/interface, and
- * the current throughput. Click toggles throughput ⇄ cumulative I/O; hovering shows the
- * details (interface, signal, IP, totals) in a popover.
+ * Network module, waybar-style.
+ *
+ * Collapsed (in the bar): connection icon + combined In/Out throughput.
+ * Expanded (hover popover): interface, SSID/signal, IP and separate In / Out rates + totals.
+ * Clicking the speed toggles throughput ⇄ cumulative I/O.
  */
 @Composable
 fun Network() {
     val network by Services.network.state.collectAsState()
     var showTotals by remember { mutableStateOf(false) }
 
-    val down = if (showTotals) {
-        formatBytes(network.totalRxBytes.toLong())
+    val combined = if (showTotals) {
+        formatBytes(network.totalRxBytes.toLong() + network.totalTxBytes.toLong())
     } else {
-        formatBytesPerSec(network.rxBytesPerSec.toLong())
-    }
-    val up = if (showTotals) {
-        formatBytes(network.totalTxBytes.toLong())
-    } else {
-        formatBytesPerSec(network.txBytesPerSec.toLong())
+        formatBytesPerSec(network.rxBytesPerSec.toLong() + network.txBytesPerSec.toLong())
     }
 
     HoverPopover(
@@ -53,19 +50,11 @@ fun Network() {
         AnimatedWidth(spacing = 10) {
             Icon(networkIcon(network), size = 15)
             Label(
-                text = connectionLabel(network),
-                modifier = Modifier.textColor(Grayscale.Foreground),
-            )
-            Label(
-                text = "\u2193 $down",
+                text = "\u2195 $combined",
                 modifier = Modifier
                     .textColor(Grayscale.Accent)
                     .onClick { showTotals = !showTotals }
                     .pointerCursor(),
-            )
-            Label(
-                text = "\u2191 $up",
-                modifier = Modifier.textColor(Grayscale.Accent),
             )
         }
     }
@@ -77,13 +66,7 @@ private fun networkIcon(network: NetworkState): String = when (network.connectio
     else -> "\uF071"
 }
 
-private fun connectionLabel(network: NetworkState): String = when (network.connectionType) {
-    "wifi" -> network.ssid.ifBlank { network.`interface` }.ifBlank { "wifi" }
-    "ethernet" -> network.`interface`.ifBlank { "ethernet" }
-    else -> "offline"
-}
-
-/** Waybar's `tooltip-format` analogue: interface, signal, IP and cumulative traffic. */
+/** Waybar's `tooltip-format` analogue: details kept out of the bar itself. */
 @Composable
 private fun NetworkDetails(network: NetworkState) {
     Box(
@@ -109,8 +92,13 @@ private fun NetworkDetails(network: NetworkState) {
                 )
             }
             Label(
-                text = "down: ${formatBytes(network.totalRxBytes.toLong())}  " +
-                    "up: ${formatBytes(network.totalTxBytes.toLong())}",
+                text = "In:  " + formatBytesPerSec(network.rxBytesPerSec.toLong()) +
+                    "  (" + formatBytes(network.totalRxBytes.toLong()) + ")",
+                modifier = Modifier.textColor(Grayscale.Foreground),
+            )
+            Label(
+                text = "Out: " + formatBytesPerSec(network.txBytesPerSec.toLong()) +
+                    "  (" + formatBytes(network.totalTxBytes.toLong()) + ")",
                 modifier = Modifier.textColor(Grayscale.Foreground),
             )
         }
