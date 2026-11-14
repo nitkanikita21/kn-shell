@@ -16,6 +16,7 @@ mod audio;
 mod battery;
 mod hyprland;
 mod network;
+mod notifications;
 mod media;
 mod spectrum;
 mod system;
@@ -31,6 +32,18 @@ uniffi::setup_scaffolding!();
 pub struct WindowInfo {
     pub title: String,
     pub app_id: String,
+}
+
+/// One desktop notification observed on the session bus.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct NotificationInfo {
+    pub id: u64,
+    pub app: String,
+    pub summary: String,
+    pub body: String,
+    /// `1` normal, `2` critical (freedesktop hints).
+    pub urgency: u8,
+    pub timestamp_ms: u64,
 }
 
 /// Current network throughput across all non-loopback interfaces.
@@ -434,4 +447,31 @@ pub(crate) use broadcast_network as publish_network;
 pub fn subscribe_network(listener: Box<dyn NetworkListener>) {
     network_listeners().lock().unwrap().push(Arc::from(listener));
     network::ensure_started();
+}
+
+
+/// Desktop notifications observed on the session bus.
+#[uniffi::export(callback_interface)]
+pub trait NotificationListener: Send + Sync {
+    fn on_notification(&self, notification: NotificationInfo);
+}
+
+pub(crate) fn notification_listeners() -> &'static Mutex<Vec<Arc<dyn NotificationListener>>> {
+    static REGISTRY: OnceLock<Mutex<Vec<Arc<dyn NotificationListener>>>> = OnceLock::new();
+    REGISTRY.get_or_init(|| Mutex::new(Vec::new()))
+}
+
+fn broadcast_notification(notification: NotificationInfo) {
+    let listeners: Vec<Arc<dyn NotificationListener>> = notification_listeners().lock().unwrap().clone();
+    for listener in listeners {
+        listener.on_notification(notification.clone());
+    }
+}
+
+pub(crate) use broadcast_notification as publish_notification;
+
+#[uniffi::export]
+pub fn subscribe_notifications(listener: Box<dyn NotificationListener>) {
+    notification_listeners().lock().unwrap().push(Arc::from(listener));
+    notifications::ensure_started();
 }

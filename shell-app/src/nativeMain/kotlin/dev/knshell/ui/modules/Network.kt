@@ -48,8 +48,6 @@ fun Network() {
         content = { NetworkDetails(network) },
     ) {
         AnimatedWidth(spacing = 10) {
-            Icon(networkIcon(network), size = 15)
-
             if (expanded) {
                 Label(
                     text = "\u2193 $down",
