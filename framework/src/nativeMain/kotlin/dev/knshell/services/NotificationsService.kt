@@ -2,6 +2,9 @@ package dev.knshell.services
 
 import dev.knshell.core.NotificationInfo
 import dev.knshell.core.NotificationListener
+import dev.knshell.core.notificationsClose
+import dev.knshell.core.notificationsInvokeAction
+import dev.knshell.core.notificationsIsServer
 import dev.knshell.core.subscribeNotifications
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -41,19 +44,36 @@ class NotificationsService internal constructor() : ShellService {
                 }
                 mutable.value = (listOf(notification) + withoutReplaced).take(MAX_HISTORY)
             }
+
+            override fun onNotificationClosed(id: ULong, reason: UInt) {
+                mutable.value = mutable.value.filterNot { it.id == id }
+            }
         }
         retained += listener
         subscribeNotifications(listener)
     }
+
+    /** True when the shell owns `org.freedesktop.Notifications` (control available). */
+    val isServer: Boolean get() = notificationsIsServer()
 
     /** Toggles do-not-disturb. */
     fun toggleDoNotDisturb() {
         dnd.value = !dnd.value
     }
 
-    /** Removes one notification from the local history. */
+    /**
+     * Closes one notification: through the server (emits `NotificationClosed` and notifies
+     * clients) when we own the bus name, otherwise just drops it from the local history.
+     */
     fun dismiss(id: ULong) {
-        mutable.value = mutable.value.filterNot { it.id == id }
+        if (!notificationsClose(id)) {
+            mutable.value = mutable.value.filterNot { it.id == id }
+        }
+    }
+
+    /** Invokes an action on a notification (server mode only). */
+    fun invokeAction(id: ULong, action: String) {
+        notificationsInvokeAction(id, action)
     }
 
     /** Clears the local history. */

@@ -454,6 +454,7 @@ pub fn subscribe_network(listener: Box<dyn NetworkListener>) {
 #[uniffi::export(callback_interface)]
 pub trait NotificationListener: Send + Sync {
     fn on_notification(&self, notification: NotificationInfo);
+    fn on_notification_closed(&self, id: u64, reason: u32);
 }
 
 pub(crate) fn notification_listeners() -> &'static Mutex<Vec<Arc<dyn NotificationListener>>> {
@@ -469,6 +470,15 @@ fn broadcast_notification(notification: NotificationInfo) {
 }
 
 pub(crate) use broadcast_notification as publish_notification;
+
+fn broadcast_notification_closed(id: u64, reason: u32) {
+    let listeners: Vec<Arc<dyn NotificationListener>> = notification_listeners().lock().unwrap().clone();
+    for listener in listeners {
+        listener.on_notification_closed(id, reason);
+    }
+}
+
+pub(crate) use broadcast_notification_closed as publish_notification_closed;
 
 #[uniffi::export]
 pub fn subscribe_notifications(listener: Box<dyn NotificationListener>) {

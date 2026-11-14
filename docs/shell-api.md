@@ -99,7 +99,7 @@ their UniFFI listener objects stay alive for the process lifetime.
 | `Services.battery` | `state` | `BatteryState` | `/sys/class/power_supply` poll (2 s) |
 | `Services.hyprland` | `activeWindow`, `currentSubmap` | `ActiveWindow?`, `String` | Hyprland event socket + safety refresh |
 | `Services.network` | `state` | `NetworkState` (rx/tx rates, totals, interface, `connection_type`, `ssid`, `signal_strength`, `ip_address`) | `/proc/net/dev` on the default-route interface (1 s) + `ip`/`nmcli` details (5 s) |
-| `Services.notifications` | `state`, `doNotDisturb` | `List<NotificationInfo>`, `Boolean` | `dbus-monitor` on `org.freedesktop.Notifications` `Notify` calls |
+| `Services.notifications` | `state`, `doNotDisturb` | `List<NotificationInfo>`, `Boolean` | server mode: own `org.freedesktop.Notifications`; observer mode: `dbus-monitor` |
 
 Workspaces are event-driven: the service listens on
 `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock` and re-reads
@@ -128,6 +128,15 @@ the service's listener writes `flow.value` → `collect` in `LaunchedEffect` run
 `Snapshot.sendApplyNotifications()`, the Recomposer recomposes and the applier calls `gtk_*`
 on the GTK thread. The same tick advances animations (`withFrameNanos`): time-based `durationMs` + `Easing`, spring, or a shared `Animate { t -> … }` progress; callbacks
 never touch GTK, so UI code needs no locking.
+
+**Notifications have two modes.** If `org.freedesktop.Notifications` is free (the user's
+daemon — swaync/mako/dunst — is stopped), the shell **is** the notification server: it serves
+the freedesktop spec (`Notify`, `CloseNotification`, `GetCapabilities`,
+`GetServerInformation`, plus `KnInvokeAction`) and emits `NotificationClosed` /
+`ActionInvoked`. Control API: `Services.notifications.dismiss(id)`,
+`invokeAction(id, action)`, `isServer`, `clear()`. If another daemon owns the name (common:
+swaync holds it and refuses replacement), the service degrades to a passive observer that
+only parses `Notify` calls for history. Expiry timeouts are not implemented yet.
 
 `Services.startAll()` subscribes everything; `Shell.run` calls it, and lazy access already
 starts the services a module touches. The old `ShellServices` facade still exists as a

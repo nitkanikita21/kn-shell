@@ -59,7 +59,7 @@ is an implementation detail and may change.
 | `battery` | `BatteryState` | — |
 | `hyprland` | `activeWindow: ActiveWindow?`, `currentSubmap: String` | — |
 | `network` | `NetworkState` (rx/tx rates, cumulative totals, interface, type, SSID, signal, IP) | — |
-| `notifications` | `state: List<NotificationInfo>`, `doNotDisturb: Boolean` | `toggleDoNotDisturb()`, `dismiss(id)`, `clear()` |
+| `notifications` | `state: List<NotificationInfo>`, `doNotDisturb: Boolean`, `isServer: Boolean` | `toggleDoNotDisturb()`, `dismiss(id)`, `invokeAction(id, action)`, `clear()` |
 
 `ShellServices` is a deprecated compatibility shim over `Services`.
 
