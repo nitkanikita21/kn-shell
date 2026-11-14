@@ -22,6 +22,10 @@ import kn.gtk.gtk_picture_new
 import kn.gtk.gtk_picture_set_can_shrink
 import kn.gtk.gtk_picture_set_content_fit
 import kn.gtk.gtk_picture_set_paintable
+import kn.gtk.gtk_widget_set_halign
+import kn.gtk.gtk_widget_set_size_request
+import kn.gtk.gtk_widget_set_valign
+import kn.gtk.GTK_ALIGN_START
 
 /**
  * Image from a file path, scaled to [width]×[height] pixels at load time
@@ -46,8 +50,8 @@ fun Image(
         factory = { GtkPictureNode(path, width, height).plain() },
         update = {
             set(path) { value -> load(value, width, height) }
-            set(width) { value -> load(path, value, height) }
-            set(height) { value -> load(path, width, value) }
+            set(width) { value -> resize(value, height) }
+            set(height) { value -> resize(width, value) }
             set(modifier) { value -> applyModifier(value) }
         },
     )
@@ -62,14 +66,40 @@ internal class GtkPictureNode(path: String, width: Int, height: Int) :
     @Suppress("unused")
     private var texture: CPointer<GdkTexture>? = null
 
+    private var requestedWidth = width
+    private var requestedHeight = height
+
     init {
         val picture = widget.reinterpret<GtkPicture>()
         gtk_picture_set_content_fit(picture, GtkContentFit.GTK_CONTENT_FIT_CONTAIN)
         gtk_picture_set_can_shrink(picture, 1)
+        pinSize()
         load(path, width, height)
     }
 
+    /**
+     * A widget's size request is only a minimum, and `GtkPicture` fills its cross axis by
+     * default, so a 28x28 icon would still be drawn at the row height. START alignment plus
+     * the request makes the allocation exactly the requested size.
+     */
+    private fun pinSize() {
+        gtk_widget_set_size_request(widget, requestedWidth, requestedHeight)
+        gtk_widget_set_halign(widget, GTK_ALIGN_START)
+        gtk_widget_set_valign(widget, GTK_ALIGN_START)
+    }
+
+    fun resize(width: Int, height: Int) {
+        if (width == requestedWidth && height == requestedHeight) return
+        requestedWidth = width
+        requestedHeight = height
+        pinSize()
+        load(path = lastPath, width = width, height = height)
+    }
+
+    private var lastPath = path
+
     fun load(path: String, width: Int, height: Int) {
+        lastPath = path
         if (path.isBlank()) return
         val loaded = gdk_pixbuf_new_from_file_at_scale(
             path,

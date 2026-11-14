@@ -172,7 +172,7 @@ private fun NotificationCard(notification: NotificationInfo) {
 private fun NotificationIcon(notification: NotificationInfo) {
     val icon = notification.icon
     if (icon.isNotBlank() && icon.startsWith("/")) {
-        Image(icon, Modifier.radius(6), width = 28, height = 28)
+        Image(icon, Modifier.radius(6).background(Color.hex(0xff0000)), width = 28, height = 28)
     } else {
         Icon(ICON_HAS_NEW, size = 18, color = Grayscale.Accent)
     }
