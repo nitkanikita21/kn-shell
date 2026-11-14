@@ -5,6 +5,7 @@ package dev.knshell.shell
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.Composition
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import dev.knshell.compose.GtkApplier
 import dev.knshell.compose.GtkBoxNode
@@ -18,6 +19,8 @@ import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.asStableRef
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
+import kotlinx.cinterop.toKString
+import platform.posix.getenv
 import kn.gtk.GtkBox
 import kn.gtk.GtkOrientation
 import kn.gtk.GtkPopover
@@ -32,12 +35,54 @@ import kn.gtk.gtk_event_controller_motion_new
 import kn.gtk.gtk_popover_new
 import kn.gtk.gtk_popover_popdown
 import kn.gtk.gtk_popover_popup
+import kn.gtk.gtk_css_provider_load_from_string
+import kn.gtk.gtk_css_provider_new
 import kn.gtk.gtk_popover_set_autohide
 import kn.gtk.gtk_popover_set_child
 import kn.gtk.gtk_popover_set_has_arrow
+import kn.gtk.gtk_style_context_add_provider_for_display
+import kn.gtk.gtk_widget_get_display
+import kn.gtk.gtk_widget_queue_resize
 import kn.gtk.gtk_widget_add_controller
 import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_set_parent
+
+/** CSS class added to the popover widget so the reset rules below can target it. */
+private const val POPOVER_CLASS = "kn-popover"
+
+/**
+ * The popover decoration lives on GTK's `contents` node, not on the widget itself, so the
+ * plain reset (which targets the widget) leaves the Adwaita frame, shadow and padding
+ * behind. Transparent background + no border/shadow on all popover nodes makes the popover
+ * a bare surface: the content composable owns the whole look.
+ */
+private val POPOVER_CSS = """
+popover.$POPOVER_CLASS {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+}
+popover.$POPOVER_CLASS > contents,
+popover.$POPOVER_CLASS contents {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+    border-radius: 0;
+}
+popover.$POPOVER_CLASS > arrow,
+popover.$POPOVER_CLASS arrow {
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    margin: 0;
+}
+""".trimIndent()
 
 /**
  * Hover popover: a `GtkPopover` anchored to the trigger, shown on hover with a short delay
@@ -93,6 +138,7 @@ internal class GtkHoverPopoverNode(
         gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!
 
     private var composition: Composition? = null
+    private var popoverCssInstalled = false
     private var shown = false
     private var showSource = 0u
     private var hideSource = 0u
@@ -100,6 +146,16 @@ internal class GtkHoverPopoverNode(
 
     @Suppress("unused")
     private val selfRef = StableRef.create(this)
+
+    private val showCallback = staticCFunction { data: COpaquePointer? ->
+        data?.asStableRef<GtkHoverPopoverNode>()?.get()?.showNow()
+        0 // G_SOURCE_REMOVE
+    }
+
+    private val hideCallback = staticCFunction { data: COpaquePointer? ->
+        data?.asStableRef<GtkHoverPopoverNode>()?.get()?.hideNow()
+        0 // G_SOURCE_REMOVE
+    }
 
     init {
         gtk_widget_add_css_class(widget, PLAIN_CLASS)
@@ -109,9 +165,14 @@ internal class GtkHoverPopoverNode(
         if (popupWidget != null) {
             val typed = popupWidget.reinterpret<GtkPopover>()
             gtk_widget_add_css_class(popupWidget, PLAIN_CLASS)
+            gtk_widget_add_css_class(popupWidget, POPOVER_CLASS)
+            installPopoverCss(popupWidget)
             gtk_popover_set_child(typed, contentBox)
-            gtk_popover_set_has_arrow(typed, 1)
-            gtk_popover_set_autohide(typed, 1)
+            // No arrow (waybar-like tooltip) and no autohide: in a layer-shell bar autohide
+            // can close the popover right after popup() and the hover logic reopens it,
+            // which looks like blinking. Closing is driven by the hover timers instead.
+            gtk_popover_set_has_arrow(typed, 0)
+            gtk_popover_set_autohide(typed, 0)
             // Re-parenting is the GTK4 way to anchor a popover to a widget.
             gtk_widget_set_parent(popupWidget, widget)
 
@@ -130,7 +191,13 @@ internal class GtkHoverPopoverNode(
         }
 
         attachHover(widget)
-        attachHover(contentBox)
+        if (popover != null) attachHover(popover)
+
+        // Development aid: KN_POPOVER_DEBUG=1 pops every popover once, so layout and
+        // styling can be checked without moving the pointer.
+        if (getenv("KN_POPOVER_DEBUG")?.toKString() == "1") {
+            showSource = g_timeout_add(2000u, showCallback, selfRef.asCPointer())
+        }
     }
 
     override fun attachChild(child: CPointer<GtkWidget>) {
@@ -144,7 +211,29 @@ internal class GtkHoverPopoverNode(
     /** Called by the composable whenever a new content lambda is available. */
     private fun ensureComposition() {
         if (composition != null) return
-        composition = ShellRuntime.instance().mountCompose(contentBox) { contentState.value() }
+        composition = ShellRuntime.instance().mountCompose(contentBox) {
+            contentState.value()
+            // The popover surface caches its size from the first presentation; without this
+            // a content update (wifi details arriving, changing rates) is clipped inside the
+            // old allocation. Queue a resize on every content recomposition.
+            SideEffect {
+                popover?.let { gtk_widget_queue_resize(it) }
+            }
+        }
+    }
+
+    /**
+     * The popover frame/shadow is drawn on the `contents` CSS node, and a provider attached
+     * to the popover widget's style context does not reach it reliably. Install the reset on
+     * the display instead (once), like the app-wide plain reset.
+     */
+    private fun installPopoverCss(popoverWidget: CPointer<GtkWidget>) {
+        if (popoverCssInstalled) return
+        val display = gtk_widget_get_display(popoverWidget) ?: return
+        val provider = gtk_css_provider_new() ?: return
+        gtk_css_provider_load_from_string(provider, POPOVER_CSS)
+        gtk_style_context_add_provider_for_display(display, provider.reinterpret(), 700u)
+        popoverCssInstalled = true
     }
 
     private fun attachHover(target: CPointer<GtkWidget>) {
@@ -181,12 +270,15 @@ internal class GtkHoverPopoverNode(
         cancelledShow()
         cancelledHide()
         closedByUser = false
+        if (shown) return
         showSource = g_timeout_add(delayMs.toUInt().coerceAtLeast(1u), showCallback, selfRef.asCPointer())
     }
 
     private fun onHoverLeave() {
         cancelledShow()
-        scheduleHide()
+        // Only hide when something is actually visible; leaving the trigger before the
+        // delay elapsed must not schedule a hide that was never needed.
+        if (shown) scheduleHide()
     }
 
     private fun scheduleHide() {
@@ -223,6 +315,10 @@ internal class GtkHoverPopoverNode(
         if (!shown) return
         gtk_popover_popdown(popup.reinterpret<GtkPopover>())
         shown = false
+        // Drop the content composition: the popover surface caches the size it negotiated
+        // on the first presentation, so a later show with fresh data must mount anew.
+        composition?.dispose()
+        composition = null
     }
 
     private fun onClosedByUser() {
@@ -230,13 +326,4 @@ internal class GtkHoverPopoverNode(
         cancelledShow()
     }
 
-    private val showCallback = staticCFunction { data: COpaquePointer? ->
-        data?.asStableRef<GtkHoverPopoverNode>()?.get()?.showNow()
-        0 // G_SOURCE_REMOVE
-    }
-
-    private val hideCallback = staticCFunction { data: COpaquePointer? ->
-        data?.asStableRef<GtkHoverPopoverNode>()?.get()?.hideNow()
-        0 // G_SOURCE_REMOVE
-    }
 }

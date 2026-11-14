@@ -248,6 +248,10 @@ HoverPopover(
 }
 ```
 
+The popover surface is fully reset (transparent `popover`/`contents`/`arrow`, no border,
+shadow or padding, no arrow), so only your content draws. Set `KN_POPOVER_DEBUG=1` to pop
+every popover once at startup — handy for checking layout without a mouse.
+
 How it works: the popover body hosts a **separate Compose composition** (mounted into the
 popover through the shared `Recomposer`), so it can read `Services` like any window.
 The popover surface is plain (reset class), so give your content root a background,

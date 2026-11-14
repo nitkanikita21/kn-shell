@@ -28,7 +28,6 @@ class NetworkService internal constructor() : ShellService {
 
     private val retained = mutableListOf<Any>()
     private var started = false
-    private var loggedTraffic = false
 
     override fun start() {
         if (started) return
@@ -36,13 +35,6 @@ class NetworkService internal constructor() : ShellService {
         val listener = object : NetworkListener {
             override fun onNetwork(state: NetworkState) {
                 mutable.value = state
-                if (!loggedTraffic && (state.rxBytesPerSec > 0uL || state.txBytesPerSec > 0uL)) {
-                    loggedTraffic = true
-                    println(
-                        "[services/network] first traffic: " +
-                            "rx=${state.rxBytesPerSec} B/s tx=${state.txBytesPerSec} B/s",
-                    )
-                }
             }
         }
         retained += listener
