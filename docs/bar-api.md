@@ -288,6 +288,13 @@ fun NotificationCard(n: NotificationInfo) {
 (`gdk_pixbuf_new_from_file_at_scale` → `GdkTexture` → `GtkPicture`), so a huge logo does not
 stretch the row.
 
+A ready-made sender lives in `scripts/test-notification.sh`:
+
+```bash
+scripts/test-notification.sh "Title" "Body"                 # rich: icon + Open/Later + critical
+scripts/test-notification.sh --plain "Title" "Body"         # plain notify-send
+```
+
 ### Audio visualiser (CAVA)
 
 `CavaEqualizer` draws a real audio spectrum: the Rust `spectrum` service spawns a `cava`

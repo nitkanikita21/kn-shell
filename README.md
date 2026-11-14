@@ -375,5 +375,6 @@ committed.
 │           ├── CavaEqualizer.kt # bucketed spectrum bars
 │           └── Palette.kt       # Grayscale palette
 ├── scripts/dev.sh, scripts/run.sh, scripts/gobley-rustup.sh
+├── scripts/test-notification.sh   # sends a rich test notification (icon+actions)
 └── docs/shell-api.md, docs/bar-api.md
 ```
