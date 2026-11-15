@@ -8,8 +8,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import dev.knshell.AppShell
 import dev.knshell.compose.AnimatedBox
+import dev.knshell.compose.fontFamily
+import dev.knshell.compose.fontSize
 import dev.knshell.compose.Row
 import dev.knshell.compose.onClick
+import dev.knshell.ui.BAR_FONT
+import dev.knshell.ui.BAR_FONT_SIZE
 import dev.knshell.ui.island
 import dev.knshell.ui.modules.Clock
 import dev.knshell.ui.modules.Notification
@@ -60,6 +64,9 @@ fun CenterIsland() {
         mainSize = if (isExpanded) AppShell.EXPANDED_HEIGHT else AppShell.BAR_HEIGHT,
         crossSize = AppShell.ISLAND_WIDTH,
         modifier = island(bottomRight = 16, bottomLeft = 16)
+            // Same typography as the bar surface (this island has its own window/composition).
+            .fontFamily(BAR_FONT)
+            .fontSize(BAR_FONT_SIZE)
             .onClick { isExpanded = !isExpanded },
     ) {
         Row(16) {

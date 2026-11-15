@@ -89,7 +89,10 @@ fun startKnShell() {
                         layer = if (overlayDev) BarLayer.Overlay else BarLayer.Top,
                         anchors = setOf(BarAnchor.Top, BarAnchor.Left),
                         margins = Margins(
-                            top = 0,
+                            // Compositors place a top-anchored surface below the reserved
+                            // (exclusive) area, i.e. below our own bar; shift it back up so
+                            // the island sits in the same row as the side islands.
+                            top = -AppShell.BAR_HEIGHT,
                             left = ((displayWidth() - AppShell.ISLAND_WIDTH) / 2).coerceAtLeast(0),
                             right = 0,
                             bottom = 0,
