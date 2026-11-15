@@ -251,42 +251,6 @@ so the content root owns background/padding/radius. `KN_POPOVER_DEBUG=1` pops ea
 once at startup for layout checks (only one popover is visible at a time in normal use —
 with the debug flag several open together, which GTK flags as a benign critical).
 
-### Attached layer-shell panel (instead of a popover)
-
-A `Popover` is a GTK popup surface (grab/autohide). If you want the “island grows down” look
-instead, wrap any widget in `AttachedPanel`: on click it creates an independent layer-shell
-surface (namespace `kn-panel`, `exclusiveZone = None`, fixed size, no animation) and places
-it under the widget, computed from the widget's bounds.
-
-Expanding an island (one continuous shape, no popup):
-
-```kotlin
-var expanded by remember { mutableStateOf(false) }
-
-AttachedPanel(
-    width = 0,              // 0 = match the island width
-    height = 420,
-    topOffset = 0,          // flush under the bar
-    alignToParent = true,   // align to the wrapped content, not to the bar
-    onOpenChange = { expanded = it },
-    content = { NotificationCenter() },
-) {
-    Row(16, island(bottomRight = if (expanded) 0 else 16, bottomLeft = if (expanded) 0 else 16)) {
-        Notification(); Workspaces(); Clock()
-    }
-}
-```
-
-The panel surface is exactly as wide as the island and starts at the bar bottom; the island
-loses its bottom rounding while open, so the two read as one shape. Any island/module can
-use this — the anchor is whatever composable you wrap.
-
-`KN_PANEL_DEBUG=1` opens every attached panel once at startup, `displayWidth()` /
-`displayHeight()` return the output size for custom positioning. Limits: the panel keeps
-the size given at creation (content does not resize the surface), clicks outside do not
-close it (toggle the anchor again), and the whole surface area is interactive even where
-the content is transparent.
-
 ### Notification card
 
 Cards are just composition — `Services.notifications.state` gives id, app, summary, body,
