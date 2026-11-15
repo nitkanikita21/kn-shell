@@ -37,12 +37,24 @@ import platform.posix.getenv
  *
  * `KN_ISLAND_DEBUG=1` starts expanded (development aid).
  */
+/** Inner content width of the centre island (island width minus its horizontal padding). */
+private const val COUNTENT_WIDTH = 217
+
+@OptIn(ExperimentalForeignApi::class)
 @Composable
 fun CenterIsland() {
-    @OptIn(ExperimentalForeignApi::class)
     val debugOpen = remember { getenv("KN_ISLAND_DEBUG")?.toKString() == "1" }
     var isExpanded by remember { mutableStateOf(debugOpen) }
     var islandBounds by remember { mutableStateOf<Bounds?>(null) }
+
+    // Development aid: open once shortly after start so the animation can be captured.
+    LaunchedEffect(Unit) {
+        val auto = getenv("KN_ISLAND_AUTO")?.toKString() == "1"
+        if (auto) {
+            delay(2000)
+            isExpanded = true
+        }
+    }
 
     LaunchedEffect(isExpanded) {
         val bar = AppShell.bar ?: return@LaunchedEffect
@@ -85,9 +97,9 @@ fun CenterIsland() {
             Clock()
         }
 
-        NotificationCenter(
-            width = ((islandBounds?.width ?: 265) - 48).coerceAtLeast(120),
-        )
+        // Fixed content width: deriving it from the measured island bounds would create a
+        // feedback loop (wider content -> wider island -> wider content).
+        NotificationCenter(width = COUNTENT_WIDTH)
 
         BoundsObserver { islandBounds = it }
     }

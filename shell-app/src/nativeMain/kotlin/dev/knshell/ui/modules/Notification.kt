@@ -186,12 +186,15 @@ private fun NotificationCard(notification: NotificationInfo, width: Int = 340) {
                         .textColor(if (urgent) Grayscale.Accent else Grayscale.Foreground)
                         .fontWeight(600),
                     ellipsize = true,
+                    // Clamp the natural width so a long summary cannot widen the island.
+                    maxWidthChars = ((width - 130) / 7).coerceAtLeast(8),
                 )
                 if (notification.body.isNotBlank()) {
                     Label(
                         text = notification.body,
                         modifier = Modifier.textColor(Grayscale.Accent),
                         wrap = true,
+                        maxWidthChars = ((width - 130) / 7).coerceAtLeast(8),
                     )
                 }
                 if (notification.actions.isNotEmpty()) {
