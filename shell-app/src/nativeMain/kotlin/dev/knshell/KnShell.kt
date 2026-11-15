@@ -57,17 +57,18 @@ fun startKnShell() {
             val overlayDev = getenv("KN_SHELL_BAR_LAYER")?.toKString() == "overlay"
             println("[shell] panel mode (layer-shell " + (if (overlayDev) "overlay over waybar" else "top bar") + ")")
             Shell.run {
-                barWindow(
+                val bar = barWindow(
                     BarWindowSpec(
                         title = "My Bar",
                         height = 40,
                         layer = if (overlayDev) BarLayer.Overlay else BarLayer.Top,
                         anchors = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
                         margins = Margins(top = 0, left = 0, right = 0, bottom = 30),
-                        exclusiveZone = if (overlayDev) ExclusiveZone.None else ExclusiveZone.Auto,
+                        exclusiveZone = if (overlayDev) ExclusiveZone.None else ExclusiveZone.Fixed(40),
                         namespace = "my-bar",
                     ),
                 ) { KnBar() }
+                AppShell.bar = bar
             }
         }
     }

@@ -11,7 +11,17 @@ import kn.gtk.GTK_LAYER_SHELL_LAYER_BACKGROUND
 import kn.gtk.GTK_LAYER_SHELL_LAYER_BOTTOM
 import kn.gtk.GTK_LAYER_SHELL_LAYER_OVERLAY
 import kn.gtk.GTK_LAYER_SHELL_LAYER_TOP
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kotlinx.cinterop.reinterpret
+import kn.gtk.GdkMonitor
+import kn.gtk.GdkRectangle
 import kn.gtk.GtkWindow
+import kn.gtk.g_list_model_get_item
+import kn.gtk.gdk_display_get_default
+import kn.gtk.gdk_display_get_monitors
+import kn.gtk.gdk_monitor_get_geometry
 
 /** Edge of the output a bar window can be anchored to. */
 enum class BarAnchor { Top, Bottom, Left, Right }
@@ -73,12 +83,57 @@ object BarLayer {
     val Overlay: UInt = GTK_LAYER_SHELL_LAYER_OVERLAY
 }
 
+/** Width of the primary output, in pixels (0 when no GDK display is available). */
+fun displayWidth(): Int = monitorSize().first
+
+/** Height of the primary output, in pixels. */
+fun displayHeight(): Int = monitorSize().second
+
+private fun monitorSize(): Pair<Int, Int> {
+    val display = gdk_display_get_default() ?: return 0 to 0
+    val monitors = gdk_display_get_monitors(display) ?: return 0 to 0
+    val monitor = g_list_model_get_item(monitors, 0u)?.reinterpret<GdkMonitor>() ?: return 0 to 0
+    return memScoped {
+        val rectangle = alloc<GdkRectangle>()
+        gdk_monitor_get_geometry(monitor, rectangle.ptr)
+        rectangle.width to rectangle.height
+    }
+}
+
+/** Surface-local rectangle, in pixels. */
+data class Rect(val x: Int, val y: Int, val width: Int, val height: Int)
+
 /** Handle to a mounted window; [close] closes it through GTK's close-request path. */
 class WindowHandle internal constructor(
     val window: CPointer<GtkWindow>,
     private val closeAction: () -> Unit,
+    initialWidth: Int = 0,
+    initialHeight: Int = 0,
+    private val resizeAction: (Int, Int) -> Unit = { _, _ -> },
+    private val inputRegionAction: (List<Rect>?) -> Unit = { },
 ) {
+    var width: Int = initialWidth
+        private set
+    var height: Int = initialHeight
+        private set
+
     fun close() = closeAction()
+
+    /** Resizes the window/surface; layer-shell reconfigures on the next frame. */
+    fun resize(width: Int? = null, height: Int? = null) {
+        this.width = width ?: this.width
+        this.height = height ?: this.height
+        resizeAction(this.width, this.height)
+    }
+
+    /**
+     * Restricts pointer input to [rects] (surface-local pixels).
+     *
+     * `null` restores input over the whole surface; an empty list makes the surface fully
+     * click-through. This is what keeps transparent parts of a grown bar from eating clicks
+     * meant for applications below it.
+     */
+    fun setInputRegion(rects: List<Rect>?) = inputRegionAction(rects)
 }
 
 /**

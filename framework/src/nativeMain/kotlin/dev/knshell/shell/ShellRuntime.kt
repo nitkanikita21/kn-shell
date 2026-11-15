@@ -24,6 +24,18 @@ import kotlinx.cinterop.staticCFunction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import kotlinx.cinterop.IntVar
+import kotlinx.cinterop.alloc
+import kotlinx.cinterop.memScoped
+import kotlinx.cinterop.ptr
+import kn.gtk.gtk_widget_queue_resize
+import kn.gtk.gtk_widget_get_native
+import kn.gtk.gtk_native_get_surface
+import kn.gtk.gdk_surface_set_input_region
+import kn.gtk.cairo_region_union_rectangle
+import kn.gtk.cairo_region_destroy
+import kn.gtk.cairo_region_create
+import kn.gtk.GdkRectangle
 import kn.gtk.GMainLoop
 import kn.gtk.GdkDisplay
 import kn.gtk.GtkOrientation
@@ -124,6 +136,44 @@ internal class ShellRuntime private constructor() {
         println("[shell-runtime] GTK initialised — one GLib loop, one dispatcher, one Recomposer")
     }
 
+    /** Resizes the window; layer-shell surfaces reconfigure on the next frame. */
+    internal fun resizeWindow(window: CPointer<GtkWindow>, width: Int, height: Int) {
+        gtk_window_set_default_size(window, width, height)
+        gtk_widget_queue_resize(window.reinterpret())
+    }
+
+    /**
+     * Restricts pointer input of the window's surface to [rects] (surface-local pixels).
+     * `null` restores the whole surface; an empty list makes it fully click-through.
+     */
+    internal fun setWindowInputRegion(window: CPointer<GtkWindow>, rects: List<Rect>?) {
+        val widget = window.reinterpret<GtkWidget>()
+        val native = gtk_widget_get_native(widget) ?: return
+        val surface = gtk_native_get_surface(native) ?: return
+        if (rects == null) {
+            gdk_surface_set_input_region(surface, null)
+            println("[shell-runtime] input region: whole surface")
+            return
+        }
+        val region = cairo_region_create() ?: return
+        memScoped {
+            for (rect in rects) {
+                val rectangle = alloc<GdkRectangle>()
+                rectangle.x = rect.x
+                rectangle.y = rect.y
+                rectangle.width = rect.width
+                rectangle.height = rect.height
+                cairo_region_union_rectangle(region, rectangle.ptr)
+            }
+        }
+        gdk_surface_set_input_region(surface, region)
+        cairo_region_destroy(region)
+        println(
+            "[shell-runtime] input region: " +
+                rects.joinToString { "${it.x},${it.y} ${it.width}x${it.height}" },
+        )
+    }
+
     /**
      * Creates a window (plain or layer-shell bar), mounts [content] into it and presents it.
      *
@@ -209,7 +259,14 @@ internal class ShellRuntime private constructor() {
                 (if (bar != null) "(layer-shell bar, namespace=${bar.namespace})" else "(plain)") +
                 " mounted; ${windows.size} window(s) on the shared runtime"
         )
-        return WindowHandle(window) { closeWindow(record) }
+        return WindowHandle(
+            window = window,
+            closeAction = { closeWindow(record) },
+            initialWidth = width,
+            initialHeight = height,
+            resizeAction = { w, h -> resizeWindow(window, w, h) },
+            inputRegionAction = { rects -> setWindowInputRegion(window, rects) },
+        )
     }
 
     /** Blocks in the GLib main loop until the last window is closed. */

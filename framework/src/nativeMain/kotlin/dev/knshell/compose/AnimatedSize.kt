@@ -7,6 +7,7 @@ import androidx.compose.runtime.ComposeNode
 import dev.knshell.animation.Easing
 import dev.knshell.animation.easingCode
 import dev.knshell.core.attachAnimatedSizeLayout
+import dev.knshell.core.setAnimatedSizeFixed
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.rawValue
@@ -51,11 +52,12 @@ fun AnimatedBox(
     easing: Easing = Easing.OutCubic,
     spacing: Int = 0,
     axis: AnimatedAxis = if (vertical) AnimatedAxis.Height else AnimatedAxis.Width,
+    mainSize: Int? = null,
     content: @Composable () -> Unit,
 ) {
     ComposeNode<GtkAnimatedBoxNode, GtkApplier>(
         factory = {
-            GtkAnimatedBoxNode(durationMs, easing, spacing, vertical, axis).plain()
+            GtkAnimatedBoxNode(durationMs, easing, spacing, vertical, axis, mainSize).plain()
         },
         update = {
             set(modifier) { value -> applyModifier(value) }
@@ -63,6 +65,7 @@ fun AnimatedBox(
             set(spacing) { }
             set(vertical) { }
             set(axis) { }
+            set(mainSize) { value -> applyMainSize(value) }
         },
     ) {
         content()
@@ -94,6 +97,7 @@ fun AnimatedHeight(
     durationMs: Int = 180,
     easing: Easing = Easing.OutCubic,
     spacing: Int = 0,
+    mainSize: Int? = null,
     content: @Composable () -> Unit,
 ) = AnimatedBox(
     vertical = true,
@@ -102,6 +106,7 @@ fun AnimatedHeight(
     easing = easing,
     spacing = spacing,
     axis = AnimatedAxis.Height,
+    mainSize = mainSize,
     content = content,
 )
 
@@ -111,6 +116,7 @@ internal class GtkAnimatedBoxNode(
     spacing: Int,
     vertical: Boolean,
     axis: AnimatedAxis,
+    mainSize: Int?,
 ) : GtkNode(
     gtk_box_new(
         if (vertical) GtkOrientation.GTK_ORIENTATION_VERTICAL else GtkOrientation.GTK_ORIENTATION_HORIZONTAL,
@@ -126,6 +132,12 @@ internal class GtkAnimatedBoxNode(
             spacing.coerceAtLeast(0).toUInt(),
             if (axis == AnimatedAxis.Height) 1u else 0u,
         )
+        mainSize?.let { applyMainSize(it) }
+    }
+
+    /** `null` resumes content-driven sizing; a value animates to that explicit main size. */
+    internal fun applyMainSize(size: Int?) {
+        setAnimatedSizeFixed(widget.rawValue.toLong().toULong(), size ?: -1)
     }
 
     override fun attachChild(child: CPointer<GtkWidget>) {

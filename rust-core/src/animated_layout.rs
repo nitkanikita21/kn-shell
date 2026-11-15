@@ -5,6 +5,8 @@
 //! `u64`; the call must happen on the GTK main thread.
 
 extern "C" {
+    fn kn_animated_size_layout_set_fixed(widget: *mut core::ffi::c_void, fixed: i32);
+
     fn kn_attach_animated_size_layout(
         widget: *mut core::ffi::c_void,
         duration_ms: u32,
@@ -35,4 +37,14 @@ pub fn attach_animated_size_layout(
             axis,
         )
     }
+}
+
+/// Animates the container's main axis to an explicit size (`fixed >= 0`), or back to
+/// content-driven sizing (`fixed < 0`).
+#[uniffi::export]
+pub fn set_animated_size_fixed(widget: u64, fixed: i32) {
+    if widget == 0 {
+        return;
+    }
+    unsafe { kn_animated_size_layout_set_fixed(widget as *mut core::ffi::c_void, fixed) }
 }

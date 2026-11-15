@@ -35,6 +35,8 @@ struct _KnAnimatedSizeLayout {
     guint easing;
     guint spacing;
     guint axis;
+    /* >= 0: animate towards this explicit size; -1: follow the content size. */
+    int fixed_size;
 
     gboolean initialized;
     gboolean have_probe;
@@ -161,6 +163,7 @@ static void kn_animated_size_layout_init(KnAnimatedSizeLayout *self) {
     self->easing = 1;
     self->spacing = 0;
     self->axis = KN_AXIS_WIDTH;
+    self->fixed_size = -1;
     self->initialized = FALSE;
     self->have_probe = FALSE;
     self->animating = FALSE;
@@ -185,7 +188,9 @@ static double kn_natural_main_size(KnAnimatedSizeLayout *self, GtkWidget *widget
 static void kn_update(KnAnimatedSizeLayout *self, GtkWidget *widget) {
     if (gtk_widget_get_first_child(widget) == NULL) return;
 
-    double natural = kn_natural_main_size(self, widget);
+    double natural = self->fixed_size >= 0
+                         ? (double) self->fixed_size
+                         : kn_natural_main_size(self, widget);
 
     if (!self->initialized) {
         if (!gtk_widget_get_mapped(widget)) return;
@@ -233,6 +238,19 @@ static gboolean kn_tick(GtkWidget *widget, GdkFrameClock *clock, gpointer user_d
 
 static void kn_tick_destroy(gpointer user_data) {
     g_object_unref(user_data);
+}
+
+/* Sets an explicit animated main-axis size (>= 0 px), or -1 for content-driven. */
+void kn_animated_size_layout_set_fixed(GtkWidget *widget, int fixed) {
+    if (!GTK_IS_WIDGET(widget)) return;
+    GtkLayoutManager *manager = gtk_widget_get_layout_manager(widget);
+    if (manager == NULL) return;
+    if (!G_TYPE_CHECK_INSTANCE_TYPE(manager, kn_animated_size_layout_get_type())) return;
+    KnAnimatedSizeLayout *self = (KnAnimatedSizeLayout *) manager;
+    if (self->fixed_size == fixed) return;
+    self->fixed_size = fixed;
+    self->have_probe = FALSE;
+    gtk_widget_queue_resize(widget);
 }
 
 /* Called from Rust over UniFFI; `widget` is a raw GtkWidget* (main thread only). */
