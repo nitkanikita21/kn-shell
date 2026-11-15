@@ -10,7 +10,6 @@ import dev.knshell.compose.fontFamily
 import dev.knshell.compose.fontSize
 import dev.knshell.compose.padding
 import dev.knshell.compose.radius
-import dev.knshell.ui.islands.CenterIsland
 import dev.knshell.ui.islands.LeftIsland
 import dev.knshell.ui.islands.RightIsland
 
@@ -40,7 +39,9 @@ fun KnBar() {
             .fontFamily(BAR_FONT)
             .fontSize(BAR_FONT_SIZE),
         start = { LeftIsland() },
-        center = { CenterIsland() },
+        // The centre island is a separate layer-shell surface (see CenterIsland), so the bar
+        // surface only hosts the side islands and reserves the top edge.
+        center = {},
         end = { RightIsland() },
     )
 }

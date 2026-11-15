@@ -142,36 +142,11 @@ internal class ShellRuntime private constructor() {
         gtk_widget_queue_resize(window.reinterpret())
     }
 
-    /**
-     * Restricts pointer input of the window's surface to [rects] (surface-local pixels).
-     * `null` restores the whole surface; an empty list makes it fully click-through.
-     */
-    internal fun setWindowInputRegion(window: CPointer<GtkWindow>, rects: List<Rect>?) {
-        val widget = window.reinterpret<GtkWidget>()
-        val native = gtk_widget_get_native(widget) ?: return
-        val surface = gtk_native_get_surface(native) ?: return
-        if (rects == null) {
-            gdk_surface_set_input_region(surface, null)
-            println("[shell-runtime] input region: whole surface")
-            return
-        }
-        val region = cairo_region_create() ?: return
-        memScoped {
-            for (rect in rects) {
-                val rectangle = alloc<GdkRectangle>()
-                rectangle.x = rect.x
-                rectangle.y = rect.y
-                rectangle.width = rect.width
-                rectangle.height = rect.height
-                cairo_region_union_rectangle(region, rectangle.ptr)
-            }
-        }
-        gdk_surface_set_input_region(surface, region)
-        cairo_region_destroy(region)
-        println(
-            "[shell-runtime] input region: " +
-                rects.joinToString { "${it.x},${it.y} ${it.width}x${it.height}" },
-        )
+    /** Moves a layer-shell surface by setting its left/top margins. */
+    internal fun setLayerMargin(window: CPointer<GtkWindow>, left: Int?, top: Int?) {
+        if (left != null) gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_LEFT, left)
+        if (top != null) gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_TOP, top)
+        gtk_widget_queue_resize(window.reinterpret())
     }
 
     /**
@@ -195,7 +170,9 @@ internal class ShellRuntime private constructor() {
 
         val window = gtk_window_new()!!.reinterpret<GtkWindow>()
         gtk_window_set_title(window, title)
-        gtk_window_set_default_size(window, width, height)
+        if (width > 0 || height > 0) {
+            gtk_window_set_default_size(window, if (width > 0) width else -1, if (height > 0) height else -1)
+        }
 
         val widget = window.reinterpret<GtkWidget>()
         gtk_widget_add_css_class(widget, "kn-window")
@@ -265,7 +242,7 @@ internal class ShellRuntime private constructor() {
             initialWidth = width,
             initialHeight = height,
             resizeAction = { w, h -> resizeWindow(window, w, h) },
-            inputRegionAction = { rects -> setWindowInputRegion(window, rects) },
+            marginAction = { left, top -> setLayerMargin(window, left, top) },
         )
     }
 

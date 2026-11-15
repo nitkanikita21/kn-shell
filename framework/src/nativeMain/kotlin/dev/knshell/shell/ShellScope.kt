@@ -59,7 +59,9 @@ data class WindowSpec(
 /** A wlr-layer-shell bar surface (top bar, bottom bar, side panel, …). */
 data class BarWindowSpec(
     val title: String = "KN Shell",
+    /** `<= 0` means "let GTK use the content's natural height" (island surfaces). */
     val height: Int = 40,
+    /** `<= 0` means "let GTK use the content's natural width" (island surfaces). */
     val width: Int = 1280,
     val layer: UInt = BarLayer.Top,
     val anchors: Set<BarAnchor> = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
@@ -100,9 +102,6 @@ private fun monitorSize(): Pair<Int, Int> {
     }
 }
 
-/** Surface-local rectangle, in pixels. */
-data class Rect(val x: Int, val y: Int, val width: Int, val height: Int)
-
 /** Handle to a mounted window; [close] closes it through GTK's close-request path. */
 class WindowHandle internal constructor(
     val window: CPointer<GtkWindow>,
@@ -110,7 +109,7 @@ class WindowHandle internal constructor(
     initialWidth: Int = 0,
     initialHeight: Int = 0,
     private val resizeAction: (Int, Int) -> Unit = { _, _ -> },
-    private val inputRegionAction: (List<Rect>?) -> Unit = { },
+    private val marginAction: (Int?, Int?) -> Unit = { _, _ -> },
 ) {
     var width: Int = initialWidth
         private set
@@ -126,14 +125,8 @@ class WindowHandle internal constructor(
         resizeAction(this.width, this.height)
     }
 
-    /**
-     * Restricts pointer input to [rects] (surface-local pixels).
-     *
-     * `null` restores input over the whole surface; an empty list makes the surface fully
-     * click-through. This is what keeps transparent parts of a grown bar from eating clicks
-     * meant for applications below it.
-     */
-    fun setInputRegion(rects: List<Rect>?) = inputRegionAction(rects)
+    /** Moves the layer-shell surface by updating its left/top margins. */
+    fun setMargin(left: Int? = null, top: Int? = null) = marginAction(left, top)
 }
 
 /**

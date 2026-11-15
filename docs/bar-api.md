@@ -251,6 +251,34 @@ so the content root owns background/padding/radius. `KN_POPOVER_DEBUG=1` pops ea
 once at startup for layout checks (only one popover is visible at a time in normal use —
 with the debug flag several open together, which GTK flags as a benign critical).
 
+### Per-island surfaces (recommended for expanding islands)
+
+Instead of one full-width bar surface, give an island its **own** layer-shell surface: the
+surface is then exactly the island, so growing it cannot block clicks around it and needs no
+input-region tricks.
+
+```kotlin
+Shell.run {
+    // bar surface: side islands only, reserves the top edge
+    val bar = barWindow(
+        BarWindowSpec(height = 40, anchors = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
+            exclusiveZone = ExclusiveZone.Fixed(40), namespace = "my-bar"),
+    ) { KnBar() }
+
+    // centre island: natural size (width = -1, height = -1), centred by its left margin
+    val center = barWindow(
+        BarWindowSpec(width = -1, height = -1, anchors = setOf(BarAnchor.Top, BarAnchor.Left),
+            margins = Margins(top = 0, left = (displayWidth() - 245) / 2, right = 0, bottom = 0),
+            exclusiveZone = ExclusiveZone.None, namespace = "kn-center"),
+    ) { CenterIsland() }
+}
+```
+
+Inside the island, `AnimatedBox(vertical = true, mainSize = if (open) 400 else 40,
+crossSize = 245)` animates its own height and clips the notification centre; the window is
+resized to match (`WindowHandle.resize(height = …)`). No `wl_surface` input region is needed:
+everything outside the island's surface belongs to other clients.
+
 ### Notification card
 
 Cards are just composition — `Services.notifications.state` gives id, app, summary, body,

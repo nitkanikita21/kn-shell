@@ -7,16 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import dev.knshell.AppShell
-import dev.knshell.compose.Align
 import dev.knshell.compose.AnimatedBox
-import dev.knshell.compose.Bounds
-import dev.knshell.compose.BoundsObserver
-import dev.knshell.compose.Modifier
 import dev.knshell.compose.Row
-import dev.knshell.compose.align
 import dev.knshell.compose.onClick
-import dev.knshell.shell.Rect
-import dev.knshell.shell.displayWidth
 import dev.knshell.ui.island
 import dev.knshell.ui.modules.Clock
 import dev.knshell.ui.modules.Notification
@@ -28,27 +21,21 @@ import kotlinx.coroutines.delay
 import platform.posix.getenv
 
 /**
- * Centre island that grows **itself** downwards.
+ * Centre island — its **own** layer-shell surface, exactly as wide as the island.
  *
- * The island is an [AnimatedBox] with an explicit animated height: the bar row stays on top
- * while the notification centre inside the same box is revealed as the island grows. The bar
- * surface is resized to fit; everything outside the island in that surface is excluded from
- * pointer input, so clicks fall through to the applications below.
+ * There is no full-width bar hack: the surface is the island, so growing it downwards never
+ * creates transparent click-blocking areas, and the side islands (separate bar surface) are
+ * not affected at all. The island animates its own height via [AnimatedBox]; the window is
+ * resized to fit (collapsed: bar height, expanded: [AppShell.EXPANDED_HEIGHT]).
  *
- * `KN_ISLAND_DEBUG=1` starts expanded (development aid).
+ * `KN_ISLAND_AUTO=1` opens it once after start; `KN_ISLAND_DEBUG=1` starts expanded.
  */
-/** Inner content width of the centre island (island width minus its horizontal padding). */
-private const val ISLAND_WIDTH = 245
-private const val COUNTENT_WIDTH = ISLAND_WIDTH - 48
-
 @OptIn(ExperimentalForeignApi::class)
 @Composable
 fun CenterIsland() {
     val debugOpen = remember { getenv("KN_ISLAND_DEBUG")?.toKString() == "1" }
     var isExpanded by remember { mutableStateOf(debugOpen) }
-    var islandBounds by remember { mutableStateOf<Bounds?>(null) }
 
-    // Development aid: open once shortly after start so the animation can be captured.
     LaunchedEffect(Unit) {
         val auto = getenv("KN_ISLAND_AUTO")?.toKString() == "1"
         if (auto) {
@@ -58,44 +45,22 @@ fun CenterIsland() {
     }
 
     LaunchedEffect(isExpanded) {
-        val bar = AppShell.bar ?: return@LaunchedEffect
+        val center = AppShell.center ?: return@LaunchedEffect
         if (isExpanded) {
-            bar.resize(height = AppShell.EXPANDED_HEIGHT)
+            center.resize(height = AppShell.EXPANDED_HEIGHT)
         } else {
             delay((AppShell.EXPAND_MS + 60).toLong())
-            if (!isExpanded) {
-                bar.setInputRegion(null)
-                bar.resize(height = AppShell.BAR_HEIGHT)
-            }
+            if (!isExpanded) center.resize(height = AppShell.BAR_HEIGHT)
         }
-    }
-
-    LaunchedEffect(isExpanded, islandBounds) {
-        if (!isExpanded) return@LaunchedEffect
-        val bounds = islandBounds ?: return@LaunchedEffect
-        AppShell.bar?.setInputRegion(
-            listOf(
-                // The bar row stays clickable across the whole width.
-                Rect(0, 0, displayWidth(), AppShell.BAR_HEIGHT),
-                // Only the island area of the expanded surface takes input; the rest is
-                // transparent and must not block the interface below.
-                Rect(bounds.x, 0, bounds.width, AppShell.EXPANDED_HEIGHT),
-            ),
-        )
     }
 
     AnimatedBox(
         vertical = true,
         durationMs = AppShell.EXPAND_MS,
         mainSize = if (isExpanded) AppShell.EXPANDED_HEIGHT else AppShell.BAR_HEIGHT,
-        // Pin the island width: notification content must never widen the island (it used to
-        // grow to ~1900px because the cross size followed the content).
-        crossSize = ISLAND_WIDTH,
+        crossSize = AppShell.ISLAND_WIDTH,
         modifier = island(bottomRight = 16, bottomLeft = 16)
-            .onClick { isExpanded = !isExpanded }
-            // CenterBox gives its centre child all remaining width; Centre alignment keeps the
-            // island at its natural (pinned) width while the surface grows.
-            .align(h = Align.Center, v = Align.Start),
+            .onClick { isExpanded = !isExpanded },
     ) {
         Row(16) {
             Notification()
@@ -103,10 +68,6 @@ fun CenterIsland() {
             Clock()
         }
 
-        // Fixed content width: deriving it from the measured island bounds would create a
-        // feedback loop (wider content -> wider island -> wider content).
-        NotificationCenter(width = COUNTENT_WIDTH)
-
-        BoundsObserver { islandBounds = it }
+        NotificationCenter(width = AppShell.ISLAND_WIDTH - 48)
     }
 }

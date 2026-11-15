@@ -7,12 +7,18 @@ object AppShell {
     /** Collapsed bar height. */
     const val BAR_HEIGHT = 40
 
-    /** Height of the bar surface while the centre island is expanded. */
+    /** Height of the centre island surface while expanded. */
     const val EXPANDED_HEIGHT = 400
 
     /** Animation duration of the island growth; the surface shrinks after it. */
     const val EXPAND_MS = 240
 
-    /** The bar window handle, set by [startKnShell]. */
+    /** Width of the centre island (also the width of its own layer surface). */
+    const val ISLAND_WIDTH = 245
+
+    /** The bar surface that hosts the left/right islands (reserves the top edge). */
     var bar: WindowHandle? = null
+
+    /** The centre island's own layer surface. */
+    var center: WindowHandle? = null
 }
