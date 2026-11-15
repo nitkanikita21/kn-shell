@@ -22,6 +22,7 @@ import dev.knshell.ui.modules.Workspaces
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.toKString
 import kotlinx.coroutines.delay
+import kotlin.time.TimeSource
 import platform.posix.getenv
 
 /**
@@ -48,14 +49,23 @@ fun CenterIsland() {
         }
     }
 
+    // Resize the island's surface *with* the animation: one jump at the end (or a delayed
+    // shrink) leaves the old surface buffer visible as a lingering rectangle.
     LaunchedEffect(isExpanded) {
         val center = AppShell.center ?: return@LaunchedEffect
-        if (isExpanded) {
-            center.resize(height = AppShell.EXPANDED_HEIGHT)
-        } else {
-            delay((AppShell.EXPAND_MS + 60).toLong())
-            if (!isExpanded) center.resize(height = AppShell.BAR_HEIGHT)
+        val target = if (isExpanded) AppShell.EXPANDED_HEIGHT else AppShell.BAR_HEIGHT
+        val from = center.height.coerceAtLeast(AppShell.BAR_HEIGHT)
+        if (from == target) return@LaunchedEffect
+        val start = TimeSource.Monotonic.markNow()
+        while (true) {
+            val progress = (start.elapsedNow().inWholeMilliseconds.toFloat() / AppShell.EXPAND_MS)
+                .coerceIn(0f, 1f)
+            val eased = 1f - (1f - progress) * (1f - progress) * (1f - progress)
+            center.resize(height = (from + (target - from) * eased).toInt())
+            if (progress >= 1f) break
+            delay(16)
         }
+        center.resize(height = target)
     }
 
     AnimatedBox(

@@ -11,6 +11,7 @@ import dev.knshell.compose.fontSize
 import dev.knshell.compose.padding
 import dev.knshell.compose.radius
 import dev.knshell.ui.islands.LeftIsland
+import dev.knshell.ui.primitives.Spacer
 import dev.knshell.ui.islands.RightIsland
 
 /** Font used by every module in the bar. */
@@ -41,7 +42,9 @@ fun KnBar() {
         start = { LeftIsland() },
         // The centre island is a separate layer-shell surface (see CenterIsland), so the bar
         // surface only hosts the side islands and reserves the top edge.
-        center = {},
+        // GtkCenterBox slots follow child order, so an empty slot needs a real (zero-size)
+        // placeholder — otherwise the end island falls into the centre slot.
+        center = { Spacer() },
         end = { RightIsland() },
     )
 }
