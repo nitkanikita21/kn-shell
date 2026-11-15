@@ -251,6 +251,30 @@ so the content root owns background/padding/radius. `KN_POPOVER_DEBUG=1` pops ea
 once at startup for layout checks (only one popover is visible at a time in normal use —
 with the debug flag several open together, which GTK flags as a benign critical).
 
+### Attached layer-shell panel (instead of a popover)
+
+A `Popover` is a GTK popup surface (grab/autohide). If you want the “island grows down” look
+instead, wrap any widget in `AttachedPanel`: on click it creates an independent layer-shell
+surface (namespace `kn-panel`, `exclusiveZone = None`, fixed size, no animation) and places
+it under the widget, computed from the widget's bounds.
+
+```kotlin
+AttachedPanel(
+    width = 380,
+    height = 420,
+    topOffset = 0,          // gap below the reserved bar area; 0 = directly under the bar
+    content = { NotificationCenter() },
+) {
+    BellIcon()
+}
+```
+
+`KN_PANEL_DEBUG=1` opens every attached panel once at startup, `displayWidth()` /
+`displayHeight()` return the output size for custom positioning. Limits: the panel keeps
+the size given at creation (content does not resize the surface), clicks outside do not
+close it (toggle the anchor again), and the whole surface area is interactive even where
+the content is transparent.
+
 ### Notification card
 
 Cards are just composition — `Services.notifications.state` gives id, app, summary, body,

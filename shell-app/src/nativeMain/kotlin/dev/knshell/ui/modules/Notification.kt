@@ -10,9 +10,11 @@ import dev.knshell.compose.Label
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.Row
 import dev.knshell.compose.Align
+import dev.knshell.compose.Button
 import dev.knshell.compose.align
 import dev.knshell.compose.background
 import dev.knshell.compose.fontWeight
+import dev.knshell.compose.hExpand
 import dev.knshell.compose.onClick
 import dev.knshell.compose.padding
 import dev.knshell.compose.pointerCursor
@@ -22,7 +24,7 @@ import dev.knshell.compose.textColor
 import dev.knshell.compose.width
 import dev.knshell.core.NotificationInfo
 import dev.knshell.services.Services
-import dev.knshell.shell.Popover
+import dev.knshell.shell.AttachedPanel
 import dev.knshell.ui.Grayscale
 import dev.knshell.ui.primitives.Icon
 import dev.knshell.ui.primitives.Image
@@ -52,20 +54,29 @@ fun Notification() {
         else -> ICON_EMPTY
     }
 
-    Popover(
-        openOnHover = false,
-        openOnClick = true,
-        content = { NotificationPanel(notifications, dnd) },
+    AttachedPanel(
+        width = 380,
+        height = 420,
+        topOffset = 0,
+        content = { NotificationCenter() },
     ) {
         Icon(icon, size = 16, modifier = Modifier.pointerCursor())
     }
+}
+
+/** Notification centre root inside the attached panel (reads services itself). */
+@Composable
+private fun NotificationCenter() {
+    val notifications by Services.notifications.state.collectAsState()
+    val dnd by Services.notifications.doNotDisturb.collectAsState()
+    NotificationPanel(notifications, dnd)
 }
 
 @Composable
 private fun NotificationPanel(notifications: List<NotificationInfo>, dnd: Boolean) {
     Box(
         modifier = Modifier
-            .padding(horizontal = 14, vertical = 10)
+            .padding(horizontal = 12, vertical = 12)
             .background(Grayscale.Surface, radius = 10),
     ) {
         Column(spacing = 8) {
@@ -101,13 +112,16 @@ private fun NotificationPanel(notifications: List<NotificationInfo>, dnd: Boolea
                         modifier = Modifier.textColor(Grayscale.Accent),
                     )
                 }
-                Label(
-                    text = "clear all",
+                Button(
+                    text = "Clear all",
                     modifier = Modifier
                         .textColor(Grayscale.Accent)
-                        .onClick { Services.notifications.clear() }
-                        .pointerCursor(),
-                )
+                        .pointerCursor()
+                        .background(Grayscale.Background)
+                        .radius(8)
+                        .padding(16,8)
+                        .align(h = Align.Center),
+                ) { Services.notifications.clear() }
             }
         }
     }
@@ -172,7 +186,7 @@ private fun NotificationCard(notification: NotificationInfo) {
 private fun NotificationIcon(notification: NotificationInfo) {
     val icon = notification.icon
     if (icon.isNotBlank() && icon.startsWith("/")) {
-        Image(icon, Modifier.radius(6).background(Color.hex(0xff0000)), width = 28, height = 28)
+        Image(icon, Modifier.radius(6).align(v = Align.Center), width = 42, height = 42)
     } else {
         Icon(ICON_HAS_NEW, size = 18, color = Grayscale.Accent)
     }

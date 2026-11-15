@@ -40,7 +40,8 @@ is an implementation detail and may change.
 | `window(WindowSpec) { … }` | regular toplevel |
 | `Shell.services` | same object as `Services` |
 | `Shell.Hyprland.focusWorkspace/spawn/dispatch` | compositor actions |
-| `HoverPopover { trigger }` | popover with its own Compose composition |
+| `Popover(openOnHover, openOnClick, controller) { anchor }` | GTK popup surface (hover tooltip / click panel / manual) |
+| `AttachedPanel { anchor }` | universal attached **layer-shell** panel under any widget (fixed size, no popup grab) |
 | `BarAnchor`, `BarLayer`, `ExclusiveZone`, `Margins`, `KeyboardMode` | window spec types |
 
 ### `dev.knshell.services` — data

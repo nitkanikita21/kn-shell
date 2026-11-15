@@ -13,6 +13,7 @@ import dev.knshell.compose.GtkApplier
 import dev.knshell.compose.GtkBoxNode
 import dev.knshell.compose.GtkNode
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.PLAIN_CLASS
 import dev.knshell.compose.installPlainReset
 import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
@@ -48,6 +49,7 @@ import kn.gtk.gtk_layer_is_supported
 import kn.gtk.gtk_layer_set_anchor
 import kn.gtk.gtk_layer_set_exclusive_zone
 import kn.gtk.gtk_layer_set_keyboard_mode
+import kn.gtk.gtk_widget_set_visible
 import kn.gtk.gtk_layer_set_layer
 import kn.gtk.gtk_layer_set_margin
 import kn.gtk.gtk_layer_set_namespace
@@ -212,6 +214,71 @@ internal class ShellRuntime private constructor() {
         return WindowHandle(window) { closeWindow(record) }
     }
 
+    /**
+     * Creates a fixed-size layer-shell panel under the bar (see [PanelWindowSpec]).
+     *
+     * The surface is created hidden, keeps its size for its whole lifetime (no animated
+     * wl_surface resizes) and reserves no exclusive zone. Showing/hiding only maps or
+     * unmaps the window, which is what makes it cheaper and calmer than a popover.
+     */
+    fun createPanel(spec: PanelWindowSpec, content: @Composable () -> Unit): PanelHandle {
+        ensureGtk()
+
+        val window = gtk_window_new()!!.reinterpret<GtkWindow>()
+        gtk_window_set_title(window, spec.title)
+        gtk_window_set_default_size(window, spec.width, spec.height)
+        // No client-side decorations: the panel is a bare surface, its content draws the look.
+        gtk_window_set_decorated(window, 0)
+
+        val widget = window.reinterpret<GtkWidget>()
+        // Plain window: no theme background/shadow/padding around the panel content.
+        gtk_widget_add_css_class(widget, PLAIN_CLASS)
+        gtk_widget_add_css_class(widget, "kn-window")
+        gtk_widget_add_css_class(widget, "kn-panel")
+        gtk_widget_set_size_request(widget, spec.width, spec.height)
+        configurePanelLayerShell(window, spec)
+
+        val rootWidget = gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!
+        gtk_window_set_child(window, rootWidget)
+
+        val composition = Composition(applier = GtkApplier(GtkBoxNode(rootWidget)), parent = recomposer)
+        val record = RuntimeWindow(
+            runtime = this,
+            id = nextWindowId++,
+            window = window,
+            title = spec.title,
+            composition = composition,
+        )
+        record.selfRef = StableRef.create(record)
+        windows += record
+        composition.setContent(content)
+
+        g_signal_connect_data(
+            instance = window,
+            detailed_signal = "close-request",
+            c_handler = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
+                data?.asStableRef<RuntimeWindow>()?.get()?.let { it.runtime.onWindowClosed(it) }
+                0
+            }.reinterpret(),
+            data = record.selfRef?.asCPointer(),
+            destroy_data = null,
+            connect_flags = 0u,
+        )
+
+        var open = false
+        val setOpen: (Boolean) -> Unit = setOpen@ { value ->
+            if (value == open) return@setOpen
+            open = value
+            if (value) {
+                gtk_widget_set_visible(widget, 1)
+                gtk_window_present(window)
+            } else {
+                gtk_widget_set_visible(widget, 0)
+            }
+        }
+        return PanelHandle(window, setOpen)
+    }
+
     /** Blocks in the GLib main loop until the last window is closed. */
     fun run() {
         g_main_loop_run(loop)
@@ -359,6 +426,27 @@ private fun configureLayerShell(window: CPointer<GtkWindow>, spec: BarWindowSpec
     )
 }
 
+/** Layer-shell setup for a fixed-size panel under the bar (no exclusive zone). */
+private fun configurePanelLayerShell(window: CPointer<GtkWindow>, spec: PanelWindowSpec) {
+    if (gtk_layer_is_supported() == 0) {
+        println("[shell-ui] gtk4-layer-shell not supported; panel falls back to a normal window")
+        return
+    }
+    gtk_layer_init_for_window(window)
+    gtk_layer_set_namespace(window, spec.namespace)
+    gtk_layer_set_layer(window, spec.layer)
+    gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_TOP, 1)
+    gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_LEFT, 1)
+    gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_TOP, spec.y)
+    gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_LEFT, spec.x)
+    gtk_layer_set_exclusive_zone(window, 0)
+    gtk_layer_set_keyboard_mode(window, spec.keyboardMode)
+    println(
+        "[shell-ui] panel surface initialised (namespace=${spec.namespace}, " +
+            "at ${spec.x},${spec.y}, size ${spec.width}x${spec.height})"
+    )
+}
+
 /**
  * Default rules for windows created through [ShellScope]: the shell's window background
  * and fully transparent layer-shell bars.
@@ -368,6 +456,9 @@ window.kn-window {
     background-color: rgba(18, 18, 24, 0.85);
 }
 window.kn-window.kn-bar {
+    background-color: transparent;
+}
+window.kn-window.kn-panel {
     background-color: transparent;
 }
 """
