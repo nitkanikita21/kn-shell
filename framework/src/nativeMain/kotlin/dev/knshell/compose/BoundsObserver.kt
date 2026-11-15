@@ -70,7 +70,11 @@ internal class GtkBoundsObserverNode : GtkNode(gtk_box_new(GtkOrientation.GTK_OR
                 width = rectangle.size.width.toInt(),
                 height = rectangle.size.height.toInt(),
             )
-            if (bounds != last) {
+            // Only horizontal geometry is interesting for input regions: reporting every
+            // frame while an island animates would recompose the shell needlessly (visible
+            // as neighbour jitter).
+            val previous = last
+            if (previous == null || previous.x != bounds.x || previous.width != bounds.width) {
                 last = bounds
                 callback(bounds)
             }

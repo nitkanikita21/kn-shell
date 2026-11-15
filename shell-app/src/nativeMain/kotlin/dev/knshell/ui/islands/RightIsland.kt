@@ -10,7 +10,7 @@ import dev.knshell.ui.modules.Network
 /** Right island: live network throughput. */
 @Composable
 fun RightIsland() {
-    Row(16, island(bottomLeft = 16)) {
+    Row(16, island(bottomLeft = 16).align(v = Align.Start)) {
         Network()
     }
 }
