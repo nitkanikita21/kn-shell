@@ -41,7 +41,7 @@ is an implementation detail and may change.
 | `Shell.services` | same object as `Services` |
 | `Shell.Hyprland.focusWorkspace/spawn/dispatch` | compositor actions |
 | `Popover(openOnHover, openOnClick, controller) { anchor }` | GTK popup surface (hover tooltip / click panel / manual) |
-| `AttachedPanel { anchor }` | universal attached **layer-shell** panel under any widget (fixed size, no popup grab) |
+| `AttachedPanel { anchor }` | universal attached **layer-shell** panel under any widget; `alignToParent` + `width = 0` make it flush with the wrapped container (island growth) |
 | `BarAnchor`, `BarLayer`, `ExclusiveZone`, `Margins`, `KeyboardMode` | window spec types |
 
 ### `dev.knshell.services` — data

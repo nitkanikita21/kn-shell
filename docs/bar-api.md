@@ -258,16 +258,28 @@ instead, wrap any widget in `AttachedPanel`: on click it creates an independent 
 surface (namespace `kn-panel`, `exclusiveZone = None`, fixed size, no animation) and places
 it under the widget, computed from the widget's bounds.
 
+Expanding an island (one continuous shape, no popup):
+
 ```kotlin
+var expanded by remember { mutableStateOf(false) }
+
 AttachedPanel(
-    width = 380,
+    width = 0,              // 0 = match the island width
     height = 420,
-    topOffset = 0,          // gap below the reserved bar area; 0 = directly under the bar
+    topOffset = 0,          // flush under the bar
+    alignToParent = true,   // align to the wrapped content, not to the bar
+    onOpenChange = { expanded = it },
     content = { NotificationCenter() },
 ) {
-    BellIcon()
+    Row(16, island(bottomRight = if (expanded) 0 else 16, bottomLeft = if (expanded) 0 else 16)) {
+        Notification(); Workspaces(); Clock()
+    }
 }
 ```
+
+The panel surface is exactly as wide as the island and starts at the bar bottom; the island
+loses its bottom rounding while open, so the two read as one shape. Any island/module can
+use this — the anchor is whatever composable you wrap.
 
 `KN_PANEL_DEBUG=1` opens every attached panel once at startup, `displayWidth()` /
 `displayHeight()` return the output size for custom positioning. Limits: the panel keeps

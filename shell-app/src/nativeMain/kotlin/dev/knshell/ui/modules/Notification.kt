@@ -3,16 +3,16 @@ package dev.knshell.ui.modules
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import dev.knshell.compose.Align
 import dev.knshell.compose.Box
 import dev.knshell.compose.Color
 import dev.knshell.compose.Column
 import dev.knshell.compose.Label
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.Row
-import dev.knshell.compose.Align
-import dev.knshell.compose.Button
 import dev.knshell.compose.align
 import dev.knshell.compose.background
+import dev.knshell.compose.fillWidth
 import dev.knshell.compose.fontWeight
 import dev.knshell.compose.hExpand
 import dev.knshell.compose.onClick
@@ -21,10 +21,8 @@ import dev.knshell.compose.pointerCursor
 import dev.knshell.compose.radius
 import dev.knshell.compose.size
 import dev.knshell.compose.textColor
-import dev.knshell.compose.width
 import dev.knshell.core.NotificationInfo
 import dev.knshell.services.Services
-import dev.knshell.shell.AttachedPanel
 import dev.knshell.ui.Grayscale
 import dev.knshell.ui.primitives.Icon
 import dev.knshell.ui.primitives.Image
@@ -32,16 +30,13 @@ import dev.knshell.ui.primitives.Image
 private const val ICON_EMPTY = "\uDB80\uDC9A"
 private const val ICON_HAS_NEW = "\uDB84\uDD6B"
 private const val ICON_DND = "\uDB80\uDC9B"
-
-/** Close button glyph shown on every card. */
 private const val ICON_CLOSE = "\uF00D"
 
+private val ACTION_COLOR = Color.hex(0x9ECBFF)
+
 /**
- * Notification centre: a **click** popover (not hover, unlike tooltips).
- *
- * Each notification is a card: icon (file paths from `image-path`/`app-icon` are rendered,
- * icon names fall back to a glyph), app + summary, body, action buttons (click invokes the
- * action through the server) and a close button. Urgent notifications use the accent colour.
+ * Notification bell. Clicking the centre island (which hosts this icon) expands the island
+ * downwards into the notification centre — see `CenterIsland`.
  */
 @Composable
 fun Notification() {
@@ -54,32 +49,28 @@ fun Notification() {
         else -> ICON_EMPTY
     }
 
-    AttachedPanel(
-        width = 380,
-        height = 420,
-        topOffset = 0,
-        content = { NotificationCenter() },
-    ) {
-        Icon(icon, size = 16, modifier = Modifier.pointerCursor())
-    }
+    Icon(icon, size = 16, modifier = Modifier.pointerCursor())
 }
 
-/** Notification centre root inside the attached panel (reads services itself). */
+/**
+ * Content of the expanded centre island: DND toggle, notification cards and "clear all".
+ *
+ * Fills the panel width (the panel surface is exactly as wide as the island) and rounds only
+ * the bottom corners, so visually the island just grows down.
+ */
 @Composable
-private fun NotificationCenter() {
+fun NotificationCenter() {
     val notifications by Services.notifications.state.collectAsState()
     val dnd by Services.notifications.doNotDisturb.collectAsState()
-    NotificationPanel(notifications, dnd)
-}
 
-@Composable
-private fun NotificationPanel(notifications: List<NotificationInfo>, dnd: Boolean) {
     Box(
         modifier = Modifier
-            .padding(horizontal = 12, vertical = 12)
-            .background(Grayscale.Surface, radius = 10),
+            .fillWidth()
+            .radius(0, 0, 16, 16)
+            .background(Grayscale.Background)
+            .padding(horizontal = 12, vertical = 12),
     ) {
-        Column(spacing = 8) {
+        Column(spacing = 8, modifier = Modifier.fillWidth()) {
             Row(
                 spacing = 10,
                 modifier = Modifier
@@ -98,59 +89,54 @@ private fun NotificationPanel(notifications: List<NotificationInfo>, dnd: Boolea
             }
 
             if (notifications.isEmpty()) {
-                Label(
-                    text = "No notifications",
-                    modifier = Modifier.textColor(Grayscale.Foreground),
-                )
+                Label("No notifications", modifier = Modifier.textColor(Grayscale.Foreground))
             } else {
-                notifications.take(6).forEach { notification ->
-                    NotificationCard(notification)
-                }
+                notifications.take(6).forEach { notification -> NotificationCard(notification) }
                 if (notifications.size > 6) {
                     Label(
-                        text = "+${notifications.size - 6} more",
+                        "+${notifications.size - 6} more",
                         modifier = Modifier.textColor(Grayscale.Accent),
                     )
                 }
-                Button(
-                    text = "Clear all",
+                Label(
+                    "clear all",
                     modifier = Modifier
                         .textColor(Grayscale.Accent)
-                        .pointerCursor()
-                        .background(Grayscale.Background)
-                        .radius(8)
-                        .padding(16,8)
-                        .align(h = Align.Center),
-                ) { Services.notifications.clear() }
+                        .onClick { Services.notifications.clear() }
+                        .pointerCursor(),
+                )
             }
         }
     }
 }
 
-/** One notification card: icon, text, actions and a close button. */
+/** One notification card: icon, text, actions and a close button (fills the panel width). */
 @Composable
 private fun NotificationCard(notification: NotificationInfo) {
     val urgent = notification.urgency >= 2u.toUByte()
+
     Box(
         modifier = Modifier
-            .width(340)
+            .fillWidth()
             .padding(8)
-            .background(Grayscale.Background, radius = 8),
+            .background(Grayscale.Surface, radius = 8),
     ) {
         Row(spacing = 10) {
             NotificationIcon(notification)
 
-            Column(spacing = 3, modifier = Modifier.width(258)) {
+            Column(spacing = 3, modifier = Modifier.hExpand()) {
                 Label(
                     text = "${notification.app}  ${notification.summary}",
                     modifier = Modifier
                         .textColor(if (urgent) Grayscale.Accent else Grayscale.Foreground)
                         .fontWeight(600),
+                    ellipsize = true,
                 )
                 if (notification.body.isNotBlank()) {
                     Label(
                         text = notification.body,
                         modifier = Modifier.textColor(Grayscale.Accent),
+                        wrap = true,
                     )
                 }
                 if (notification.actions.isNotEmpty()) {
@@ -186,10 +172,8 @@ private fun NotificationCard(notification: NotificationInfo) {
 private fun NotificationIcon(notification: NotificationInfo) {
     val icon = notification.icon
     if (icon.isNotBlank() && icon.startsWith("/")) {
-        Image(icon, Modifier.radius(6).align(v = Align.Center), width = 42, height = 42)
+        Image(icon, Modifier.radius(6), width = 28, height = 28)
     } else {
         Icon(ICON_HAS_NEW, size = 18, color = Grayscale.Accent)
     }
 }
-
-private val ACTION_COLOR = Color.hex(0x9ECBFF)

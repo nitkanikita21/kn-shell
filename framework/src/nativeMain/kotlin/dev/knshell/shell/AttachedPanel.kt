@@ -32,6 +32,8 @@ import kn.gtk.gtk_box_remove
 import kn.gtk.gtk_gesture_click_new
 import kn.gtk.gtk_widget_add_controller
 import kn.gtk.gtk_widget_compute_bounds
+import kn.gtk.gtk_widget_get_first_child
+import kn.gtk.gtk_widget_get_parent
 import kn.gtk.gtk_widget_get_root
 import platform.posix.getenv
 
@@ -58,16 +60,21 @@ fun AttachedPanel(
     width: Int = 360,
     height: Int = 320,
     topOffset: Int = 0,
+    alignToParent: Boolean = false,
+    onOpenChange: ((Boolean) -> Unit)? = null,
     content: @Composable () -> Unit,
     anchor: @Composable () -> Unit,
 ) {
     ComposeNode<GtkAttachedPanelNode, GtkApplier>(
         factory = {
-            GtkAttachedPanelNode(width, height, topOffset).also { it.contentState.value = content }
+            GtkAttachedPanelNode(width, height, topOffset, alignToParent, onOpenChange).also {
+                it.contentState.value = content
+            }
         },
         update = {
             set(modifier) { value -> applyModifier(value) }
             set(content) { value -> contentState.value = value }
+            set(onOpenChange) { value -> openChange = value }
         },
     ) {
         anchor()
@@ -75,9 +82,11 @@ fun AttachedPanel(
 }
 
 internal class GtkAttachedPanelNode(
-    private val panelWidth: Int,
+    private val requestedWidth: Int,
     private val panelHeight: Int,
     private val topOffset: Int,
+    private val alignToParent: Boolean,
+    internal var openChange: ((Boolean) -> Unit)?,
 ) : GtkNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!) {
 
     internal val contentState = mutableStateOf<@Composable () -> Unit>({})
@@ -125,10 +134,16 @@ internal class GtkAttachedPanelNode(
     private fun onClick() {
         val current = panel
         if (current != null) {
+            val next = !current.isOpen
             current.toggle()
+            openChange?.invoke(next)
             return
         }
         open()
+    }
+
+    private fun notifyOpen(open: Boolean) {
+        openChange?.invoke(open)
     }
 
     private fun open() {
@@ -137,12 +152,12 @@ internal class GtkAttachedPanelNode(
             existing.show()
             return
         }
-        val x = panelX()
+        val (x, width) = panelGeometry()
         val handle = ShellRuntime.instance().createPanel(
             PanelWindowSpec(
                 x = x,
                 y = topOffset,
-                width = panelWidth,
+                width = width,
                 height = panelHeight,
             ),
         ) {
@@ -151,21 +166,40 @@ internal class GtkAttachedPanelNode(
         panel = handle
         handle.show()
         shownOnce = true
+        notifyOpen(true)
     }
 
-    /** Horizontal panel position: centred under the trigger, clamped to the output. */
-    private fun panelX(): Int {
-        val trigger = widget
-        val root = gtk_widget_get_root(trigger) ?: return 0
-        val screenWidth = displayWidth()
-        val triggerCenter = memScoped {
-            val bounds = alloc<graphene_rect_t>()
-            val ok = gtk_widget_compute_bounds(trigger, root.reinterpret(), bounds.ptr) != 0
-            if (!ok) return 0
-            (bounds.origin.x + bounds.size.width / 2f).toInt()
+    /**
+     * Panel horizontal geometry `(x, width)`: centred under the trigger, or (with
+     * [alignToParent]) matched to the anchor's parent container — that is what makes an
+     * island grow down into a panel of exactly the island's width.
+     */
+    private fun panelGeometry(): Pair<Int, Int> {
+        // The wrapped content is the node's first child; align to it, falling back to the
+        // parent when there is no child (e.g. the anchor composable rendered nothing).
+        val reference = if (alignToParent) {
+            gtk_widget_get_first_child(widget) ?: gtk_widget_get_parent(widget) ?: widget
+        } else {
+            widget
         }
-        val x = triggerCenter - panelWidth / 2
-        return if (screenWidth > 0) x.coerceIn(0, screenWidth - panelWidth) else x.coerceAtLeast(0)
+        val root = gtk_widget_get_root(reference) ?: return 0 to requestedWidth
+        val bounds = memScoped {
+            val rect = alloc<graphene_rect_t>()
+            val ok = gtk_widget_compute_bounds(reference.reinterpret(), root.reinterpret(), rect.ptr) != 0
+            if (!ok) return 0 to requestedWidth
+            Triple(rect.origin.x.toInt(), rect.size.width.toInt(), rect.origin.y.toInt())
+        }
+        val parentWidth = bounds.second.coerceAtLeast(1)
+        val width = if (requestedWidth > 0) requestedWidth else parentWidth
+        val center = bounds.first + parentWidth / 2
+        return if (alignToParent) {
+            // Align the panel's left edge with the container (island), not its centre.
+            bounds.first.coerceAtLeast(0) to width
+        } else {
+            val screen = displayWidth()
+            val x = center - width / 2
+            (if (screen > 0) x.coerceIn(0, screen - width) else x.coerceAtLeast(0)) to width
+        }
     }
 }
 
