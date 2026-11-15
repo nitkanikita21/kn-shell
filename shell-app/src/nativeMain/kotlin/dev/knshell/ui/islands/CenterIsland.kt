@@ -38,7 +38,8 @@ import platform.posix.getenv
  * `KN_ISLAND_DEBUG=1` starts expanded (development aid).
  */
 /** Inner content width of the centre island (island width minus its horizontal padding). */
-private const val COUNTENT_WIDTH = 217
+private const val ISLAND_WIDTH = 245
+private const val COUNTENT_WIDTH = ISLAND_WIDTH - 48
 
 @OptIn(ExperimentalForeignApi::class)
 @Composable
@@ -87,9 +88,14 @@ fun CenterIsland() {
         vertical = true,
         durationMs = AppShell.EXPAND_MS,
         mainSize = if (isExpanded) AppShell.EXPANDED_HEIGHT else AppShell.BAR_HEIGHT,
+        // Pin the island width: notification content must never widen the island (it used to
+        // grow to ~1900px because the cross size followed the content).
+        crossSize = ISLAND_WIDTH,
         modifier = island(bottomRight = 16, bottomLeft = 16)
             .onClick { isExpanded = !isExpanded }
-            .align(v = Align.Start),
+            // CenterBox gives its centre child all remaining width; Centre alignment keeps the
+            // island at its natural (pinned) width while the surface grows.
+            .align(h = Align.Center, v = Align.Start),
     ) {
         Row(16) {
             Notification()

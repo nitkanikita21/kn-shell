@@ -7,6 +7,7 @@ import androidx.compose.runtime.ComposeNode
 import dev.knshell.animation.Easing
 import dev.knshell.animation.easingCode
 import dev.knshell.core.attachAnimatedSizeLayout
+import dev.knshell.core.setAnimatedSizeCross
 import dev.knshell.core.setAnimatedSizeFixed
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -53,11 +54,12 @@ fun AnimatedBox(
     spacing: Int = 0,
     axis: AnimatedAxis = if (vertical) AnimatedAxis.Height else AnimatedAxis.Width,
     mainSize: Int? = null,
+    crossSize: Int? = null,
     content: @Composable () -> Unit,
 ) {
     ComposeNode<GtkAnimatedBoxNode, GtkApplier>(
         factory = {
-            GtkAnimatedBoxNode(durationMs, easing, spacing, vertical, axis, mainSize).plain()
+            GtkAnimatedBoxNode(durationMs, easing, spacing, vertical, axis, mainSize, crossSize).plain()
         },
         update = {
             set(modifier) { value -> applyModifier(value) }
@@ -66,6 +68,7 @@ fun AnimatedBox(
             set(vertical) { }
             set(axis) { }
             set(mainSize) { value -> applyMainSize(value) }
+            set(crossSize) { value -> applyCrossSize(value) }
         },
     ) {
         content()
@@ -98,6 +101,7 @@ fun AnimatedHeight(
     easing: Easing = Easing.OutCubic,
     spacing: Int = 0,
     mainSize: Int? = null,
+    crossSize: Int? = null,
     content: @Composable () -> Unit,
 ) = AnimatedBox(
     vertical = true,
@@ -107,6 +111,7 @@ fun AnimatedHeight(
     spacing = spacing,
     axis = AnimatedAxis.Height,
     mainSize = mainSize,
+    crossSize = crossSize,
     content = content,
 )
 
@@ -117,6 +122,7 @@ internal class GtkAnimatedBoxNode(
     vertical: Boolean,
     axis: AnimatedAxis,
     mainSize: Int?,
+    crossSize: Int?,
 ) : GtkNode(
     gtk_box_new(
         if (vertical) GtkOrientation.GTK_ORIENTATION_VERTICAL else GtkOrientation.GTK_ORIENTATION_HORIZONTAL,
@@ -133,6 +139,12 @@ internal class GtkAnimatedBoxNode(
             if (axis == AnimatedAxis.Height) 1u else 0u,
         )
         mainSize?.let { applyMainSize(it) }
+        crossSize?.let { applyCrossSize(it) }
+    }
+
+    /** `null` restores content-driven cross sizing; a value pins the cross axis. */
+    internal fun applyCrossSize(size: Int?) {
+        setAnimatedSizeCross(widget.rawValue.toLong().toULong(), size ?: -1)
     }
 
     /** `null` resumes content-driven sizing; a value animates to that explicit main size. */

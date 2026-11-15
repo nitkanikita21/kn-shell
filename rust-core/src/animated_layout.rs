@@ -6,6 +6,7 @@
 
 extern "C" {
     fn kn_animated_size_layout_set_fixed(widget: *mut core::ffi::c_void, fixed: i32);
+    fn kn_animated_size_layout_set_cross(widget: *mut core::ffi::c_void, fixed: i32);
 
     fn kn_attach_animated_size_layout(
         widget: *mut core::ffi::c_void,
@@ -47,4 +48,14 @@ pub fn set_animated_size_fixed(widget: u64, fixed: i32) {
         return;
     }
     unsafe { kn_animated_size_layout_set_fixed(widget as *mut core::ffi::c_void, fixed) }
+}
+
+/// Fixes the container's cross axis to an explicit size (`fixed >= 0`), or restores
+/// content-driven sizing (`fixed < 0`).
+#[uniffi::export]
+pub fn set_animated_size_cross(widget: u64, fixed: i32) {
+    if widget == 0 {
+        return;
+    }
+    unsafe { kn_animated_size_layout_set_cross(widget as *mut core::ffi::c_void, fixed) }
 }

@@ -37,6 +37,8 @@ struct _KnAnimatedSizeLayout {
     guint axis;
     /* >= 0: animate towards this explicit size; -1: follow the content size. */
     int fixed_size;
+    /* >= 0: explicit cross-axis size; -1: follow the children. */
+    int fixed_cross;
 
     gboolean initialized;
     gboolean have_probe;
@@ -100,6 +102,9 @@ static void kn_animated_size_layout_measure(GtkLayoutManager *manager,
         int value = self->current > 0.0 ? (int) lround(self->current) : 0;
         *minimum = value;
         *natural = value;
+    } else if (self->fixed_cross >= 0) {
+        *minimum = self->fixed_cross;
+        *natural = self->fixed_cross;
     } else {
         int cross = 0;
         for (GtkWidget *child = gtk_widget_get_first_child(widget);
@@ -164,6 +169,7 @@ static void kn_animated_size_layout_init(KnAnimatedSizeLayout *self) {
     self->spacing = 0;
     self->axis = KN_AXIS_WIDTH;
     self->fixed_size = -1;
+    self->fixed_cross = -1;
     self->initialized = FALSE;
     self->have_probe = FALSE;
     self->animating = FALSE;
@@ -238,6 +244,18 @@ static gboolean kn_tick(GtkWidget *widget, GdkFrameClock *clock, gpointer user_d
 
 static void kn_tick_destroy(gpointer user_data) {
     g_object_unref(user_data);
+}
+
+/* Sets an explicit cross-axis size (>= 0 px), or -1 for content-driven. */
+void kn_animated_size_layout_set_cross(GtkWidget *widget, int fixed) {
+    if (!GTK_IS_WIDGET(widget)) return;
+    GtkLayoutManager *manager = gtk_widget_get_layout_manager(widget);
+    if (manager == NULL) return;
+    if (!G_TYPE_CHECK_INSTANCE_TYPE(manager, kn_animated_size_layout_get_type())) return;
+    KnAnimatedSizeLayout *self = (KnAnimatedSizeLayout *) manager;
+    if (self->fixed_cross == fixed) return;
+    self->fixed_cross = fixed;
+    gtk_widget_queue_resize(widget);
 }
 
 /* Sets an explicit animated main-axis size (>= 0 px), or -1 for content-driven. */
