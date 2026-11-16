@@ -93,8 +93,6 @@ Benchmark: `scripts/anim-bench.sh` (`--help`).
 | `network` | `NetworkState` (rx/tx rates, cumulative totals, interface, type, SSID, signal, IP) | — |
 | `notifications` | `state: List<NotificationInfo>` (icon + actions included), `doNotDisturb`, `isServer` | `toggleDoNotDisturb()` (server-side suppression), `dismiss(id)`, `invokeAction(id, action)`, `clear()` |
 
-`ShellServices` is a deprecated compatibility shim over `Services`.
-
 ### `dev.knshell.animation`
 
 `AnimationSpec` (`Tween`, `Spring`, `Snap`) for container sizes; `spring`/`animateFloatAsState`,

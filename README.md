@@ -330,7 +330,7 @@ committed.
 * Rust → Kotlin callbacks run on Rust-owned threads. Kotlin/Native's new memory model makes the
   cross-thread call safe; callbacks only write to `MutableStateFlow`/Compose state, never touch GTK.
 * GTK calls happen exclusively on the GLib main thread (recomposer + applier are dispatched there).
-* Kotlin keeps every callback object in `ShellServices.retained`, and every GTK node keeps its
+* Kotlin keeps every callback object in each service's own `retained` list, and every GTK node keeps its
   `StableRef` (`selfRef`) for the lifetime of the widget — otherwise the GC frees the native handle
   and GTK would call a dangling pointer.
 

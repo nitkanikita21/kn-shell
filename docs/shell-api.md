@@ -139,9 +139,7 @@ swaync holds it and refuses replacement), the service degrades to a passive obse
 only parses `Notify` calls for history. Expiry timeouts are not implemented yet.
 
 `Services.startAll()` subscribes everything; `Shell.run` calls it, and lazy access already
-starts the services a module touches. The old `ShellServices` facade still exists as a
-deprecated shim (`ShellServices.media` → `Services.media.state`) so existing code keeps
-compiling, with `Shell.services` now referring to `Services`.
+starts the services a module touches. `Shell.services` refers to `Services`.
 
 ## Actions
 
