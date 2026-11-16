@@ -14,6 +14,9 @@
 mod animated_layout;
 mod audio;
 mod battery;
+// Public extension host: external crates (e.g. palette-core under its
+// `custom-host` feature) implement `CustomExtension` and call `register_extension`.
+pub mod custom;
 mod hyprland;
 mod network;
 mod notifications;

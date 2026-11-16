@@ -10,6 +10,9 @@ build/
 .tools/
 .konan/
 .cargo-home/
+# Secondary cargo home created by the bootstrap (.cargo-home is the primary); keep
+# both out or a stray `git add -A` would stage ~12k registry files.
+.cargo-local/
 
 # Rust
 target/

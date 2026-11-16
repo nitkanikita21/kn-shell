@@ -3,8 +3,6 @@
 package dev.knshell.compose
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MonotonicFrameClock
-import androidx.compose.runtime.snapshots.Snapshot
 import dev.knshell.shell.BarAnchor
 import dev.knshell.shell.BarWindowSpec
 import dev.knshell.shell.Margins
@@ -15,14 +13,10 @@ import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.asStableRef
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
-import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Runnable
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.CoroutineContext
-import kotlin.time.TimeSource
 import kn.gtk.g_idle_add
-import kn.gtk.g_timeout_add
 import kn.gtk.gdk_display_get_default
 
 /**
@@ -44,64 +38,6 @@ class GLibDispatcher : CoroutineDispatcher() {
             }.reinterpret(),
             ref.asCPointer(),
         )
-    }
-}
-
-/**
- * Compose frame clock driven by a 16 ms GLib timeout (~60 fps).
- *
- * Compose Runtime asks for a frame via `withFrameNanos`; we publish one tick per
- * timeout, so animations and recomposition advance in lock-step with the GTK main loop.
- */
-class GLibFrameClock : MonotonicFrameClock {
-    private val start = TimeSource.Monotonic.markNow()
-
-    // Every suspended `withFrameNanos` caller is registered here and resumed on each
-    // tick. This is the same broadcast semantics Compose's BroadcastFrameClock has:
-    // multiple animations must all receive the same frame.
-    private val waiters = mutableListOf<CancellableContinuation<Long>>()
-
-    // Retained: the GLib timeout keeps the raw pointer as user_data.
-    private val tickerRef by lazy { StableRef.create(this) }
-
-    fun startTicker() {
-        val ref = tickerRef
-        g_timeout_add(
-            16u,
-            staticCFunction { data: COpaquePointer? ->
-                data?.asStableRef<GLibFrameClock>()?.get()?.tick()
-                1 // G_SOURCE_CONTINUE
-            }.reinterpret(),
-            ref.asCPointer(),
-        )
-    }
-
-    private fun tick() {
-        // Compose observes state changes through the snapshot apply notifications. On
-        // Android/Compose Desktop the platform calls this; in this GTK bridge nothing
-        // else does, and without it the Recomposer never learns about writes made from
-        // coroutines (Rust service callbacks, clocks, animations) — the UI freezes after
-        // the initial composition.
-        Snapshot.sendApplyNotifications()
-
-        val nanos = start.elapsedNow().inWholeNanoseconds
-        // Opt-in size behaviours tween on the node level; they do not register frame
-        // waiters, so tick them regardless of whether Compose animations are running.
-        SizeBehaviorRegistry.tick(nanos)
-        if (waiters.isEmpty()) return
-        val pending = waiters.toList()
-        waiters.clear()
-        pending.forEach { waiter ->
-            waiter.resume(nanos) { }
-        }
-    }
-
-    override suspend fun <R> withFrameNanos(onFrame: (frameTimeNanos: Long) -> R): R {
-        val nanos = suspendCancellableCoroutine<Long> { continuation ->
-            waiters += continuation
-            continuation.invokeOnCancellation { waiters.remove(continuation) }
-        }
-        return onFrame(nanos)
     }
 }
 

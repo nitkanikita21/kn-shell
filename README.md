@@ -31,7 +31,7 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 │  │ mutableStateOf │      │ Slider/Canvas    │    │ GtkLabel      ││
 │  │ spring anim.   │      │                  │    │ GtkButton     ││
 │  └───────▲────────┘      └──────────────────┘    │ GtkDrawingArea││
-│          │ GLibFrameClock (16 ms, broadcast)     │ GtkScale      ││
+│          │ GtkFrameClock (vsync, lazy)          │ GtkScale      ││
 │          │ GLibDispatcher (g_idle_add)           └───────▲───────┘│
 │  gtk4-layer-shell: TOP layer, anchors top/left/right, rgba CSS    │
 └──────────────────────────────────────────────────────────────────┘
@@ -269,11 +269,15 @@ waybar to see the bar at the very top edge.
 
 1. `GLibDispatcher` — a `CoroutineDispatcher` that posts work with `g_idle_add`, so recomposition runs
    on the GTK main thread.
-2. `GLibFrameClock` — a `MonotonicFrameClock` that broadcasts one frame to **all** suspended
-   `withFrameNanos` callers every 16 ms via `g_timeout_add`. Every tick also calls
-   `Snapshot.sendApplyNotifications()`: Compose observes state writes through snapshot apply
-   notifications, which usually the platform UI loop sends. Without it the Recomposer freezes
-   after the initial composition (Rust service updates, clocks and animations stop reaching the UI).
+2. `GtkFrameClock` — a `MonotonicFrameClock` backed by GTK's `GdkFrameClock`
+   (`gtk_widget_add_tick_callback` on the window root). It broadcasts one frame to **all**
+   suspended `withFrameNanos` callers; the tick callback is installed only while a frame is
+   actually needed (an animation waiter or `SizeAnimationRegistry.hasWork`), so an idle shell
+   requests **no frames at all**. Frame time comes from `gdk_frame_clock_get_frame_time()`, so
+   Compose animations and container sizes share the monitor's vsync. `Snapshot.sendApplyNotifications()`
+   is no longer polled: `Snapshot.registerApplyObserver` (plus a global-write observer) coalesces
+   state writes into one `g_idle_add` that notifies the Recomposer. The old `g_timeout_add(16)`
+   (62.5 wakeups/s) is gone.
 3. `GtkApplier` — an `AbstractApplier<GtkNode>` implementing bottom-up insertion, which maps
    Compose nodes onto `GtkBox` children.
 4. Composable state (clock text, volume, MPRIS title, animated radii) is read **during composition**,
@@ -296,6 +300,12 @@ waybar to see the bar at the very top edge.
    `AnimatedContent` and `spring()` from the official artifact are unavailable. `framework` therefore
    ships a small spring implementation on top of `withFrameNanos`
    (`framework/.../animation/Spring.kt`), preserving the same semantics.
+   For container sizes `framework` also ships its own node-level engine
+   (`AnimationSpec`/`SizeTween`/`SizeAnimationRegistry`) driven by the GTK frame clock:
+   `animatedWidth`/`animatedHeight`/`animatedSize` are `Modifier` extensions on the container
+   (no dedicated component), the value (spec, retarget, interruption) is owned by Compose, and a passive C `GtkLayoutManager`
+   only applies it and reports the content's natural size. The old `Modifier.widthBehavior()`
+   family and the 16 ms `g_timeout_add` clock were removed in the same change.
 3. **Audio uses `pactl` instead of `pipewire-rs`/libpulse bindings.**
    PipeWire's `pipewire-pulse` server speaks the PulseAudio protocol, so `pactl` observes and sets
    the default sink. This avoids ~300 lines of unsafe libpulse mainloop integration for the MVP;

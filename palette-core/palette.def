@@ -1,0 +1,14 @@
+# Kotlin/Native cinterop definition for the palette-core C ABI.
+# The C contract itself lives in `palette_core.h` (hand-written, kept in sync with
+# `src/ffi.rs`); this file only tells cinterop how to bind it.
+#
+# The produced klib is `dev.knshell.palette.*` and is consumed by `:shell-app`.
+# The native static library built by Gobley (`libpalette_core.a`) is linked by
+# `shell-app` via the cinterop `linkerOpts` (see shell-app/build.gradle.kts).
+
+headers = palette_core.h
+headerFilter = palette_core.h
+package = dev.knshell.palette
+
+# Keep the generated bindings self-contained: only the palette_core.h surface is pulled
+# in, not the transitive system/POSIX headers it includes.

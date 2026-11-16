@@ -113,66 +113,47 @@ sliding between fixed slots: `x = lerp(oldIndex, newIndex, t)`).
 Tip: colours can also be left to GTK's `transitionMs`; use the shared `t` for geometry and
 let the CSS transition handle colour, which avoids one CSS update per frame.
 
-### Opt-in size behavior (`Behavior on width`)
+### Animated size containers (Compose-owned)
 
-Attach `widthBehavior(...)` (or `heightBehavior` / `sizeBehavior`) to the widget you want,
-exactly like QML `Behavior on width`:
+The animated value is owned by Compose (`AnimationSpec`, retarget from the current value,
+interruption-safe), the C layout manager only applies it and reports the natural content size,
+and the single GTK frame clock drives everything — see `docs/framework-api.md` → Animated size
+and `docs/tasks/compose-owned-animated-size.md`.
 
 ```kotlin
-// explicit target
-Box(
-    Modifier
-        .widthBehavior(durationMs = 180, easing = Easing.OutCubic)
-        .size(if (active) 34 else 24, 24),
-)
-
-// content-driven width — no size() needed, works like QML too
+// content-driven width — grows AND shrinks smoothly (a size_request minimum cannot do this).
+// `animatedWidth` is a Modifier on the Row itself; the styled surface IS the container.
 Row(
-    Modifier
-        .widthBehavior()
-        .padding(horizontal = 14),
-) {
-    CavaEqualizer(width = 80, height = 20)
-    Label(title)
-}
-```
-
-Two modes:
-
-* **explicit** — a `size()`/`width()`/`height()` target changes and is tweened;
-* **auto** — no explicit size in the chain: the animator measures the natural size
-  (`gtk_widget_get_preferred_size` with the size request temporarily lifted, so the
-  measurement is not clamped) and tweens to it. It probes every 6 frames when idle and
-  every frame while tweening.
-
-The tween runs on the widget node (plain GTK calls, no Compose recomposition). The first
-application snaps to the initial value; removing the widget cancels its tween. Colours are
-better handled by `transition(ms)` / `transitionMs` (native GTK transitions).
-
-**GTK limitation of the auto mode.** `gtk_widget_set_size_request` is a *minimum*, so the
-Modifier can animate shrinking (request above the natural width) but **not growth**: when
-content grows, its natural width wins and the widget jumps. For smooth animation in both
-directions use the container, which disables natural-size propagation:
-
-```kotlin
-AnimatedWidth(
-    durationMs = 200,
-    modifier = Modifier.radius(8).background(Grayscale.Surface).padding(horizontal = 14),
+    spacing = 10,
+    modifier = Modifier
+        .radius(8)
+        .background(Grayscale.Surface)
+        .padding(horizontal = 14)
+        .animatedWidth(spec = Tween(200, Easing.OutCubic)),
 ) {
     if (playing) CavaEqualizer(width = 80, height = 20) else Icon("\uF04C")
     Label(title)
 }
+
+// explicit size (workspace pill): the styled surface IS the container
+Row(
+    modifier = Modifier
+        .radius(8)
+        .background(Grayscale.Accent)
+        .animatedWidth(target = if (active) null else 24, minMainSize = 24, crossSize = 24),
+) {
+    Label(text)
+}
 ```
 
-`AnimatedBox(vertical = false|true, spacing = …, axis = AnimatedAxis.Width|Height)` is the
-general form: it is a full Row/Column container (orientation, spacing, any number of
-children) whose main axis animates. `AnimatedWidth { … }` and `AnimatedHeight { … }` are
-the short aliases.
+`animatedWidth` / `animatedHeight` / `animatedSize(axis, …)` are `Modifier` extensions on the
+container (`Row`/`Column`). There is no dedicated component — `AnimatedBox`/`AnimatedWidth` were
+removed.
 
-It is backed by a native **`GtkLayoutManager` implemented in C**
-(`rust-core/src/kn_animated_size_layout.c`): `measure()` reports the animated width as both
+It is backed by a passive native **`GtkLayoutManager` implemented in C**
+(`rust-core/src/kn_animated_size_layout.c`): `measure()` reports the applied value as both
 minimum and natural, so the parent allocates exactly that value — growth animates just like
-shrinking, which a `size_request` cannot express. The child keeps its natural size and the
+shrinking, which a `size_request` cannot express. The children keep their natural size and the
 container clips it (`overflow: hidden`), so content is revealed instead of being reflowed on
 every frame. The container is the styled surface (background/radius/padding go on it).
 
@@ -274,10 +255,10 @@ Shell.run {
 }
 ```
 
-Inside the island, `AnimatedBox(vertical = true, mainSize = if (open) 400 else 40,
-crossSize = 245)` animates its own height and clips the notification centre; the window is
-resized to match (`WindowHandle.resize(height = …)`). No `wl_surface` input region is needed:
-everything outside the island's surface belongs to other clients.
+Inside the island, the `Column` carries `animatedHeight(target = if (open) 400 else 40,
+crossSize = 245)` (a Modifier) so it animates its own height and clips the notification centre;
+the window is resized to match (`WindowHandle.resize(height = …)`). No `wl_surface` input region
+is needed: everything outside the island's surface belongs to other clients.
 
 ### Notification card
 

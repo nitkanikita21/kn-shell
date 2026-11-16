@@ -7,7 +7,7 @@ license = "MIT"
 [lib]
 name = "kn_shell_core"
 # Gobley links the static library produced by Cargo into the Kotlin/Native binary.
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 # Must stay in sync with the UniFFI version embedded in Gobley 0.3.x.
@@ -23,3 +23,24 @@ dbus = "0.9.12"
 
 [build-dependencies]
 cc = "1"
+
+[features]
+# Registers a built-in demo extension so the custom-host loop is observable
+# end-to-end without writing any Rust. To enable, add the cargo feature
+# `demo-extensions` (e.g. `cargo build --features demo-extensions`, or make it
+# a default feature temporarily); this build does not expose a Gradle property
+# for passing cargo features.
+demo-extensions = []
+
+# Dev loop: the debug staticlib is linked into the Kotlin/Native executable and
+# then re-linked every time any Kotlin file changes. A 138 MB DWARF-laden archive
+# makes the final link slow and bloats shell-app/build, so for debug we drop
+# debug info, parallelise codegen and skip the inline table. Release keeps full
+# debug info + thin LTO (only used by `./scripts/run.sh`).
+[profile.dev]
+debug = false
+incremental = true
+codegen-units = 256
+
+[profile.release]
+lto = "thin"

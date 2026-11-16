@@ -283,7 +283,7 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `selection(color, background)` | text-selection colours inside a label |
 | `slider(troughColor, troughHeight, highlightColor, knobColor, knobSize)` | typed styling of `GtkScale` trough/highlight/knob |
 | `size(w, h)` / `width(w)` / `height(h)` | `gtk_widget_set_size_request` |
-| `widthBehavior(ms, easing)` / `heightBehavior(...)` / `sizeBehavior(...)` | opt-in QML-like Behavior: tweens explicit `size()` changes **and** auto (content-driven) size when the chain has no explicit size |
+| `animatedWidth` / `animatedHeight` / `animatedSize` (`target`, `minMainSize`, `crossSize`, `spacing`) | Compose-owned size animation as a `Modifier` on the container (see `docs/framework-api.md` → Animated size) |
 | `align(h = …, v = …)` / `align(Align.…)` | unified alignment on one or both axes |
 | `hExpand()` / `vExpand()` / `expand()` | grow + fill on one axis / both |
 | `fillWidth()` / `fillHeight()` / `fillAll()` | shorthand for expand + fill |

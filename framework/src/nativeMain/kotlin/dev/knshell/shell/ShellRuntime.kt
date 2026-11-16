@@ -8,7 +8,7 @@ import androidx.compose.runtime.Recomposer
 import dev.knshell.compose.Color
 import dev.knshell.compose.DEFAULT_CSS
 import dev.knshell.compose.GLibDispatcher
-import dev.knshell.compose.GLibFrameClock
+import dev.knshell.compose.GtkFrameClock
 import dev.knshell.compose.GtkApplier
 import dev.knshell.compose.GtkBoxNode
 import dev.knshell.compose.GtkNode
@@ -73,6 +73,7 @@ import kn.gtk.gtk_widget_set_size_request
 import kn.gtk.gtk_widget_set_margin_start
 import kn.gtk.gtk_widget_set_margin_top
 import kn.gtk.gtk_window_close
+import kn.gtk.gtk_window_get_child
 import kn.gtk.gtk_window_new
 import kn.gtk.gtk_window_present
 import kn.gtk.gtk_window_set_child
@@ -84,7 +85,7 @@ import kn.gtk.gtk_window_set_title
  * The single runtime shared by every window of the shell.
  *
  * Owns exactly one GTK initialisation, one GLib main loop, one [GLibDispatcher], one
- * [GLibFrameClock], one coroutine scope and one [Recomposer]. Every window mounts its
+ * [GtkFrameClock], one coroutine scope and one [Recomposer]. Every window mounts its
  * own [Composition] but they all report to the same recomposer, so state written by a
  * coroutine (or by a Rust service callback) recomposes all windows on the same frame.
  */
@@ -93,7 +94,7 @@ internal class ShellRuntime private constructor() {
     private val loop: CPointer<GMainLoop> = g_main_loop_new(null, 0)!!
 
     private val dispatcher = GLibDispatcher()
-    private val frameClock = GLibFrameClock()
+    private val frameClock = GtkFrameClock()
 
     // The frame clock must be part of the *calling* coroutine context: Recomposer's
     // recompositionRunner() reads `coroutineContext.monotonicFrameClock` from it.
@@ -131,8 +132,14 @@ internal class ShellRuntime private constructor() {
         } else {
             println("[shell-runtime] no default GdkDisplay — kn-plain reset not installed")
         }
-        frameClock.startTicker()
-        scope.launch { recomposer.runRecomposeAndApplyChanges() }
+        frameClock.start()
+        scope.launch {
+            try {
+                recomposer.runRecomposeAndApplyChanges()
+            } catch (e: Throwable) {
+                println("[shell-runtime] Recomposer FAILED: ${e.message}")
+            }
+        }
         println("[shell-runtime] GTK initialised — one GLib loop, one dispatcher, one Recomposer")
     }
 
@@ -214,6 +221,10 @@ internal class ShellRuntime private constructor() {
 
         composition.setContent(content)
 
+        // Lazy vsync: the frame clock installs its tick callback on the root widget as soon
+        // as the first waiter or size animation needs frames; unregister on close.
+        frameClock.registerRoot(rootWidget)
+
         g_signal_connect_data(
             instance = window,
             detailed_signal = "close-request",
@@ -271,6 +282,8 @@ internal class ShellRuntime private constructor() {
     private fun onWindowClosed(record: RuntimeWindow) {
         if (record.closed) return
         record.closed = true
+        val root = gtk_window_get_child(record.window)
+        if (root != null) frameClock.unregisterRoot(root.reinterpret())
         record.composition.dispose()
         windows.remove(record)
         println(

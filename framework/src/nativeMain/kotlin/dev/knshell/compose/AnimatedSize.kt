@@ -2,168 +2,136 @@
 
 package dev.knshell.compose
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ComposeNode
-import dev.knshell.animation.Easing
-import dev.knshell.animation.easingCode
-import dev.knshell.core.attachAnimatedSizeLayout
-import dev.knshell.core.setAnimatedSizeCross
-import dev.knshell.core.setAnimatedSizeFixed
-import kotlinx.cinterop.CPointer
+import dev.knshell.animation.AnimationSpec
+import dev.knshell.animation.applyAnimatedSizeModifier
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.rawValue
-import kotlinx.cinterop.reinterpret
-import kotlinx.cinterop.toLong
-import kn.gtk.GtkBox
-import kn.gtk.GtkOrientation
-import kn.gtk.GtkWidget
-import kn.gtk.gtk_box_append
-import kn.gtk.gtk_box_insert_child_after
-import kn.gtk.gtk_box_new
-import kn.gtk.gtk_box_remove
 
-/** Which axis of [AnimatedBox] is animated. */
+/** Which axis of an `animatedSize` modifier is animated. */
 enum class AnimatedAxis { Width, Height }
 
 /**
- * Full Row/Column-like container whose main axis animates on content changes.
+ * Modifier element that tweens the **main-axis size** of the target container widget in
+ * Compose-owned time, with no dedicated component — `animatedWidth`/`animatedHeight`/
+ * `animatedSize` attach this element to a `Row`/`Column`.
  *
- * Backed by a native `GtkLayoutManager` (C, `rust-core/src/kn_animated_size_layout.c`):
- * `measure()` reports the animated size as both minimum and natural, so the parent allocates
- * exactly that value — growth animates just like shrinking, which a `size_request` cannot
- * express. Children keep their natural size along the main axis and the container clips
- * them, so content is revealed instead of being reflowed every frame.
+ * The element carries no animation state itself — it is a stateless descriptor, exactly like
+ * every other [ModifierElement]. The real tween lives in [dev.knshell.animation], keyed by the
+ * target widget's pointer (see [applyAnimatedSizeModifier]); `applyModifiers` get-or-creates
+ * that animator and pushes the latest parameters on every modifier change.
+ *
+ * ## Semantics
+ *
+ * - **Content-driven target** = the natural size of the children measured with
+ *   `for_size = -1` (the C helper sums them plus the container's own spacing). It does **not**
+ *   depend on the currently applied animated value, so there is no feedback loop: children are
+ *   laid out at their natural size and the container clips (`GTK_OVERFLOW_HIDDEN`). Content is
+ *   *revealed*, never reflowed per frame.
+ * - **Clip, not reflow.** An animating container does not change its children's layout; only
+ *   the visible window into it grows/shrinks.
+ * - **Retarget from the current value.** Changing [spec] or [target] while an animation is
+ *   running restarts the animation from wherever it is right now — never from the old start
+ *   value, so there is no jump.
+ * - **Default is a monotonic [AnimationSpec.Tween].** Overshoot of a container would clip the
+ *   content for a few frames, so [AnimationSpec.Spring] is opt-in and meant for leaves and
+ *   indicators.
+ * - **Explicit [target]** overrides the content-driven target; `null` returns to
+ *   content-driven. The transition is animated from the current value (see `setAnimatedSizeFixed`).
+ * - **Rounding happens only in C**, when the native layout manager allocates.
+ *
+ * [vertical] and [spacing] describe the host container: the animated layout manager is attached
+ * to a **Row** (`vertical = false`) or **Column** (`vertical = true`). Spacing is read from the
+ * container itself, so it can stay `0` here.
+ *
+ * @param target explicit main-axis target in px, or `null` for content-driven.
+ * @param spec how the value travels to the target; see [AnimationSpec].
+ * @param minMainSize a floor on the main-axis size in px. When content-driven ([target] is
+ *   `null`) or when the content is narrower than this, the container is at least this wide (so
+ *   e.g. a workspace chip never collapses below its neighbours); when the content is wider it
+ *   still grows to fit, so wide labels are never clipped.
+ * @param crossSize explicit cross-axis size in px, or `null` for content-driven.
+ * @param vertical `false` for a Row (animate width), `true` for a Column (animate height).
+ * @param spacing gap between children; the container's own spacing is used automatically, so
+ *   this is only a fallback for non-box hosts.
+ */
+internal data class AnimatedSizeElement(
+    val target: Int? = null,
+    val spec: AnimationSpec = AnimationSpec.Tween(),
+    val minMainSize: Int? = null,
+    val crossSize: Int? = null,
+    val vertical: Boolean = false,
+    val spacing: Int = 0,
+) : ModifierElement
+
+/**
+ * Animates the **width** of the receiver (a Row / container) to follow its content, or to an
+ * explicit [target].
  *
  * ```kotlin
- * AnimatedBox(vertical = false, spacing = 8, modifier = Modifier.padding(horizontal = 14)) {
- *     if (playing) CavaEqualizer(width = 80, height = 20) else Icon("\uF04C")
- *     Label(title)
- * }
+ * Row(spacing = 10) {
+ *     Icon("\uF43A")
+ *     Label(now.format(format))
+ * }.animatedWidth(spec = Tween(200, Easing.OutCubic))
  * ```
  *
- * [durationMs], [easing], [spacing] and [vertical] are applied when the widget is created
- * (the layout manager is attached once); changing them later does not retarget the running
- * animation.
+ * Only meaningful on a **container** widget (Row/Column): the native layout manager measures the
+ * children, so a leaf (Label/Icon) would collapse to zero when content-driven.
  */
-@Composable
-fun AnimatedBox(
-    vertical: Boolean = false,
-    modifier: Modifier = Modifier,
-    durationMs: Int = 180,
-    easing: Easing = Easing.OutCubic,
-    spacing: Int = 0,
-    axis: AnimatedAxis = if (vertical) AnimatedAxis.Height else AnimatedAxis.Width,
-    mainSize: Int? = null,
+fun Modifier.animatedWidth(
+    target: Int? = null,
+    spec: AnimationSpec = AnimationSpec.Tween(),
+    minMainSize: Int? = null,
     crossSize: Int? = null,
-    content: @Composable () -> Unit,
-) {
-    ComposeNode<GtkAnimatedBoxNode, GtkApplier>(
-        factory = {
-            GtkAnimatedBoxNode(durationMs, easing, spacing, vertical, axis, mainSize, crossSize).plain()
-        },
-        update = {
-            set(modifier) { value -> applyModifier(value) }
-            // spacing/vertical/axis are baked into the native layout manager at creation.
-            set(spacing) { }
-            set(vertical) { }
-            set(axis) { }
-            set(mainSize) { value -> applyMainSize(value) }
-            set(crossSize) { value -> applyCrossSize(value) }
-        },
-    ) {
-        content()
-    }
-}
-
-/** Row whose width animates with its content. */
-@Composable
-fun AnimatedWidth(
-    modifier: Modifier = Modifier,
-    durationMs: Int = 180,
-    easing: Easing = Easing.OutCubic,
     spacing: Int = 0,
-    content: @Composable () -> Unit,
-) = AnimatedBox(
-    vertical = false,
-    modifier = modifier,
-    durationMs = durationMs,
-    easing = easing,
-    spacing = spacing,
-    axis = AnimatedAxis.Width,
-    content = content,
+): Modifier = with(
+    AnimatedSizeElement(
+        target = target,
+        spec = spec,
+        minMainSize = minMainSize,
+        crossSize = crossSize,
+        vertical = false,
+        spacing = spacing,
+    ),
 )
 
-/** Column whose height animates with its content. */
-@Composable
-fun AnimatedHeight(
-    modifier: Modifier = Modifier,
-    durationMs: Int = 180,
-    easing: Easing = Easing.OutCubic,
-    spacing: Int = 0,
-    mainSize: Int? = null,
+/**
+ * Animates the **height** of the receiver (a Column / container) to follow its content, or to
+ * an explicit [target]. See [animatedWidth] for the semantics.
+ */
+fun Modifier.animatedHeight(
+    target: Int? = null,
+    spec: AnimationSpec = AnimationSpec.Tween(),
+    minMainSize: Int? = null,
     crossSize: Int? = null,
-    content: @Composable () -> Unit,
-) = AnimatedBox(
-    vertical = true,
-    modifier = modifier,
-    durationMs = durationMs,
-    easing = easing,
-    spacing = spacing,
-    axis = AnimatedAxis.Height,
-    mainSize = mainSize,
-    crossSize = crossSize,
-    content = content,
+    spacing: Int = 0,
+): Modifier = with(
+    AnimatedSizeElement(
+        target = target,
+        spec = spec,
+        minMainSize = minMainSize,
+        crossSize = crossSize,
+        vertical = true,
+        spacing = spacing,
+    ),
 )
 
-internal class GtkAnimatedBoxNode(
-    durationMs: Int,
-    easing: Easing,
-    spacing: Int,
-    vertical: Boolean,
+/**
+ * Animates the size along [axis] of the receiver (a container) to follow its content, or to an
+ * explicit [target]. [animatedWidth] / [animatedHeight] read better at most call sites.
+ */
+fun Modifier.animatedSize(
     axis: AnimatedAxis,
-    mainSize: Int?,
-    crossSize: Int?,
-) : GtkNode(
-    gtk_box_new(
-        if (vertical) GtkOrientation.GTK_ORIENTATION_VERTICAL else GtkOrientation.GTK_ORIENTATION_HORIZONTAL,
-        spacing,
-    )!!,
-) {
-
-    init {
-        attachAnimatedSizeLayout(
-            widget.rawValue.toLong().toULong(),
-            durationMs.coerceAtLeast(16).toUInt(),
-            easing.easingCode,
-            spacing.coerceAtLeast(0).toUInt(),
-            if (axis == AnimatedAxis.Height) 1u else 0u,
-        )
-        mainSize?.let { applyMainSize(it) }
-        crossSize?.let { applyCrossSize(it) }
-    }
-
-    /** `null` restores content-driven cross sizing; a value pins the cross axis. */
-    internal fun applyCrossSize(size: Int?) {
-        setAnimatedSizeCross(widget.rawValue.toLong().toULong(), size ?: -1)
-    }
-
-    /** `null` resumes content-driven sizing; a value animates to that explicit main size. */
-    internal fun applyMainSize(size: Int?) {
-        setAnimatedSizeFixed(widget.rawValue.toLong().toULong(), size ?: -1)
-    }
-
-    override fun attachChild(child: CPointer<GtkWidget>) {
-        gtk_box_append(widget.reinterpret<GtkBox>(), child)
-    }
-
-    /** Order-aware insert: a conditional child (equalizer <-> icon) must keep its slot. */
-    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
-        val box = widget.reinterpret<GtkBox>()
-        val previous = children.getOrNull(index - 1)?.widget
-        gtk_box_insert_child_after(box, child, previous)
-    }
-
-    override fun detachChild(child: CPointer<GtkWidget>) {
-        gtk_box_remove(widget.reinterpret<GtkBox>(), child)
-    }
-}
+    target: Int? = null,
+    spec: AnimationSpec = AnimationSpec.Tween(),
+    minMainSize: Int? = null,
+    crossSize: Int? = null,
+    spacing: Int = 0,
+): Modifier = with(
+    AnimatedSizeElement(
+        target = target,
+        spec = spec,
+        minMainSize = minMainSize,
+        crossSize = crossSize,
+        vertical = axis == AnimatedAxis.Height,
+        spacing = spacing,
+    ),
+)

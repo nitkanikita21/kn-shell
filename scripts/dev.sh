@@ -48,13 +48,6 @@ cleanup() {
 }
 trap cleanup INT TERM EXIT
 
-needs_rust_clean() {
-    [[ ! -x "$BIN" ]] && return 0
-    find rust-core/src -name '*.rs' -newer "$BIN" | grep -q . && return 0
-    [[ rust-core/Cargo.toml -nt "$BIN" ]] && return 0
-    return 1
-}
-
 stop_app() {
     [[ -z "$CHILD_PID" ]] && return
     kill -TERM -- "-$CHILD_PID" 2>/dev/null || kill -TERM "$CHILD_PID" 2>/dev/null
@@ -82,12 +75,12 @@ start_app() {
 }
 
 build() {
-    if needs_rust_clean; then
-        # Incremental links were observed to reuse a stale Rust static library; a clean
-        # rebuild of these directories guarantees the binary matches the sources.
-        echo "[dev] Rust changed (or binary missing) — cleaning native build dirs"
-        rm -rf rust-core/build shell-app/build
-    fi
+    # Cargo is incremental and Gradle already declares rust-core's `src/` + Cargo.{toml,lock}
+    # as inputs (see rust-core/build.gradle.kts), so an edited .rs file invalidates the
+    # cargo staticlib and the cinterop/link tasks correctly — no manual clean needed.
+    # The old `rm -rf rust-core/build shell-app/build` wiped the Kotlin/Native
+    # incremental cache on *every* Rust change, forcing a full recompile of the Kotlin
+    # modules and turning the dev loop into a ~minutes-long rebuild. We no longer do that.
     ./gradlew :shell-app:linkDebugExecutableLinuxX64 --console=plain
 }
 

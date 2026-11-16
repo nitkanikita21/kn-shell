@@ -26,6 +26,7 @@ import kn.gtk.gtk_widget_set_vexpand
 import kn.gtk.GTK_ALIGN_CENTER
 import kn.gtk.GtkOverflow
 import kn.gtk.GTK_ALIGN_FILL
+import dev.knshell.animation.applyAnimatedSizeModifier
 
 /** A simple ARGB color with a CSS representation. */
 data class Color(val r: Int, val g: Int, val b: Int, val alpha: Float = 1f) {
@@ -421,9 +422,6 @@ private object InlineStyleId {
  * exactly the CSS its modifiers describe, without touching a global stylesheet.
  */
 internal class InlineStyle(private val widget: CPointer<GtkWidget>) {
-    /** Opt-in size tween used by [Modifier.behavior]; see [SizeAnimator]. */
-    internal val sizeAnimator = SizeAnimator()
-
 
     /** Click/hover/cursor wiring (see Interaction.kt). */
     internal val interaction = InteractionState(widget)
@@ -484,7 +482,6 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var hexpand: Boolean? = null
     var vexpand: Boolean? = null
     var halign: UInt? = null
-    var behavior: BehaviorElement? = null
     var clickHandler: (() -> Unit)? = null
     var hoverEnter: (() -> Unit)? = null
     var hoverExit: (() -> Unit)? = null
@@ -646,8 +643,6 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is SelectionElement ->
                 rules += " selection" to "background-color: ${element.background.toCss()}; color: ${element.color.toCss()};"
 
-            is BehaviorElement -> behavior = element
-
             is ClickElement -> clickHandler = element.handler
 
             is HoverElement -> {
@@ -656,6 +651,8 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             }
 
             is CursorElement -> cursorName = element.name
+
+            is AnimatedSizeElement -> applyAnimatedSizeModifier(widget, element)
 
             is RawStyleElement -> rules += element.selector to element.declarations
         }
@@ -671,16 +668,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
         // explicitly; natural content is constrained elsewhere (see Label.maxWidthChars).
         val resolvedWidth = width?.let { maxWidth?.let { max -> minOf(it, max) } ?: it }
         val resolvedHeight = height?.let { maxHeight?.let { max -> minOf(it, max) } ?: it }
-        if (behavior != null) {
-            inlineStyle.sizeAnimator.animate(widget, resolvedWidth, resolvedHeight, behavior.durationMs, behavior.easing, behavior.axis)
-        } else {
-            inlineStyle.sizeAnimator.cancel()
-            gtk_widget_set_size_request(widget, resolvedWidth ?: -1, resolvedHeight ?: -1)
-        }
-    } else if (behavior != null) {
-        // Content-driven sizes are animated by the AnimatedWidth container (Rust layout
-        // manager); a Modifier alone cannot do it (size_request is a minimum only).
-        inlineStyle.sizeAnimator.cancel()
+        gtk_widget_set_size_request(widget, resolvedWidth ?: -1, resolvedHeight ?: -1)
     }
     opacity?.let { gtk_widget_set_opacity(widget, it.toDouble()) }
     hexpand?.let { gtk_widget_set_hexpand(widget, if (it) 1 else 0) }
