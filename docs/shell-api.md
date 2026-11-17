@@ -341,9 +341,11 @@ Overlay would make the surrounding box claim extra space and stretch (e.g. a wor
 stretched across the whole row). If you *do* want the overlay to fill a parent that already
 allocates space, pass `Modifier.align(Align.Fill)` explicitly.
 
-Verified semantics: a `GtkOverlay` whose main child is empty measures 0×0 even with a 17px
-overlay label. Use it for badges, counters, icons over fixed-size shapes; keep regular
-`Label` where the text *should* size its container.
+Verified semantics: a `GtkOverlay` whose children are all in the overlay list with
+`measure-overlay` off measures 0×0 even with a 17px overlay label — no placeholder main child
+is needed (a main child would always be measured). Use `Overlay` for badges, counters, icons
+over fixed-size shapes; keep a regular `Label` where the text *should* size its container, and
+use `Stack` when the container should be as large as its largest child.
 
 ### Keeping a container width constant
 

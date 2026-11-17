@@ -37,10 +37,8 @@ import kn.gtk.GTK_ALIGN_CENTER
 import kn.gtk.GTK_ALIGN_FILL
 import kn.gtk.GtkOverlay
 import kn.gtk.gtk_overlay_add_overlay
-import kn.gtk.gtk_overlay_get_child
 import kn.gtk.gtk_overlay_remove_overlay
 import kn.gtk.gtk_overlay_new
-import kn.gtk.gtk_overlay_set_child
 import kn.gtk.gtk_overlay_set_measure_overlay
 import kn.gtk.gtk_widget_set_halign
 import kn.gtk.gtk_widget_set_hexpand
@@ -168,31 +166,43 @@ open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
 
 /**
  * GtkOverlay where overlay children are painted on top but **do not affect the measured
- * size** (`gtk_overlay_set_measure_overlay` stays false). The node keeps an invisible
- * empty main child, so the overlay can be as small as its parent requests — e.g. a 16px
- * circle whose label is drawn on top and clipped instead of stretching the chip.
+ * size** (`gtk_overlay_set_measure_overlay` stays false), so the overlay can be as small as
+ * its parent requests — e.g. a 16px circle whose label is drawn on top and clipped instead of
+ * stretching the chip.
+ *
+ * `GtkOverlay` needs no main child for that: a main child is always measured, and with every
+ * child in the overlay list and `measure-overlay` off the container measures 0×0 on its own
+ * (plan L11 — the invisible spacer GtkBox an earlier version kept here was unnecessary, and it
+ * also made the node report expand through a child nobody composed).
  *
  * Overlay children are centered horizontally and vertically.
  */
-class GtkOverlayNode : GtkNode(gtk_overlay_new()!!) {
-    init {
-        val overlay = widget.reinterpret<GtkOverlay>()
-        // Invisible main child: it alone defines the measured size (0x0), so the Overlay
-        // itself is sized by the Modifier (size/min-size). No expand here: GtkBox aggregates
-        // children's expand flags, and an expanding Overlay would stretch its parent (e.g. a
-        // workspace chip inside a Row). Overlay children stay centered.
-        gtk_overlay_set_child(overlay, gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!)
-    }
+class GtkOverlayNode : GtkOverlayBaseNode(measureChildren = false, centerChildren = true)
 
+/**
+ * Shared plumbing for [GtkOverlayNode] and [GtkStackNode]: every child joins the overlay list.
+ *
+ * Which of the two behaviours applies is a property of the node, not of the child, so there is
+ * no main-child slot to shuffle: a child that is remeasured, removed or reordered never has to
+ * be evicted from `gtk_overlay_set_child()`.
+ */
+abstract class GtkOverlayBaseNode(
+    private val measureChildren: Boolean,
+    private val centerChildren: Boolean,
+) : GtkNode(gtk_overlay_new()!!) {
     override fun attachChild(child: CPointer<GtkWidget>) {
-        gtk_widget_set_halign(child, GTK_ALIGN_CENTER)
-        gtk_widget_set_valign(child, GTK_ALIGN_CENTER)
-        gtk_overlay_add_overlay(widget.reinterpret<GtkOverlay>(), child)
+        val overlay = widget.reinterpret<GtkOverlay>()
+        if (centerChildren) {
+            gtk_widget_set_halign(child, GTK_ALIGN_CENTER)
+            gtk_widget_set_valign(child, GTK_ALIGN_CENTER)
+        }
+        gtk_overlay_add_overlay(overlay, child)
+        gtk_overlay_set_measure_overlay(overlay, child, if (measureChildren) 1 else 0)
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {
-        // Overlay children can be conditional (`if (active) Text(...)`): without this the
-        // removed label stays in the overlay and the next one is added on top of it.
+        // Children can be conditional (`if (active) Text(...)`): without this the removed label
+        // stays in the overlay and the next one is drawn on top of it.
         gtk_overlay_remove_overlay(widget.reinterpret<GtkOverlay>(), child)
     }
 }
@@ -207,35 +217,11 @@ class GtkOverlayNode : GtkNode(gtk_overlay_new()!!) {
  * `Modifier.align` (GTK fills by default, and GTK fills *both* axes, so a `Stack` child that
  * must keep its natural size needs `Modifier.align(h = Align.Start, v = Align.Start)`).
  *
- * Children paint in composition order (main child first, then the overlay list), which is what
- * makes a badge drawn after its icon land on top. A child composed at index 0 of a non-empty
- * stack joins the overlay list instead of evicting the current main child — GtkOverlay holds
- * exactly one of those, and evicting it would unparent a live widget.
+ * Children paint in composition order, which is what makes a badge drawn after its icon land on
+ * top. No child ever becomes GtkOverlay's main child (that one cannot be switched off from the
+ * measured size), so composing at any index — including 0 — is just an overlay append.
  */
-class GtkStackNode : GtkNode(gtk_overlay_new()!!) {
-    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) = place(index, child)
-
-    override fun attachChild(child: CPointer<GtkWidget>) = place(children.size - 1, child)
-
-    private fun place(index: Int, child: CPointer<GtkWidget>) {
-        val overlay = widget.reinterpret<GtkOverlay>()
-        if (index == 0 && gtk_overlay_get_child(overlay) == null) {
-            gtk_overlay_set_child(overlay, child)
-        } else {
-            gtk_overlay_add_overlay(overlay, child)
-            gtk_overlay_set_measure_overlay(overlay, child, 1)
-        }
-    }
-
-    override fun detachChild(child: CPointer<GtkWidget>) {
-        val overlay = widget.reinterpret<GtkOverlay>()
-        if (gtk_overlay_get_child(overlay) == child) {
-            gtk_overlay_set_child(overlay, null)
-        } else {
-            gtk_overlay_remove_overlay(overlay, child)
-        }
-    }
-}
+class GtkStackNode : GtkOverlayBaseNode(measureChildren = true, centerChildren = false)
 
 /**
  * Which region of a [CenterBox] a node occupies.

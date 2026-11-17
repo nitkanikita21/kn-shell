@@ -1,7 +1,7 @@
-# Handoff: GTK4 layout semantics (K8 — continuation on the laptop)
+# Handoff: GTK4 layout semantics (K9 — continuation on the laptop)
 
 Цей файл — точка входу після перерви. План-чекліст: `plans/gtk4-layout-semantics.md`
-(виконується, 7/10 кроків: K1…K7 позначені `[x]`).
+(виконується, 8/10 кроків: K1…K8 позначені `[x]`).
 
 ## 0. Стан на момент зупинки
 - K1 (тести), K2 (фікси C), K3 (`KnBoxLayout` + `weight`), **K4 (видалено `reconcileMainAxisAlign`,
@@ -225,25 +225,44 @@ DSL-канал: `Modifier.maxSizeCaps(): Pair<Int, Int>` → `GtkNode.pushChildL
 - Тести — група `3b. Stack` у `LayoutProbeTest.kt` (4 шт., разом 75 green). Мутаційна перевірка:
   без `measure_overlay` падають 2 з них.
 
-## 2''''. K8 — `Overlay` без хаку (L11): наступний крок
+## 2''''. K8 — ВИКОНАНО (L11 закрито інакше, ніж припускав план)
 
-Факт, зібраний K7: `GtkOverlay` **завжди** міряє свою головну дитину
-(`gtk_overlay_set_child`), а `gtk_overlay_set_measure_overlay()` стосується лише overlay-списку.
-Тому «невидима 0×0 головна дитина» в `GtkOverlayNode` — не стільки хак, скільки вимога API:
-без неї `Overlay { Text("2") }` розтягнувся б до розміру лейбла. K8 має обрати:
+- `gtk_overlay_set_child()` **завжди** міряє головну дитину — але головна дитина й не потрібна:
+  коли всі діти лежать в overlay-списку з `measure_overlay = FALSE`, `GtkOverlay` міряється 0×0
+  сам. Невидимий 0×0 `GtkBox` (старий хак) видалено повністю.
+- `abstract class GtkOverlayBaseNode(measureChildren: Boolean, centerChildren: Boolean) :
+  GtkNode(gtk_overlay_new()!!)` у `compose/Widgets.kt`: `attachChild` → `gtk_overlay_add_overlay` +
+  `gtk_overlay_set_measure_overlay(o, child, if (measureChildren) 1 else 0)` (+ CENTER/CENTER для
+  `Overlay`); `detachChild` → `gtk_overlay_remove_overlay`.
+  `GtkOverlayNode(measureChildren = false, centerChildren = true)`,
+  `GtkStackNode(measureChildren = true, centerChildren = false)`. Жодного `gtk_overlay_set_child`
+  у коді не лишилось.
+- Наслідок для K7: примітка «`insertChild(0)` у непорожній стек» більше не діє — усі діти рівні.
+- Тести: група `3c. Overlay` (4 шт.) у `LayoutProbeTest.kt`; разом 79 green.
+- Точність, яку варто памʼятати при нових тестах вирівнювання: GTK центрує з **ceil** —
+  7px лейбл у 200px клітинці починається з 97, а не 96.
 
-1. **лишити GtkOverlay** і задокументувати заглушку як вимогу API (найдешевше; тоді L11 —
-   «не хак, а контракт», а `clip_overlay` додати як опцію `Modifier`/параметр);
-2. **додати режим у `KnBoxLayout`** (`kn_box_set_stack(widget, measure_mode)`): усі діти в одну
-   клітинку, per-child прапорець «бере участь у вимірі»; тоді `Overlay` і `Stack` стають одним
-   manager'ом без GtkOverlay узагалі, а `Overlay` отримує `measure = false` без заглушки.
+## 2'''''. K9 — `docs/layout-model.md` (наступний крок)
 
-Перед кодом — рішення в §6.5 плану. Якщо варіант 2: червоні тести на `Overlay`
-(«overlay-дитина не збільшує контейнер», «overlay-дитина отримує клітинку контейнера»,
-«overlay з двома дітьми не міряє жодну») і перевірити, що `Stack`-тести лишаються зеленими
-після переносу на новий режим. Не забути: `GtkOverlayNode` зараз ще й примусово ставить
-`GTK_ALIGN_CENTER/CENTER` дітям — з K4-ownership це безпечно, але при переносі на KnBoxLayout
-вирівнювання має йти через `Modifier.align`.
+Мета: один документ, що описує модель розкладки так, як вона тепер працює, і фіксує межі.
+Матеріал уже зібраний у `plans/gtk4-layout-semantics.md` §6.1–6.5, його треба переписати для
+читача фреймворку (не для того, хто читав план):
+
+1. Хто міряє: `KnBoxLayout` (C, `rust-core/src/kn_box_layout.c`) проти решти GTK (bottom-up).
+   Що з цього випливає для користувача: `size_request` — це **мінімум**, натюр-розмір рахується з
+   контенту, `maxWidth/maxHeight` — стеля з підлогою `min` (min beats max), вага — пропорційний
+   поділ залишку.
+2. Контейнери й коли який: `Row`/`Column` (KnBoxLayout, `weight`, `maxSize`), `Box` (block flow,
+   **не** Compose `Box`), `Stack` (стекінг, розмір за найбільшою дитиною), `Overlay` (діти не
+   впливають на розмір), `CenterBox` (три регіони, `shrink-center-last`), `Canvas`.
+3. Чесні межі (те, що люди ловлять як «баг»): `Modifier.weight` працює лише в
+   `Row`/`Column`/`Box` (поза `KnBoxLayout` нема куди його покласти); `maxSize` поза
+   `KnBoxLayout` стелює лише явний `size()`; `align` не створює комірку поза менеджером;
+   `Label(maxWidthChars)` vs `maxWidth` (еліпсис проти обрізання).
+4. Куди посилатись: `docs/shell-api.md` (Modifier-таблиця), `docs/bar-api.md` (модулі бару),
+   `docs/framework-api.md` (перелік віджетів).
+Після K9 — K10: приклад `Box` із подвійним `padding` (L10, файл `test.ui.kt` живе у вашій
+WIP-гілці, не в цьому клоні) + загальний прогін прикладів.
 
 ## 3. Рішення, які вже ухвалено (не переписувати)
 
@@ -301,7 +320,7 @@ DSL-канал: `Modifier.maxSizeCaps(): Pair<Int, Int>` → `GtkNode.pushChildL
 - `scripts/anim-bench.sh:326` — `C_LAYOUT` тепер вказує на `kn_box_layout.c` (gate:
   `gtk_widget_add_tick_callback|g_get_monotonic_time|kn_ease` — 0 хітів ✓).
 
-## 5. Побіжна загроза для K8 (не блокує, але не забути)
+## 5. Побіжна загроза для K9/K10 (не блокує, але не забути)
 
 `docs/bar-api.md` / `docs/shell-api.md` описують `Box` як «div», а код робить з нього
 вертикальний `GtkBox` (block flow). Це L8 = K7 (факти й варіанти — §2''').
@@ -318,12 +337,13 @@ DSL-канал: `Modifier.maxSizeCaps(): Pair<Int, Int>` → `GtkNode.pushChildL
   **не** чіпали. Тому правки наших файлів комітити лише з явним переліком шляхів
   (`git commit -- <paths>`) — `git add -A` схопив би їхній staged-рефакторинг.
 
-## 7. Стан git (на 2026-11-18 01:45)
+## 7. Стан git (на 2026-11-18 01:50)
 
-K1–K7 **закомічені й запушені** на `gtk4-layout-semantics`:
-`af82a6d` (K1–K3 код), `896b552`/`4519329`/`f4e894d` (plans), `fd20e54` (K4),
-`30a30ae` (K5), `feat(centerbox): name the regions instead of counting attach calls` (K6),
-`feat(stack): add the z-stacking container Compose calls Box` (K7).
+K1–K8 **закомічені й запушені** на `gtk4-layout-semantics`: `af82a6d` (K1–K3 код),
+`896b552`/`4519329`/`f4e894d` (plans), `fd20e54` (K4), `30a30ae` (K5),
+`feat(centerbox): name the regions instead of counting attach calls` (K6),
+`feat(stack): add the z-stacking container Compose calls Box` (K7),
+`feat(overlay): drop the invisible main child GtkOverlay never needed` (K8).
 Робоче дерево чисте; ваш рефакторинг (shell-app DI/theme, `:icons:core`, `services/*.kt`) у
 цьому клоні відсутній, тому `git commit -- <paths>` без ризику захопити чуже.
 
@@ -362,7 +382,7 @@ cd KN-shell && git checkout gtk4-layout-semantics
 source .tools/env.sh
 ./gradlew :rust-core:compileReleaseKotlinAndroid :framework:compileKotlinLinuxX64 --console=plain -q
 ./gradlew :framework:linuxX64Test --console=plain -q --tests '*LayoutProbeTest*'
-# очікування: 75 тестів, 0 red (стан після K7). Якщо red > 0 — не чіпати наступний крок,
+# очікування: 79 тестів, 0 red (стан після K8). Якщо red > 0 — не чіпати наступний крок,
 # а з'ясувати чому (зазвичай не перекомпільований rust-core, не той toolchain або немає display).
 # `.tools/env.sh` у репо нема — `source` дасть помилку, вона безневинна (див. §1.1 про rust 1.90.0).
 ```

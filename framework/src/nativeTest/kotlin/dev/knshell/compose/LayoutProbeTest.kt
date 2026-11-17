@@ -555,6 +555,67 @@ class LayoutProbeTest {
         )
     }
 
+    // ------------------------------------------------- 3c. Overlay (plan L11)
+    //
+    // `Overlay` paints children without letting them affect the measured size and needs no
+    // invisible spacer as its main child: with every child in the overlay list and
+    // `measure-overlay` off, GtkOverlay measures 0x0 by itself.
+
+    @Test
+    fun `an overlay child does not grow the container`() {
+        val overlay = GtkOverlayNode()
+        overlay.insertChild(0, GtkNode(label("a label that is quite wide indeed")))
+
+        assertEquals(0, naturalWidth(overlay.widget), "an overlay child contributes no size")
+        assertEquals(0, naturalHeight(overlay.widget), "on either axis")
+    }
+
+    @Test
+    fun `an overlay child keeps its natural size inside the cell`() {
+        val overlay = GtkOverlayNode()
+        val badge = GtkNode(label("2"))
+        overlay.insertChild(0, badge)
+        allocate(overlay.widget, width = 200, height = 80)
+
+        val width = naturalWidth(badge.widget)
+        val height = naturalHeight(badge.widget)
+        // GTK centres with a ceiling divide, so a 7px label in a 200px cell starts at 97, not 96.
+        val cell = Rect(
+            x = (200 - width + 1) / 2,
+            y = (80 - height + 1) / 2,
+            width = width,
+            height = height,
+        )
+        assertEquals(cell, allocRect(badge.widget), "centred, and never stretched by the parent's cell")
+    }
+
+    @Test
+    fun `removing an overlay child detaches it`() {
+        val overlay = GtkOverlayNode()
+        val badge = GtkNode(label("2"))
+        overlay.insertChild(0, badge)
+        overlay.insertChild(1, GtkNode(label("3")))
+        overlay.removeChild(0, 1)
+
+        assertTrue(
+            gtk_widget_get_parent(badge.widget) == null,
+            "a removed overlay child must leave the GtkOverlay, or the next one is painted on top of it",
+        )
+    }
+
+    @Test
+    fun `an overlay does not expand because of its child`() {
+        val overlay = GtkOverlayNode()
+        val expanding = GtkNode(label("x"))
+        gtk_widget_set_hexpand(expanding.widget, 1)
+        overlay.insertChild(0, expanding)
+
+        assertFalse(
+            expandsHorizontally(overlay.widget),
+            "GtkBox aggregates children's expand flags, so a spacer with an expanding child would stretch its row",
+        )
+    }
+
     // --------------------------------------------------------- 2. DSL contract
 
     @Test

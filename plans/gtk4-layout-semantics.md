@@ -69,7 +69,7 @@ Kotlin-шар (API лишається Android-подібний):
 - [x] **K5. Max-size**: clamp у `KnBoxLayout` (рекомендовано, бо інакше `maxWidth()` лишається брехнею в DSL) — з явним записом у docs, що це емуляція; альтернатива — прибрати `maxWidth/maxHeight/maxSize` (L6).
 - [x] **K6. CenterBox**: іменовані слоти замість лічильника (L7) + документація `shrink-center-last` (4.12).
 - [x] **K7. `Box` vs `Stack`** (L8): збереження block flow + новий `Stack`, чи перепис на стекінг. Вибір з урахуванням, що `docs/bar-api.md`/`docs/shell-api.md` уже описують `Box` як «div».
-- [ ] **K8. Overlay без хаку**: рідні `measure_overlay`/`clip_overlay` (L11).
+- [x] **K8. Overlay без хаку**: рідні `measure_overlay`/`clip_overlay` (L11).
 - [ ] **K9. Docs**: `docs/framework-api.md` (модифієр→GTK таблиця), `docs/shell-api.md:256-303`, `docs/bar-api.md:117-172`, новий `docs/layout-model.md` — що GTK гарантує, що емулюємо, чого не може бути (max-size, % of parent).
 - [ ] **K10. Прибирання прикладів**: L10 у `test.ui.kt`; перевірка `ui/primitives/Image.kt:86` і `compose/ShaderCanvas.kt:145` (pin через `size_request` — тепер є чесний шлях).
 
@@ -262,3 +262,35 @@ _Рішення_: **варіант 1** — `Box` лишається block flow, 
 - Документація: `docs/shell-api.md` (список layout-віджетів + абзац «`Box` — block flow, не
   Compose `Box`; стек — `Stack`/`Overlay`»), `docs/bar-api.md` (таблиця модулів),
   `docs/framework-api.md` (перелік віджетів), KDoc `Box`/`Stack`/`GtkStackNode`/`Overlay`.
+
+## 6.5 K8 — результати (2026-11-18, ноут)
+
+_Suite_: **79 тестів, 79 green**. Хак L11 закрито — і не тим способом, який припускав план.
+
+- **Виправлення припущення плану**: `gtk_overlay_set_measure_overlay()` не усуває потребу в
+  головній дитині, а `gtk_overlay_set_child()` **завжди** її міряє. Але головна дитина й не
+  потрібна: якщо **всі** діти лежать в overlay-списку з `measure_overlay = FALSE`, `GtkOverlay`
+  сам міряється 0×0. Тобто невидимий 0×0 `GtkBox` був не «вимогою API», а просто зайвим
+  віджетом — і саме він робив так, що `Overlay` міг репортити expand через дитину, яку ніхто не
+  компонував.
+- Реалізація: `abstract class GtkOverlayBaseNode(measureChildren, centerChildren)` —
+  `attachChild` кладе дитину в overlay-список, ставить `measure_overlay` за прапорцем і (для
+  `Overlay`) центрує; `detachChild` = `gtk_overlay_remove_overlay`. `GtkOverlayNode` =
+  `(measureChildren = false, centerChildren = true)`, `GtkStackNode` =
+  `(measureChildren = true, centerChildren = false)`. Викликів `gtk_overlay_set_child` у коді
+  більше немає взагалі — отже й нюансу «`insertChild(0)` у непорожній стек» більше не існує
+  (K7-примітка про це знята).
+- Нові тести (група `3c. Overlay`): `an overlay child does not grow the container` (0×0 при
+  широкому лейблі), `an overlay child keeps its natural size inside the cell` (центрування з
+  округленням угору — GTK ділить з ceil, 7px у 200px клітинці починається з 97, не 96),
+  `removing an overlay child detaches it` (батько = null, інакше наступна дитина малюється поверх
+  попередньої), `an overlay does not expand because of its child`.
+- `clip_overlay` не знадобився: `clipOverflow()` уже мапиться на `gtk_widget_set_overflow(HIDDEN)`,
+  який GtkOverlay поважає — тому рідної опції не додавали (менше API, той самий результат).
+- Візуал: probe в `shell-app/main.kt` — 16px рожевий чип із `Overlay { Text("2", size = 10) }`
+  усередині (чип лишився 16×16, лейбл не розтягнув його) поруч зі `Stack` із тим самим «2» і
+  текстом «stack grows» (стек виріс під більшу дитину, обидві дитини в одній клітинці). Лог без
+  `Gtk-WARNING`/`CRITICAL`; `main.kt` повернуто до стану commit. Скріншот: `/tmp/k8b.png`.
+- Документація: `docs/shell-api.md` — абзац «Verified semantics» переписано (заглушка не потрібна,
+  `Stack` — для контейнера розміром з найбільшу дитину); KDoc `Overlay`/`GtkOverlayNode`/`Stack`
+  і `GtkOverlayBaseNode`.
