@@ -62,10 +62,10 @@ Kotlin-шар (API лишається Android-подібний):
 
 ## 4. Кроки
 
-- [ ] **K1. Headless layout-проба / тести** — `framework/src/nativeTest/.../LayoutProbeTest.kt` (+ мінімальний C/UniFFI-хелпер для `gtk_widget_size_allocate` на unmapped widget). Покрити: weight 1:2, min-vs-natural при shrink, `size(0, 2)` divider, align на обох осях, expand-propagation у вкладених `Row`/`Column`, sticky-рекомпозиция. Це захист перед правкою C.
+- [x] **K1. Headless layout-проба / тести** — `framework/src/nativeTest/.../LayoutProbeTest.kt` (+ мінімальний C/UniFFI-хелпер для `gtk_widget_size_allocate` на unmapped widget). Покрити: weight 1:2, min-vs-natural при shrink, `size(0, 2)` divider, align на обох осях, expand-propagation у вкладених `Row`/`Column`, sticky-рекомпозиция. Це захист перед правкою C.
 - [x] **K2. Точечні фікси чинного C-manager'а** (L2 vexpand-for-vertical, L3 min+natural+for_size, L4 `m < 1`, L5 packing) — окремим комітом, щоб потім було з чим порівнювати візуально.
 - [x] **K3. `KnBoxLayout` + per-child `weight`** у `rust-core` (C + `box_layout.rs` UniFFI + `compute_expand`), прикріплення з `GtkBoxNode`. Рішення на цьому кроці: merge з animated-size чи тонкий шар поверх спільної child-моделі.
-- [ ] **K4. Видалення `reconcileMainAxisAlign()` + повний скид полів кожний прохід** в `applyModifiers` (L1, L9).
+- [x] **K4. Видалення `reconcileMainAxisAlign()` + повний скид полів кожний прохід** в `applyModifiers` (L1, L9).
 - [ ] **K5. Max-size**: clamp у `KnBoxLayout` (рекомендовано, бо інакше `maxWidth()` лишається брехнею в DSL) — з явним записом у docs, що це емуляція; альтернатива — прибрати `maxWidth/maxHeight/maxSize` (L6).
 - [ ] **K6. CenterBox**: іменовані слоти замість лічильника (L7) + документація `shrink-center-last` (4.12).
 - [ ] **K7. `Box` vs `Stack`** (L8): збереження block flow + новий `Stack`, чи перепис на стекінг. Вибір з урахуванням, що `docs/bar-api.md`/`docs/shell-api.md` уже описують `Box` як «div».
@@ -113,6 +113,33 @@ Kotlin-шар (API лишається Android-подібний):
 
 Умовного skip у Kotlin/Native немає (раннер розуміє лише статичний `@Ignore`), тож тести залишаються
 червоними й самі називають крок, який їх зеленить.
+
+## 6.1 K4 — результати (2026-11-18, ноут)
+
+_Suite_: **54 тести, 54 green** (`./gradlew :framework:linuxX64Test`). Обидва навмисно
+червоні K4-тести зелені; жодного нового red.
+
+- **L1 закрито**: `reconcileMainAxisAlign()` видалена разом із викликом; `align()` більше ніколи
+  не чіпає `hexpand`/`vexpand`. Клітинку для Center/End дає `KnBoxLayout` (`main_pos`), що
+  підтверджено группою 4 ще в K3.
+- **L9 закрито чесно**: `applyModifiers` тепер відстежує, кому *належить* поле. Для кожного з
+  `hexpand/vexpand/halign/valign/opacity` — якщо ланцюг написав поле, ставиться запис у GLib data
+  віджета (`g_object_set_data`, ключ `kn-modifier-*`); на наступному проході, якщо ланцюг поле
+  не згадав, поле повертається до дефолту GTK і запис знімається. Поле, якого ланцюг ніколи не
+  писав, не чіпается взагалі — це й є захист прямих записів поза каналом модифієрів
+  (`ui/primitives/Image.kt` `pinSize()` → `GTK_ALIGN_START`; `compose/Widgets.kt`
+  `GtkOverlayNode.attachChild` → CENTER).
+  Стан живе на самому віджеті (вмирає разом з ним), тому не потрібна ніяка реєстрація в `GtkNode`,
+  і `applyModifiers` лишається придатним для виклику без вузла (саме так його викликає тест).
+- **Виміряний дефолт GTK 4.24** (ctypes-проба на голому `GtkLabel`): `halign = valign =
+  GTK_ALIGN_FILL`, `hexpand = vexpand = 0`, `opacity = 1.0`. Тобто таблиця handoff §2 («`valign`
+  за замовчуванням `GTK_ALIGN_START`») була хибною — `valign` скидається у `FILL`, а не `START`.
+- Два нові тести-захисти: `a dropped field is reset on its own axis only` (_ALIGNElement_ несе
+  осі окремо → `align(v=…)` не чіпає `halign`) і `the reset never touches a field the modifier
+  chain never wrote` (пін іконки й центрування overlay-дитини переживають прохід з іншим ланцюгом).
+- Візуал: `KN_SHELL_MODE=windowed` — вікно малюється як на `master` (різниця скриншотів — лише
+  анімований shader-фонд, 0.2% пікселів).
+
 
 **Виведені обмеження тестового хarness'у (щоб наступні читачі не витратили на це час):**
 - display потрібен: companion `init { check(gtk_init_check() != 0) }` — без нього тест-процес падває

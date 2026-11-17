@@ -12,13 +12,16 @@ import dev.knshell.core.setBoxSpacing
 import dev.knshell.core.attachAnimatedSizeLayout
 import dev.knshell.core.setAnimatedSizeCurrent
 import kn.gtk.GTK_ALIGN_CENTER
+import kn.gtk.GTK_ALIGN_END
 import kn.gtk.GTK_ALIGN_FILL
+import kn.gtk.GTK_ALIGN_START
 import kn.gtk.gtk_widget_get_halign
 import kn.gtk.gtk_widget_get_hexpand
 import kn.gtk.gtk_widget_set_valign
 import kn.gtk.GtkAllocation
 import kn.gtk.GtkBox
 import kn.gtk.GtkLabel
+import kn.gtk.GtkOverlay
 import kn.gtk.GtkOrientation
 import kn.gtk.GtkWidget
 import kn.gtk.PangoEllipsizeMode
@@ -36,6 +39,8 @@ import kn.gtk.gtk_init_check
 import kn.gtk.gtk_label_new
 import kn.gtk.gtk_label_set_ellipsize
 import kn.gtk.gtk_label_set_wrap
+import kn.gtk.gtk_overlay_add_overlay
+import kn.gtk.gtk_overlay_new
 import kn.gtk.gtk_style_context_add_provider
 import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_compute_expand
@@ -81,16 +86,17 @@ import kotlin.test.assertTrue
  *  1. **GTK native semantics** — facts about stock GTK 4.24 that the framework builds on. They
  *     must never break; they are why `padding()` is not emulated with child margins, why a
  *     `weight` needs a custom layout manager, and why `maxWidth()` has no GTK counterpart.
- *  2. **DSL contract** — what `applyModifiers` has to guarantee (plan L1/L9). These are the
- *     assertions that turn green in K4.
+ *  2. **DSL contract** — what `applyModifiers` has to guarantee: that a `Modifier` chain only
+ *     gets the layout fields it asks for, and only keeps them while it asks (plan L1/L9). This
+ *     group was the work list of K4, and closed green with it.
  * 3. **The animated box** — the behaviour the old `kn_animated_size_layout.c` was supposed to
  *    produce (plan L2/L3/L4/L5). That file is gone: its animated fields live inside `KnBoxLayout`
  *    (`rust-core/src/kn_box_layout.c`), which is also the object of group 4. Group 3 turned
  *    green in K2, group 4 in K3.
  *
  * There is no conditional skip on Kotlin/Native (the runner only understands a static
- * `@Ignore`), so group 2 deliberately stays red until the step that fixes it lands: the
- * failure messages carry the plan step, which makes the red set readable as a work list.
+ * `@Ignore`), so a step that is not done yet is represented by a red test whose failure message
+ * carries the plan step — which makes the red set readable as a work list.
  *
  * Requires a display connection — GTK needs one for style contexts and Pango metrics:
  * `./gradlew :framework:linuxX64Test`.
@@ -195,9 +201,9 @@ class LayoutProbeTest {
     fun `main-axis alignment positions the child inside the space it claims`() {
         // GtkBox never enlarges an aligned child's *allocation*: it gives the child its natural
         // width and moves it inside the leftover. `allocRect()` alone therefore cannot see a cell —
-        // `cell()` reconstructs it from the gap to the next sibling. This is the gap
-        // `reconcileMainAxisAlign()` (plan L1) papers over by switching on `hexpand`, and what
-        // the custom manager must resolve honestly (K3/K4).
+        // `cell()` reconstructs it from the gap to the next sibling. This is the gap the removed
+        // `reconcileMainAxisAlign()` hack (plan L1) used to paper over by switching on `hexpand`,
+        // and what the custom manager now resolves honestly (K3/K4).
         fun rowWith(expanding: Boolean, fill: Boolean): Triple<CPointer<GtkWidget>, Rect, Int> {
             val centered = label("c").also {
                 gtk_widget_set_halign(it, if (fill) GTK_ALIGN_FILL else GTK_ALIGN_CENTER)
@@ -313,9 +319,9 @@ class LayoutProbeTest {
 
     @Test
     fun `layout state does not survive a chain that dropped it`() {
-        // Plan L9: `applyModifiers` writes hexpand/vexpand/valign/margins only `if != null`, so
-        // recomposing without `fillWidth()` leaves the old flag on. A Modifier chain is rebuilt
-        // from scratch on every pass, so "absent" has to mean "default" — red until K4.
+        // Plan L9/K4: a `Modifier` chain is rebuilt from scratch on every pass, so "absent" means
+        // "back to the GTK default" — `applyModifiers` used to write these fields only `if != null`,
+        // which left `fillWidth()` on a widget forever.
         val widget = label("a")
         applyModifier(widget, Modifier.fillWidth())
         assertTrue(expandsHorizontally(widget))
@@ -327,15 +333,51 @@ class LayoutProbeTest {
 
     @Test
     fun `main-axis alignment does not travel through the expand flag`() {
-        // Plan L1: `reconcileMainAxisAlign()` turns on hexpand/vexpand when an aligned child sits
-        // along its parent's orientation and never turns it off again — which is how an
-        // `align(h = Center)` icon once stretched its 44px badge across a whole card. After K4/K3
-        // the manager owns the cell and the flags stay exactly as the DSL asked: red until K4.
+        // Plan L1: the removed `reconcileMainAxisAlign()` hack turned on hexpand/vexpand when an
+        // aligned child sat along its parent's orientation and never turned it off again — which is
+        // how an `align(h = Center)` icon once stretched its 44px badge across a whole card. The
+        // manager owns the cell now (K3), so the flags stay exactly as the DSL asked.
         val icon = label("icon")
         val column = box(vertical = true, children = listOf(icon))
         applyModifier(icon, Modifier.align(v = Align.Center))
         assertEquals(GTK_ALIGN_CENTER, gtk_widget_get_valign(icon), "the alignment itself is the contract")
         assertFalse(expandsVertically(icon), "K4: align must not be smuggled through the expand flag")
+    }
+
+    @Test
+    fun `a dropped field is reset on its own axis only`() {
+        // `AlignElement` carries one nullable axis, so `align(v = …)` never claims the horizontal
+        // one — and the reset must follow that ownership, not the whole pair.
+        val widget = label("a")
+        applyModifier(widget, Modifier.align(h = Align.End, v = Align.Center))
+        applyModifier(widget, Modifier.align(v = Align.Center))
+        assertEquals(GTK_ALIGN_CENTER, gtk_widget_get_valign(widget), "the kept axis stays as written")
+        assertEquals(GTK_ALIGN_FILL, gtk_widget_get_halign(widget), "the dropped axis goes back to GTK")
+    }
+
+    @Test
+    fun `the reset never touches a field the modifier chain never wrote`() {
+        // K4 protection: `Image.pinSize()` (ui/primitives/Image.kt) pins a picture with
+        // `GTK_ALIGN_START`, and `GtkOverlayNode.attachChild()` (compose/Widgets.kt) centres its
+        // children — both by writing GTK properties directly, outside the modifier pipeline, and
+        // both before `applyModifiers` runs. A reset to the global default would erase that work on
+        // every widget whose chain only talks about padding, so ownership is what guards it.
+        val icon = label("icon")
+        gtk_widget_set_size_request(icon, 28, 28)
+        gtk_widget_set_halign(icon, GTK_ALIGN_START)
+        gtk_widget_set_valign(icon, GTK_ALIGN_START)
+        applyModifier(icon, Modifier.padding(all = 4))
+        assertEquals(GTK_ALIGN_START, gtk_widget_get_halign(icon), "a pinned picture stays pinned")
+        assertEquals(GTK_ALIGN_START, gtk_widget_get_valign(icon))
+
+        val badge = label("badge")
+        val overlay = gtk_overlay_new()!!
+        gtk_overlay_add_overlay(overlay.reinterpret<GtkOverlay>(), badge)
+        gtk_widget_set_halign(badge, GTK_ALIGN_CENTER)
+        gtk_widget_set_valign(badge, GTK_ALIGN_CENTER)
+        applyModifier(badge, Modifier.padding(all = 2))
+        assertEquals(GTK_ALIGN_CENTER, gtk_widget_get_halign(badge), "an overlay child stays centred")
+        assertEquals(GTK_ALIGN_CENTER, gtk_widget_get_valign(badge))
     }
 
     @Test
@@ -497,8 +539,8 @@ class LayoutProbeTest {
     @Test
     fun `a weighted child can be given a cell without an expand flag`() {
         // The whole point of `weight` for the bar: a `Label` that takes the remaining width
-        // without lying about `hexpand` (which is what `reconcileMainAxisAlign()` used to do —
-        // plan L1). The expand flag stays what the DSL asked for.
+        // without lying about `hexpand` (which is what the removed `reconcileMainAxisAlign()` hack
+        // used to do — plan L1). The expand flag stays what the DSL asked for.
         val icon = label("icon")
         val title = label("t")
         val row = managedBox(children = listOf(icon, title))

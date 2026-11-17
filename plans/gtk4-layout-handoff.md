@@ -1,15 +1,24 @@
-# Handoff: GTK4 layout semantics (K4 — continuation on the laptop)
+# Handoff: GTK4 layout semantics (K5 — continuation on the laptop)
 
 Цей файл — точка входу після перерви. План-чекліст: `plans/gtk4-layout-semantics.md`
-(виконується, 3/10 кроків позначено `plannotator_mark_done`).
+(виконується, 4/10 кроків: K1, K2, K3, K4 позначені `[x]`).
 
 ## 0. Стан на момент зупинки
 
-- K1 (тести), K2 (фікси C), K3 (`KnBoxLayout` + `weight`) — **зроблено**.
--_suite_: `28 tests, 2 failed`. Обидва red — це **навмисні** цілі K4:
-  - `layout state does not survive a chain that dropped it` → `K4: an empty chain must clear the expand flag. Expected <0>, actual <1>`
-  - `main-axis alignment does not travel through the expand flag` → `K4: align must not be smuggled through the expand flag`
-- `:framework:compileKotlinLinuxX64`, `:shell-app:compileKotlinLinuxX64` — чисті.
+- K1 (тести), K2 (фікси C), K3 (`KnBoxLayout` + `weight`), **K4 (видалено `reconcileMainAxisAlign`,
+  чесний скид полів) — зроблено**.
+-_suite_: `54 tests, 0 failed`. Навмисно червоних цілей більше немає: від тепер кожен крок
+  починається з тесту, а green тримається весь час.
+- K4 зроблено через **ownership полів на самому віджеті**: `g_object_set_data` з ключем
+  `kn-modifier-<field>` ставиться, коли ланцюг модифієрів записав поле, і знімається зі
+  скиданням до дефолту GTK, коли перестав. Поле, якого ланцюг ніколи не писав, не чіпается
+  взагалі — тому `Image.pinSize()` (`GTK_ALIGN_START`) і `GtkOverlayNode.attachChild()`
+  (CENTER) лишилися цими. Стан живе на `GtkWidget`, тож `applyModifiers` можна викликати й без
+  `GtkNode` (саме так робить тест). Деталі й виміряні дефолти — `plans/gtk4-layout-semantics.md` §6.1.
+- ⚠️ Таблиця §2 нижче («`valign` за замовчуванням `GTK_ALIGN_START`») була **хибною**: на голому
+  `GtkLabel` під GTK 4.24 обидві осі = `GTK_ALIGN_FILL`. Текст лижено як застереження.
+- `:framework:compileKotlinLinuxX64`, `:shell-app:compileKotlinLinuxX64`,
+  `:shell-app:linkDebugExecutableLinuxX64` — чисті.
 - Усі виклики `Row`/`Column` у репо передають `spacing =` іменованим аргументом, тому
   вставка `homogeneous` другим позиційним параметром нікого не зламала (перевірено `rg`).
 
@@ -43,9 +52,23 @@ source .tools/env.sh
 
 Потрібен display (`init { check(gtk_init_check() != 0) }` у класі — інакше core dump).
 `--ktest_logger=PLAIN` кидає `IllegalArgumentException`, використовуй `SIMPLE`.
-Повний прогін: `./gradlew :framework:linuxX64Test` → 51 testів, очікувані 2 red.
+Повний прогін: `./gradlew :framework:linuxX64Test` → 54 тести, очікування 0 red.
 
-## 2. K4 — що робити
+## 1.1 Середовище (досвід Pure Arch, ноут)
+
+`rust-toolchain.toml` у репо немає, а cargo 1.100 ламає gobley 0.3.7 (читає legacy
+`target/debug/build/<pkg>/<hash>/output`, новий cargo пише `…/<pkg>-<hash>/output`):
+
+```bash
+rustup toolchain install 1.90.0 --profile minimal && rustup default 1.90.0
+./gradlew :shell-app:linkDebugExecutableLinuxX64 --console=plain   # ~2 хв з чистого кешу
+KN_SHELL_MODE=windowed shell-app/build/bin/linuxX64/debugExecutable/shell-app.kexe
+```
+
+Симптом без фіксу: `Execution failed for task ':rust-core:cargoBuildLinuxX64Debug'` +
+`FileNotFoundException: …/build/quote/<hash>/output`.
+
+## 2. K4 — ВИКОНАНО (лишається як опис механіки, на якій будувати K5)
 
 Файл: `framework/src/nativeMain/kotlin/dev/knshell/compose/Modifier.kt`
 
@@ -99,13 +122,58 @@ source .tools/env.sh
     тож варіант «скидати тільки те, що писав modifier» задовольняє обидва red і не чіпає
     Overlay/Image. Це і є рекомендована реалізація.
 
-5. **Очистити документацію/коментарі від імені видаленої функції**:
-   `rg -n 'reconcileMainAxisAlign' --glob '*.kt'` → залишаться тільки згадки в
-   `LayoutProbeTest.kt` (коментарі, lines 199/330/500). Переформулювати їх у
-   минулий час («the removed `reconcileMainAxisAlign` hack»), щоб тести не посилались на
-   код, якого більше немає.
+5. **Очистити документацію/коментарі від імені видаленої функції** — зроблено: у
+   `LayoutProbeTest.kt` лишилися три згадки в коментарях, усі в минулому часі («the removed
+   `reconcileMainAxisAlign()` hack»), як і просив цей пункт.
 
-6. Після green: `plannotator_mark_done({ step: 4 })`.
+6. ~~Після green: `plannotator_mark_done({ step: 4 })`~~ — зроблено; K4 позначено `[x]` у плані.
+
+### 2.1 Як K4 виглядає в коді (щоб не читати diff заново)
+
+```kotlin
+// Modifier.kt, в кінці applyModifiers — по одному такому блоку на поле:
+if (halign != null) {
+    gtk_widget_set_halign(widget, halign)
+    setFieldWritten(widget, HALIGN_KEY, true)
+} else if (fieldWritten(widget, HALIGN_KEY)) {
+    gtk_widget_set_halign(widget, GTK_ALIGN_FILL)
+    setFieldWritten(widget, HALIGN_KEY, false)
+}
+
+private const val HALIGN_KEY = "kn-modifier-halign"   // + VEXPAND/HEXPAND/VALIGN/OPACITY
+
+private fun fieldWritten(widget: CPointer<GtkWidget>, key: String): Boolean =
+    g_object_get_data(widget.reinterpret<GObject>(), key) != null
+
+private fun setFieldWritten(widget: CPointer<GtkWidget>, key: String, written: Boolean) {
+    val value = if (written) widget.reinterpret<GObject>() else null
+    g_object_set_data(widget.reinterpret<GObject>(), key, value)
+}
+```
+
+Значення — вказівник на сам віджет: `g_object_set_data` не бере destroy-кобек, нічого не
+frees, а читається лише факт наявності ключа. Спроба пакувати `Int`-у-покажчик
+ (`interpretCPointer<UnitVar>(…)`) провалилась: `interpretCPointer` приймає `NativePtr`, а не
+ `Long`. Записи `margin*` і `size_request` лишилися як були (умовний `size_request` — це
+ майбутня K5, не L9).
+
+## 2'. K5 — max-size (наступний крок)
+
+Дефект L6: `MaxSizeElement` (`Modifier.kt:188`, збір `≈633-639`, clamp `≈727-730`) обмежує
+лише явний `width()`/`size()`. Без явного розміру `maxWidth()` — no-op, тобто брехня в DSL.
+
+Варіанти (plan §4 K5):
+1. **clamp у `KnBoxLayout`** (рекомендація плану): менеджер знає `main_size` родителя й
+   `minimum/natural` дитини, тож може чеснісно обмежити бажане; потребує per-child стану
+   (`max_main`/`max_cross`) у тій самій моделі, що й `weight` — див. `kn_box_layout.c`
+   (`set_weight`/`get_weight`) і `box_layout.rs` (13 export-ів UniFFI).
+2. **прибрати `maxWidth/maxHeight/maxSize` з DSL** — чесніше, але ламає публічний API
+   (тест `size request is a floor and never a ceiling` документує, чому GTK не дає альтернативи).
+
+Обов'язково починати з тесту: зараз harness уже вміє міряти `measure`/`allocate` без display
+(групи 1/4), тож «cap не може бути більшим за natural, але й не меншим за minimum» —
+окрема червона ціль до правки C. Не чіпати `Label(maxWidthChars=…)` — це інший механізм
+ (Pango-еліпсис, lowering minimum), див. `compose/Widgets.kt:547-570`.
 
 ## 3. Рішення, які вже ухвалено (не переписувати)
 
@@ -143,7 +211,8 @@ source .tools/env.sh
   Анімований API лишився сумісним як façades: `attachAnimatedSizeLayout`,
   `setAnimatedSizeFixed/Cross/Current`, `animatedSizeContent`, `animatedSizeIsReady`.
 - `framework/src/nativeMain/kotlin/dev/knshell/compose/Modifier.kt` — `WeightElement`
-  (≈ line 152), `Modifier.mainAxisWeight()`, `applyModifiers` (≈ 533–742).
+  (≈ line 152), `Modifier.mainAxisWeight()`, `applyModifiers` (≈ 533–742). З K4: п'ять
+  `kn-modifier-*` ключів і `fieldWritten`/`setFieldWritten` — у кінці файлу.
 - `framework/src/nativeMain/kotlin/dev/knshell/compose/Layout.kt` — `Modifier.weight(value)`.
 - `framework/src/nativeMain/kotlin/dev/knshell/compose/GtkApplier.kt` — `GtkNode.modifier`,
   `open fun applyModifier`, `open fun pushWeight()`.

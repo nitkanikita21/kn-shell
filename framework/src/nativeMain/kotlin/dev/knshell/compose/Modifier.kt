@@ -23,16 +23,11 @@ import kn.gtk.gtk_widget_set_overflow
 import kn.gtk.gtk_widget_set_size_request
 import kn.gtk.gtk_widget_set_valign
 import kn.gtk.gtk_widget_set_vexpand
-import kn.gtk.GTK_ALIGN_CENTER
-import kn.gtk.GTK_ALIGN_END
-import kn.gtk.GtkOrientation
-import kn.gtk.GtkOrientable
+import kn.gtk.GObject
 import kn.gtk.GtkOverflow
-import kn.gtk.gtk_orientable_get_orientation
-import kn.gtk.gtk_widget_get_halign
-import kn.gtk.gtk_widget_get_parent
-import kn.gtk.gtk_widget_get_valign
 import kn.gtk.GTK_ALIGN_FILL
+import kn.gtk.g_object_get_data
+import kn.gtk.g_object_set_data
 import dev.knshell.animation.applyAnimatedSizeModifier
 import kotlin.math.PI
 import kotlin.math.cos
@@ -734,39 +729,78 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
         val resolvedHeight = height?.let { maxHeight?.let { max -> minOf(it, max) } ?: it }
         gtk_widget_set_size_request(widget, resolvedWidth ?: -1, resolvedHeight ?: -1)
     }
-    opacity?.let { gtk_widget_set_opacity(widget, it.toDouble()) }
-    hexpand?.let { gtk_widget_set_hexpand(widget, if (it) 1 else 0) }
-    vexpand?.let { gtk_widget_set_vexpand(widget, if (it) 1 else 0) }
-    halign?.let { gtk_widget_set_halign(widget, it) }
-    valign?.let { gtk_widget_set_valign(widget, it) }
-    reconcileMainAxisAlign(widget)
+
+    // A `Modifier` chain is rebuilt from scratch on every recomposition, so a field the chain no
+    // longer mentions must go back to its GTK default (plan L9) — without this, `fillWidth()` stuck
+    // to a widget forever. Only fields the chain itself wrote are reset: `Image.pinSize()` and
+    // `GtkOverlayNode.attachChild()` set alignment directly, outside the pipeline, and `applyModifiers`
+    // runs after them.
+    if (hexpand != null) {
+        gtk_widget_set_hexpand(widget, if (hexpand == true) 1 else 0)
+        setFieldWritten(widget, HEXPAND_KEY, true)
+    } else if (fieldWritten(widget, HEXPAND_KEY)) {
+        gtk_widget_set_hexpand(widget, 0)
+        setFieldWritten(widget, HEXPAND_KEY, false)
+    }
+
+    if (vexpand != null) {
+        gtk_widget_set_vexpand(widget, if (vexpand == true) 1 else 0)
+        setFieldWritten(widget, VEXPAND_KEY, true)
+    } else if (fieldWritten(widget, VEXPAND_KEY)) {
+        gtk_widget_set_vexpand(widget, 0)
+        setFieldWritten(widget, VEXPAND_KEY, false)
+    }
+
+    // GTK 4 leaves a fresh widget at GTK_ALIGN_FILL on *both* axes (measured on a bare GtkLabel
+    // under gtk 4.24), so that is what a dropped `align()` restores.
+    if (halign != null) {
+        gtk_widget_set_halign(widget, halign)
+        setFieldWritten(widget, HALIGN_KEY, true)
+    } else if (fieldWritten(widget, HALIGN_KEY)) {
+        gtk_widget_set_halign(widget, GTK_ALIGN_FILL)
+        setFieldWritten(widget, HALIGN_KEY, false)
+    }
+
+    if (valign != null) {
+        gtk_widget_set_valign(widget, valign)
+        setFieldWritten(widget, VALIGN_KEY, true)
+    } else if (fieldWritten(widget, VALIGN_KEY)) {
+        gtk_widget_set_valign(widget, GTK_ALIGN_FILL)
+        setFieldWritten(widget, VALIGN_KEY, false)
+    }
+
+    if (opacity != null) {
+        gtk_widget_set_opacity(widget, opacity.toDouble())
+        setFieldWritten(widget, OPACITY_KEY, true)
+    } else if (fieldWritten(widget, OPACITY_KEY)) {
+        gtk_widget_set_opacity(widget, 1.0)
+        setFieldWritten(widget, OPACITY_KEY, false)
+    }
 
     inlineStyle.setRules(rules)
     inlineStyle.interaction.bind(clickHandler, hoverEnter, hoverExit, cursorName)
 }
 
-/**
- * Make `align(v = Align.Center)` / `align(v = Align.End)` work inside a vertical
- * `GtkBox` (`Box`, `Column`) and the horizontal equivalents inside `Row`.
- *
- * GtkBox honors `halign`/`valign` on its *cross* axis only: along its own
- * orientation the leftover space goes exclusively to children whose expand flag
- * is set, so without this a child is packed at the start with exactly its
- * natural size and the align above silently does nothing. Claiming the cell
- * lets `gtk_widget_size_allocate()` shrink the widget back to natural and
- * position it per align — which is also what centers an icon inside a badge.
- *
- * The flag is set along the *parent's* orientation and never cleared:
- * - cross-axis expand would propagate: `gtk_widget_compute_expand()` reports a
- *   vertical box as horizontally expanding when all its children do, so an icon
- *   with `align(h = Center)` made its 44px badge stretch across the whole card;
- * - clearing would step on explicit `expand()` / `fillWidth()` requests.
- */
-internal fun reconcileMainAxisAlign(widget: CPointer<GtkWidget>) {
-    val parent = gtk_widget_get_parent(widget) ?: return
-    val horizontal = gtk_orientable_get_orientation(parent.reinterpret<GtkOrientable>()) ==
-        GtkOrientation.GTK_ORIENTATION_HORIZONTAL
-    val align = if (horizontal) gtk_widget_get_halign(widget) else gtk_widget_get_valign(widget)
-    if (align != GTK_ALIGN_CENTER && align != GTK_ALIGN_END) return
-    if (horizontal) gtk_widget_set_hexpand(widget, 1) else gtk_widget_set_vexpand(widget, 1)
+// Which layout fields a `Modifier` chain has written on a widget, kept as GLib data on the widget
+// itself (plan L9). GObject data needs a pointer, and the only thing ever read back is whether the
+// key is present, so the value is the widget's own pointer: `g_object_set_data()` takes no destroy
+// callback and never frees what it stores, and writing `null` removes the key again. The record
+// therefore dies with the widget — no registry, no leak, and a widget that only ever got its
+// alignment from outside the modifier pipeline is never touched.
+
+private const val HEXPAND_KEY = "kn-modifier-hexpand"
+private const val VEXPAND_KEY = "kn-modifier-vexpand"
+private const val HALIGN_KEY = "kn-modifier-halign"
+private const val VALIGN_KEY = "kn-modifier-valign"
+private const val OPACITY_KEY = "kn-modifier-opacity"
+
+/** Whether a [Modifier] chain has written this layout field on [widget] before. */
+private fun fieldWritten(widget: CPointer<GtkWidget>, key: String): Boolean =
+    g_object_get_data(widget.reinterpret<GObject>(), key) != null
+
+/** Claims [key] for the modifier chain, or hands the field back when [written] is false. */
+private fun setFieldWritten(widget: CPointer<GtkWidget>, key: String, written: Boolean) {
+    val value = if (written) widget.reinterpret<GObject>() else null
+    g_object_set_data(widget.reinterpret<GObject>(), key, value)
 }
+
