@@ -38,6 +38,30 @@ fun Modifier.expand(): Modifier = with(ExpandElement(horizontal = true, vertical
     .with(AlignElement(horizontal = GTK_ALIGN_FILL, vertical = GTK_ALIGN_FILL))
 
 /**
+ * Main-axis weight: this child claims a share of the space the other children left over —
+ * the analogue of Android's `layout_weight` / Compose's `Modifier.weight`.
+ *
+ * ```kotlin
+ * Row(spacing = 8) {
+ *     Label("name")                       // natural width
+ *     Label(url, modifier = Modifier.weight(1f)) // everything else
+ * }
+ * ```
+ *
+ * Semantics (implemented by `KnBoxLayout` in `rust-core/src/kn_box_layout.c`):
+ *  - unweighted children are measured first and take their natural size;
+ *  - the leftover is split between weighted children in proportion to their weights;
+ *  - a weighted child is never squeezed below its own minimum, and with no leftover it keeps
+ *    that natural size — i.e. weights distribute *surplus*, they do not resize content
+ *    (this is exactly how `LinearLayout` behaves);
+ *  - `weight(0f)` (or no weight at all) means "natural size", and it also CLEARS a weight the
+ *    same widget had in a previous recomposition.
+ *
+ * Only meaningful on a direct child of a `Row`/`Column`/`Box`: any other container ignores it.
+ */
+fun Modifier.weight(value: Double = 1.0): Modifier = with(WeightElement(value.coerceAtLeast(0.0)))
+
+/**
  * Unified alignment modifier. Replaces `fillMaxWidth`, `fillMaxHeight`, `fillMaxSize`,
  * `centerVertically`, `centerHorizontally`.
  *

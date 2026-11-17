@@ -20,10 +20,33 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
     /** Per-widget style provider used by modifier-based styling. */
     internal val inlineStyle = InlineStyle(widget)
 
-    internal fun applyModifier(modifier: Modifier) {
+    /**
+     * The [Modifier] currently applied to this node.
+     *
+     * A container reads it to decide about its child: `weight` is a per-child property of the
+     * layout manager (`KnBoxLayout`), so [GtkBoxNode] pushes `child.modifier.mainAxisWeight()`
+     * whenever the child is attached or recomposed. Default is `Modifier` (no elements), which
+     * keeps the whole chain "absent means default" — the same rule that makes an empty chain
+     * clear `hexpand` (plan L9).
+     */
+    internal var modifier: Modifier = Modifier
+        private set
+
+    internal open fun applyModifier(modifier: Modifier) {
+        this.modifier = modifier
         applyModifiers(widget, modifier, inlineStyle)
     }
 
+    /**
+     * Lets a container push a per-child layout property it reads from [modifier].
+     *
+     * `weight` lives in the parent's layout manager (GTK has no child properties for a managed
+     * box), so a node cannot apply it to itself: [GtkBoxNode] overrides this and calls
+     * `setBoxChildWeight(parent, child, weight)`. The default is a no-op for leaves and for
+     * containers that do not manage weights. Called by the parent on attach and on every
+     * recomposition of the child's own chain.
+     */
+    internal open fun pushWeight() {}
     open fun insertChild(index: Int, child: GtkNode) {
         val safeIndex = index.coerceIn(0, children.size)
         children.add(safeIndex, child)
@@ -89,6 +112,18 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
  * exactly what GTK needs, because a widget can only be appended once its own
  * children already form a valid tree.
  */
+/**
+ * Public bridge for the internal [GtkNode.applyModifier] pipeline.
+ *
+ * Satellite widget modules (`:icons:core` and future ones) define their own
+ * GtkNode subclasses; they must route `Modifier` values through exactly the
+ * same [applyModifiers] code as the built-in widgets, without re-exposing
+ * [InlineStyle] as API. Compose-node factories inside those modules call this.
+ */
+fun GtkNode.applyModifierFromModule(modifier: Modifier) {
+    applyModifier(modifier)
+}
+
 class GtkApplier(root: GtkNode) : AbstractApplier<GtkNode>(root) {
     override fun insertTopDown(index: Int, instance: GtkNode) {
         // Children are inserted in insertBottomUp.

@@ -20,8 +20,17 @@ import kn.gtk.GtkOrientation
 import kn.gtk.GtkWidget
 import kn.gtk.cairo_t
 import kn.gtk.g_signal_connect_data
+import dev.knshell.core.attachBoxLayout
+import dev.knshell.core.forgetBoxChild
+import dev.knshell.core.setBoxChildWeight
+import dev.knshell.core.setBoxHomogeneous
+import dev.knshell.core.setBoxOrientation
+import dev.knshell.core.setBoxSpacing
+import kotlinx.cinterop.rawValue
 import kn.gtk.gtk_box_append
 import kn.gtk.gtk_box_insert_child_after
+import kn.gtk.gtk_widget_get_layout_manager
+import kn.gtk.gtk_widget_get_parent
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 import kn.gtk.GTK_ALIGN_CENTER
@@ -75,12 +84,64 @@ import kn.gtk.gtk_widget_queue_draw
  * theme never paints a background, border, shadow, padding or state highlight and the
  * whole visual definition comes from the [Modifier] DSL.
  */
-internal fun <T : GtkNode> T.plain(): T {
+/**
+ * Marks a node as "plain" — public so satellite widget modules (`:icons:core`)
+ * can register their own widgets through the same DSL styling pipeline.
+ */
+fun <T : GtkNode> T.plain(): T {
     gtk_widget_add_css_class(widget, PLAIN_CLASS)
     return this
 }
 
+/**
+ * The framework's box container: a `GtkBox` whose packing is done by the native
+ * `KnBoxLayout` manager (`rust-core/src/kn_box_layout.c`) instead of GtkBox's own final
+ * `GtkBoxLayout`.
+ *
+ * A manager is the only way to express the parts of the Android/Compose layout contract GTK has
+ * no API for: a per-child `weight`, a real height-for-width negotiation (`for_size` forwarded to
+ * the children), main-axis alignment inside a claimed cell, and the Compose-owned animated size.
+ * The widget stays a `GtkBox`, so its node tree, CSS name and child-management API
+ * (`gtk_box_append`/`gtk_box_insert_child_after`) are untouched — only the *packing* moved, which
+ * is why `spacing` must now be pushed to the manager rather than to `gtk_box_set_spacing()`.
+ */
 open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
+    private val containerHandle: ULong = widget.rawValue.toLong().toULong()
+
+    init {
+        attachBoxLayout(containerHandle, AXIS_WIDTH, 0, false)
+    }
+
+    /** Called once by [gtkBox] right after the widget is created. */
+    internal fun configureBox(vertical: Boolean, spacing: Int, homogeneous: Boolean) {
+        setBoxOrientation(containerHandle, if (vertical) AXIS_HEIGHT else AXIS_WIDTH)
+        setBoxSpacing(containerHandle, spacing.coerceAtLeast(0))
+        setBoxHomogeneous(containerHandle, homogeneous)
+    }
+
+    /** Re-pushes every child's weight; covers the case where a child changed weight without
+     * leaving the tree (its modifier is applied before this node's recomposition runs). */
+    private fun syncWeights() {
+        children.forEach { it.pushWeight() }
+    }
+
+    /** Applies this node's `Modifier.weight` to the container it currently lives in. */
+    internal override fun pushWeight() {
+        val parent = gtk_widget_get_parent(widget)?.asContainerHandle() ?: return
+        setBoxChildWeight(parent, widget.rawValue.toLong().toULong(), modifier.mainAxisWeight())
+    }
+
+    private fun CPointer<GtkWidget>.asContainerHandle(): ULong? =
+        if (gtk_widget_get_layout_manager(this) == null) null
+        else this.rawValue.toLong().toULong()
+
+    internal override fun applyModifier(modifier: Modifier) {
+        super.applyModifier(modifier)
+        // Our own chain changed nothing about the children, but theirs may have: a child that
+        // changed its weight without leaving the tree is only visible through its node.
+        syncWeights()
+    }
+
     /**
      * Order-aware insert: GTK appends by default, which breaks conditional siblings — the
      * new widget must land *before* the child that currently follows [index].
@@ -89,14 +150,26 @@ open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
         val box = widget.reinterpret<GtkBox>()
         val previous = children.getOrNull(index - 1)?.widget
         gtk_box_insert_child_after(box, child, previous)
+        // The child's own modifier was applied before it got a parent, so its weight can only
+        // be pushed now (main-axis align needs no such revisit: the manager gives an aligned
+        // child a cell itself — plan L1).
+        children.lastOrNull { it.widget == child }?.pushWeight()
     }
 
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_box_append(widget.reinterpret<GtkBox>(), child)
+        children.lastOrNull { it.widget == child }?.pushWeight()
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {
+        forgetBoxChild(containerHandle, child.rawValue.toLong().toULong())
         gtk_box_remove(widget.reinterpret<GtkBox>(), child)
+    }
+
+    private companion object {
+        /** Axis constants of `KnBoxLayout` (`KN_AXIS_WIDTH` / `KN_AXIS_HEIGHT`). */
+        const val AXIS_WIDTH = 0
+        const val AXIS_HEIGHT = 1
     }
 }
 
@@ -357,6 +430,7 @@ class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area_new()!!)
 private fun gtkBox(
     vertical: Boolean,
     spacing: Int,
+    homogeneous: Boolean,
     modifier: Modifier,
     content: @Composable () -> Unit,
 ) {
@@ -367,9 +441,12 @@ private fun gtkBox(
                     if (vertical) GtkOrientation.GTK_ORIENTATION_VERTICAL else GtkOrientation.GTK_ORIENTATION_HORIZONTAL,
                     spacing,
                 )!!,
-            ).plain()
+            ).plain().also { it.configureBox(vertical, spacing, homogeneous) }
         },
         update = {
+            set(vertical) { value -> configureBox(value, spacing, homogeneous) }
+            set(spacing) { value -> configureBox(vertical, value, homogeneous) }
+            set(homogeneous) { value -> configureBox(vertical, spacing, value) }
             set(modifier) { value -> applyModifier(value) }
         },
     ) {
@@ -378,13 +455,25 @@ private fun gtkBox(
 }
 
 @Composable
-fun Column(spacing: Int = 8, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    gtkBox(vertical = true, spacing = spacing, modifier = modifier, content = content)
+fun Column(
+    spacing: Int = 8,
+    homogeneous: Boolean = false,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    gtkBox(vertical = true, spacing = spacing, homogeneous = homogeneous,
+        modifier = modifier, content = content)
 }
 
 @Composable
-fun Row(spacing: Int = 8, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    gtkBox(vertical = false, spacing = spacing, modifier = modifier, content = content)
+fun Row(
+    spacing: Int = 8,
+    homogeneous: Boolean = false,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    gtkBox(vertical = false, spacing = spacing, homogeneous = homogeneous,
+        modifier = modifier, content = content)
 }
 
 /**
@@ -403,7 +492,7 @@ fun Box(modifier: Modifier = Modifier, content: @Composable () -> Unit = {}) {
         factory = {
             GtkBoxNode(
                 gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!,
-            ).plain()
+            ).plain().also { it.configureBox(vertical = true, spacing = 0, homogeneous = false) }
         },
         update = {
             set(modifier) { value -> applyModifier(value) }

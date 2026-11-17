@@ -24,9 +24,19 @@ import kn.gtk.gtk_widget_set_size_request
 import kn.gtk.gtk_widget_set_valign
 import kn.gtk.gtk_widget_set_vexpand
 import kn.gtk.GTK_ALIGN_CENTER
+import kn.gtk.GTK_ALIGN_END
+import kn.gtk.GtkOrientation
+import kn.gtk.GtkOrientable
 import kn.gtk.GtkOverflow
+import kn.gtk.gtk_orientable_get_orientation
+import kn.gtk.gtk_widget_get_halign
+import kn.gtk.gtk_widget_get_parent
+import kn.gtk.gtk_widget_get_valign
 import kn.gtk.GTK_ALIGN_FILL
 import dev.knshell.animation.applyAnimatedSizeModifier
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** A simple ARGB color with a CSS representation. */
 data class Color(val r: Int, val g: Int, val b: Int, val alpha: Float = 1f) {
@@ -48,8 +58,38 @@ data class Color(val r: Int, val g: Int, val b: Int, val alpha: Float = 1f) {
             b = (value and 0xFF).toInt(),
             alpha = alpha,
         )
+
+        /** OKLCH (l, c, h) → Color. `l` ∈ 0..1 lightness, `c` ∈ 0..~0.4 chroma, `h` in degrees. */
+        fun oklch(l: Float, c: Float, h: Float, alpha: Float = 1f): Color {
+            val hRad = h * PI.toFloat() / 180f
+            val a = c * cos(hRad)
+            val b = c * sin(hRad)
+
+            val l_ = l + 0.3963377774f * a + 0.2158037573f * b
+            val m_ = l - 0.1055613458f * a - 0.0638541728f * b
+            val s_ = l - 0.0894841775f * a - 1.2914855480f * b
+
+            val l3 = l_ * l_ * l_
+            val m3 = m_ * m_ * m_
+            val s3 = s_ * s_ * s_
+
+            val rLin = 4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3
+            val gLin = -1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3
+            val bLin = -0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3
+
+            return Color(
+                r = (rLin.linearToSrgb().coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255),
+                g = (gLin.linearToSrgb().coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255),
+                b = (bLin.linearToSrgb().coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255),
+                alpha = alpha,
+            )
+        }
     }
 }
+
+private fun Float.linearToSrgb(): Float =
+    if (this <= 0.0031308f) 12.92f * this
+    else 1.055f * kotlin.math.exp(kotlin.math.ln(this.toDouble()) / 2.4).toFloat() - 0.055f
 
 /** Catppuccin Mocha, used by the reference waybar theme. */
 object Catppuccin {
@@ -104,6 +144,24 @@ internal data object BoldElement : ModifierElement
 internal data class SizeElement(val width: Int?, val height: Int?) : ModifierElement
 internal data class ExpandElement(val horizontal: Boolean, val vertical: Boolean) : ModifierElement
 internal data class AlignElement(val horizontal: UInt?, val vertical: UInt?) : ModifierElement
+
+/**
+ * Android-style main-axis weight of a child inside a `Row`/`Column` (plan K3).
+ *
+ * It is a **per-child** property of the *container's* layout manager, so unlike every other
+ * element it is not written on the widget by [applyModifiers] — `GtkBoxNode.attachChildAt`
+ * pushes it to the manager (the parent widget is not reachable from here, and GTK's own
+ * `child` properties do not exist for a managed box).
+ *
+ * `weight <= 0f` means "no weight" and must be pushed as well: a [Modifier] chain is rebuilt
+ * from scratch every recomposition, so an absent weight has to clear the previous one (L9).
+ */
+internal data class WeightElement(val value: Double) : ModifierElement
+
+/** The main-axis weight [modifier] asks for, or `0f` when it has none. */
+internal fun Modifier.mainAxisWeight(): Double =
+    elements.filterIsInstance<WeightElement>().lastOrNull()?.value ?: 0.0
+
 internal data class OpacityElement(val value: Float) : ModifierElement
 
 /** Escape hatch for CSS that cannot be expressed with the typed modifiers. */
@@ -307,6 +365,7 @@ fun Modifier.extraBold(): Modifier = fontWeight(800)
 fun Modifier.black(): Modifier = fontWeight(900)
 
 fun Modifier.size(width: Int? = null, height: Int? = null): Modifier = with(SizeElement(width, height))
+fun Modifier.size(size: Int? = null): Modifier = with(SizeElement(size, size))
 
 fun Modifier.width(width: Int): Modifier = with(SizeElement(width, null))
 
@@ -547,6 +606,11 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
                 valign = element.vertical
             }
 
+            // Weight is a property of the CONTAINER's layout manager, not of the widget: it is
+            // pushed by `GtkBoxNode.pushWeight()` when this node is attached or recomposed.
+            // Nothing to write here — but reading it from `modifier` is exactly what that does.
+            is WeightElement -> Unit
+
             is OpacityElement -> opacity = element.value
 
             is RadiusElement -> rules += "" to element.declarations
@@ -675,7 +739,34 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     vexpand?.let { gtk_widget_set_vexpand(widget, if (it) 1 else 0) }
     halign?.let { gtk_widget_set_halign(widget, it) }
     valign?.let { gtk_widget_set_valign(widget, it) }
+    reconcileMainAxisAlign(widget)
 
     inlineStyle.setRules(rules)
     inlineStyle.interaction.bind(clickHandler, hoverEnter, hoverExit, cursorName)
+}
+
+/**
+ * Make `align(v = Align.Center)` / `align(v = Align.End)` work inside a vertical
+ * `GtkBox` (`Box`, `Column`) and the horizontal equivalents inside `Row`.
+ *
+ * GtkBox honors `halign`/`valign` on its *cross* axis only: along its own
+ * orientation the leftover space goes exclusively to children whose expand flag
+ * is set, so without this a child is packed at the start with exactly its
+ * natural size and the align above silently does nothing. Claiming the cell
+ * lets `gtk_widget_size_allocate()` shrink the widget back to natural and
+ * position it per align — which is also what centers an icon inside a badge.
+ *
+ * The flag is set along the *parent's* orientation and never cleared:
+ * - cross-axis expand would propagate: `gtk_widget_compute_expand()` reports a
+ *   vertical box as horizontally expanding when all its children do, so an icon
+ *   with `align(h = Center)` made its 44px badge stretch across the whole card;
+ * - clearing would step on explicit `expand()` / `fillWidth()` requests.
+ */
+internal fun reconcileMainAxisAlign(widget: CPointer<GtkWidget>) {
+    val parent = gtk_widget_get_parent(widget) ?: return
+    val horizontal = gtk_orientable_get_orientation(parent.reinterpret<GtkOrientable>()) ==
+        GtkOrientation.GTK_ORIENTATION_HORIZONTAL
+    val align = if (horizontal) gtk_widget_get_halign(widget) else gtk_widget_get_valign(widget)
+    if (align != GTK_ALIGN_CENTER && align != GTK_ALIGN_END) return
+    if (horizontal) gtk_widget_set_hexpand(widget, 1) else gtk_widget_set_vexpand(widget, 1)
 }

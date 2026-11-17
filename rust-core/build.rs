@@ -1,9 +1,9 @@
 fn main() {
-    println!("cargo:rerun-if-changed=src/kn_animated_size_layout.c");
+    println!("cargo:rerun-if-changed=src/kn_box_layout.c");
 
     let mut build = cc::Build::new();
     build
-        .file("src/kn_animated_size_layout.c")
+        .file("src/kn_box_layout.c")
         .flag_if_supported("-std=c11")
         .flag_if_supported("-Wno-unused-parameter");
 
@@ -19,5 +19,5 @@ fn main() {
         }
     }
 
-    build.compile("kn_animated_size_layout");
+    build.compile("kn_box_layout");
 }

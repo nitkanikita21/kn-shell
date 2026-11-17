@@ -323,7 +323,7 @@ trap 'EXIT_CODE=130; exit 130' INT TERM
 # ---------------------------------------------------------------------------
 FRAMEWORK_KT="framework/src/nativeMain/kotlin"
 APP_KT="shell-app/src/nativeMain/kotlin"
-C_LAYOUT="rust-core/src/kn_animated_size_layout.c"
+C_LAYOUT="rust-core/src/kn_box_layout.c"
 
 gate() {
     local name=$1 details=$2 file=$3
