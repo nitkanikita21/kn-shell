@@ -168,7 +168,10 @@ remove boilerplate:
 | `Icon(glyph, size = 13, color = null)` | Nerd Font glyph |
 | `Text(text, size = 13, color = null)` | plain label |
 
-Layout: `Row`, `Column`, `Box`, `CenterBox` from `dev.knshell.compose`.
+Layout: `Row`, `Column`, `Box`, `CenterBox`, `Stack`, `Overlay` from `dev.knshell.compose`.
+`Box` is the **block-flow** container (the "div": children one under another), not Compose's
+`Box`; put children on top of each other with `Stack` (container = largest child) or, when the
+overlay must not affect the measured size, with `Overlay`.
 Colours: the `Catppuccin` palette object (`dev.knshell.compose`); build any other palette
 with the Modifier DSL.
 

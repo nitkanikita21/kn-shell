@@ -68,7 +68,7 @@ Kotlin-шар (API лишається Android-подібний):
 - [x] **K4. Видалення `reconcileMainAxisAlign()` + повний скид полів кожний прохід** в `applyModifiers` (L1, L9).
 - [x] **K5. Max-size**: clamp у `KnBoxLayout` (рекомендовано, бо інакше `maxWidth()` лишається брехнею в DSL) — з явним записом у docs, що це емуляція; альтернатива — прибрати `maxWidth/maxHeight/maxSize` (L6).
 - [x] **K6. CenterBox**: іменовані слоти замість лічильника (L7) + документація `shrink-center-last` (4.12).
-- [ ] **K7. `Box` vs `Stack`** (L8): збереження block flow + новий `Stack`, чи перепис на стекінг. Вибір з урахуванням, що `docs/bar-api.md`/`docs/shell-api.md` уже описують `Box` як «div».
+- [x] **K7. `Box` vs `Stack`** (L8): збереження block flow + новий `Stack`, чи перепис на стекінг. Вибір з урахуванням, що `docs/bar-api.md`/`docs/shell-api.md` уже описують `Box` як «div».
 - [ ] **K8. Overlay без хаку**: рідні `measure_overlay`/`clip_overlay` (L11).
 - [ ] **K9. Docs**: `docs/framework-api.md` (модифієр→GTK таблиця), `docs/shell-api.md:256-303`, `docs/bar-api.md:117-172`, новий `docs/layout-model.md` — що GTK гарантує, що емулюємо, чого не може бути (max-size, % of parent).
 - [ ] **K10. Прибирання прикладів**: L10 у `test.ui.kt`; перевірка `ui/primitives/Image.kt:86` і `compose/ShaderCanvas.kt:145` (pin через `size_request` — тепер є чесний шлях).
@@ -227,3 +227,38 @@ _Suite_: **71 тест, 71 green** (`./gradlew :framework:linuxX64Test`). +7 т�
 - Документація: `docs/shell-api.md` (абзац про регіони + структурний слот + `shrink-center-last`),
   `docs/bar-api.md` (те саме, коротко), KDoc `GtkCenterRegionNode`/`GtkCenterBoxNode`; старий
   коментар тесту `CenterBox cannot express which side is squeezed first` переписано в минулий час.
+
+## 6.4 K7 — результати (2026-11-18, ноут)
+
+_Рішення_: **варіант 1** — `Box` лишається block flow, а стекінг отримує окремий віджет `Stack`.
+
+- Чому не переписувати `Box` на стекінг: його block-flow семантика вже описана в
+  `docs/shell-api.md`, `docs/bar-api.md` і в KDoc, на ній побудовані `Spacer`/`Space`
+  (`ui/primitives/Utilities.kt:29,35` — `Box(Modifier.size(width, height))`) і весь наявний
+  UI-код бару. Зміна семантики мовчки змінила б розкладку кожного `Box` у проєктах користувача,
+  не даючи натомість нічого, чого не дає новий `Stack`.
+- `Stack` = Compose `Box`: **контейнер розміром з найбільшу дитину**, кожна дитина отримує всю
+  клітинку. Реалізація — `GtkOverlay` з `gtk_overlay_set_measure_overlay(child, TRUE)` на кожній
+  дитині; перша дитина стає main child (`gtk_overlay_set_child`), решта — overlay-список.
+  Невидима 0×0 заглушка тут **не потрібна** — саме тому `Stack` існує окремо від `Overlay`.
+- Позицію всередині клітинки задає `Modifier.align`: `Stack` сам нічого не вирівнює, а GTK за
+  замовчуванням тягне дитину на обидві осі, тож дитина, яка має зберегти натюр-розмір, просить
+  `Align.Start`/`Center`. Порядок малювання = порядок композиції (бейдж після іконки лягає зверху).
+- Нюанс, задокументований у KDoc: `insertChild(0)` у **непорожній** стек додає дитину в
+  overlay-список, а не витісняє main child — витіснення означало б `set_child(null)`, тобто
+  unparent живого віджета (GTK тримає рівно одну головну дитину).
+- Тести (4, група `3b. Stack`): `a stack is as large as its largest child` (обидва порядки),
+  `every stack child is given the whole cell`, `a stack of one child is that child`,
+  `removing the first child keeps the rest measured`. Мутаційна перевірка: без
+  `measure_overlay` падають рівно 2 з них (`…largest child`, `removing the first child…`) — тобто
+  тести справді тримають вимірювання, а не просто «компілюється».
+- Візуал: probe в `shell-app/main.kt` — три `Stack` у `Row`: (а) `Text("24", size=32)` під
+  `Text("12:00:00", size=10)`, (б) картка `size(48,48)` з бейджем `Text("3")` через
+  `align(h = End, v = Start)`, (в) стек з однією дитиною. Бейдж намальовано поверх картки
+  у правому верхньому куті, широкий текст не обрізано до вужчого, лог без
+  `Gtk-WARNING`/`CRITICAL`; `main.kt` повернуто до стану commit.
+  Скріншот: `/tmp/k7.png` (вертикальне розтягування карток — це `valign = FILL` від `Row`,
+  не поведінка `Stack`).
+- Документація: `docs/shell-api.md` (список layout-віджетів + абзац «`Box` — block flow, не
+  Compose `Box`; стек — `Stack`/`Overlay`»), `docs/bar-api.md` (таблиця модулів),
+  `docs/framework-api.md` (перелік віджетів), KDoc `Box`/`Stack`/`GtkStackNode`/`Overlay`.

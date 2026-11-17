@@ -479,6 +479,82 @@ class LayoutProbeTest {
         assertEquals(flat.third, growing.third, "and so does the other side")
     }
 
+    // ------------------------------------------------- 3b. Stack (Compose Box)
+    //
+    // `Box` in this framework is block flow (see docs/shell-api.md); `Stack` is the z-stacking
+    // container, and the contract is Compose's: as large as the largest child, every child given
+    // the whole cell.
+
+    @Test
+    fun `a stack is as large as its largest child`() {
+        // Fresh widgets per stack on purpose: a widget can only have one parent, so reusing the
+        // labels would move them out of the first stack and measure an empty container.
+        fun stackOf(first: String, second: String) = GtkStackNode().also {
+            it.insertChild(0, GtkNode(label(first)))
+            it.insertChild(1, GtkNode(label(second)))
+        }
+
+        // Both orders: GtkOverlay tells its main child apart from the overlay list, so the
+        // largest child has to contribute to the size whichever of the two it is.
+        assertEquals(
+            naturalWidth(label("12:00:00")),
+            naturalWidth(stackOf("12:00:00", "2").widget),
+            "the largest child is the first one",
+        )
+        assertEquals(
+            naturalWidth(label("12:00:00")),
+            naturalWidth(stackOf("2", "12:00:00").widget),
+            "the largest child is the second one",
+        )
+        assertEquals(
+            naturalHeight(label("12:00:00")),
+            naturalHeight(stackOf("2", "12:00:00").widget),
+            "and on the cross axis",
+        )
+    }
+
+    @Test
+    fun `every stack child is given the whole cell`() {
+        val stack = GtkStackNode()
+        stack.insertChild(0, GtkNode(label("2")))
+        stack.insertChild(1, GtkNode(label("icon")))
+        allocate(stack.widget, width = 200, height = 80)
+
+        assertEquals(
+            listOf(Rect(0, 0, 200, 80), Rect(0, 0, 200, 80)),
+            childrenOf(stack.widget).map { allocRect(it) },
+            "children overlap: each is allocated the container's own cell",
+        )
+    }
+
+    @Test
+    fun `a stack of one child is that child`() {
+        val stack = GtkStackNode()
+        val only = GtkNode(label("24"))
+        stack.insertChild(0, only)
+
+        assertEquals(naturalWidth(only.widget), naturalWidth(stack.widget), "one child, its size")
+
+        // The first child becomes GtkOverlay's main child; a second one joins the overlay list
+        // and must still be measured.
+        stack.insertChild(1, GtkNode(label("3")))
+        assertEquals(naturalWidth(only.widget), naturalWidth(stack.widget), "a smaller sibling changes nothing")
+    }
+
+    @Test
+    fun `removing the first child keeps the rest measured`() {
+        val stack = GtkStackNode()
+        stack.insertChild(0, GtkNode(label("short")))
+        stack.insertChild(1, GtkNode(label("12:00:00")))
+        stack.removeChild(0, 1)
+
+        assertEquals(
+            naturalWidth(label("12:00:00")),
+            naturalWidth(stack.widget),
+            "the remaining child still defines the stack",
+        )
+    }
+
     // --------------------------------------------------------- 2. DSL contract
 
     @Test

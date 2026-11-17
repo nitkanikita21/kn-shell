@@ -7,7 +7,7 @@ bar yourself from generic layout, utilities, the Modifier DSL and reactive servi
 
 | Piece | From |
 | --- | --- |
-| layout | `Row`, `Column`, `Box`, `CenterBox` — `dev.knshell.compose` |
+| layout | `Row`, `Column`, `Box`, `CenterBox`, `Stack`, `Overlay` — `dev.knshell.compose` |
 | utilities | `Space`, `HSpace`, `VSpace`, `Spacer`, `Icon`, `Text` — `dev.knshell.ui.primitives` |
 | styling | Modifier DSL (`padding`, `margin`, `background`, `textColor`, `fontSize`, …) + `Catppuccin` palette |
 | data | `Services` — `StateFlow`s (`Services.workspaces.state`, `Services.media.state`, …) |

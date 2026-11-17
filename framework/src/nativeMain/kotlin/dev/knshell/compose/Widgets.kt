@@ -37,9 +37,11 @@ import kn.gtk.GTK_ALIGN_CENTER
 import kn.gtk.GTK_ALIGN_FILL
 import kn.gtk.GtkOverlay
 import kn.gtk.gtk_overlay_add_overlay
+import kn.gtk.gtk_overlay_get_child
 import kn.gtk.gtk_overlay_remove_overlay
 import kn.gtk.gtk_overlay_new
 import kn.gtk.gtk_overlay_set_child
+import kn.gtk.gtk_overlay_set_measure_overlay
 import kn.gtk.gtk_widget_set_halign
 import kn.gtk.gtk_widget_set_hexpand
 import kn.gtk.gtk_widget_set_valign
@@ -192,6 +194,46 @@ class GtkOverlayNode : GtkNode(gtk_overlay_new()!!) {
         // Overlay children can be conditional (`if (active) Text(...)`): without this the
         // removed label stays in the overlay and the next one is added on top of it.
         gtk_overlay_remove_overlay(widget.reinterpret<GtkOverlay>(), child)
+    }
+}
+
+/**
+ * Stacks children on top of each other and is as large as its **largest** child — Compose's
+ * `Box`, and the z-stacking container [Box] deliberately is not (`GtkBox` block flow).
+ *
+ * GtkOverlay does the work: `measure-overlay` is switched on for every child, so each of them
+ * contributes to the size instead of the container having to invent an invisible main child.
+ * Every child is allocated the whole cell and decides its own position inside it with
+ * `Modifier.align` (GTK fills by default, and GTK fills *both* axes, so a `Stack` child that
+ * must keep its natural size needs `Modifier.align(h = Align.Start, v = Align.Start)`).
+ *
+ * Children paint in composition order (main child first, then the overlay list), which is what
+ * makes a badge drawn after its icon land on top. A child composed at index 0 of a non-empty
+ * stack joins the overlay list instead of evicting the current main child — GtkOverlay holds
+ * exactly one of those, and evicting it would unparent a live widget.
+ */
+class GtkStackNode : GtkNode(gtk_overlay_new()!!) {
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) = place(index, child)
+
+    override fun attachChild(child: CPointer<GtkWidget>) = place(children.size - 1, child)
+
+    private fun place(index: Int, child: CPointer<GtkWidget>) {
+        val overlay = widget.reinterpret<GtkOverlay>()
+        if (index == 0 && gtk_overlay_get_child(overlay) == null) {
+            gtk_overlay_set_child(overlay, child)
+        } else {
+            gtk_overlay_add_overlay(overlay, child)
+            gtk_overlay_set_measure_overlay(overlay, child, 1)
+        }
+    }
+
+    override fun detachChild(child: CPointer<GtkWidget>) {
+        val overlay = widget.reinterpret<GtkOverlay>()
+        if (gtk_overlay_get_child(overlay) == child) {
+            gtk_overlay_set_child(overlay, null)
+        } else {
+            gtk_overlay_remove_overlay(overlay, child)
+        }
     }
 }
 
@@ -502,12 +544,13 @@ fun Row(
 }
 
 /**
- * Generic container — the "div" of this toolkit.
+ * Generic block-flow container — the "div" of this toolkit, **not** Compose's `Box`.
  *
- * Children stack vertically (block flow); use [Row] / [Column] for flex layouts. All
- * styling comes from the [Modifier]: size, padding, background, radius, hover, etc.
- * A plain visible bar surface is just
- * `Box(Modifier.align(h = Align.Fill).height(40).background(color)) { ... }`.
+ * Children stack vertically (block flow), each one a full-width row: use [Row] / [Column]
+ * for flex layouts, [Stack] to put children on top of each other (Compose `Box`), [Overlay]
+ * when the overlay children must not affect the measured size. All styling comes from the
+ * [Modifier]: size, padding, background, radius, hover, etc. A plain visible bar surface is
+ * just `Box(Modifier.align(h = Align.Fill).height(40).background(color)) { ... }`.
  *
  * Layer-shell windows are transparent: if nothing paints, the bar is invisible.
  */
@@ -519,6 +562,33 @@ fun Box(modifier: Modifier = Modifier, content: @Composable () -> Unit = {}) {
                 gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!,
             ).plain().also { it.configureBox(vertical = true, spacing = 0, homogeneous = false) }
         },
+        update = {
+            set(modifier) { value -> applyModifier(value) }
+        },
+    ) {
+        content()
+    }
+}
+
+/**
+ * Stacks [content] on top of each other: the container is as large as its largest child, and
+ * every child is given the whole cell (this is Compose's `Box`; the widget named [Box] here is
+ * the block-flow "div").
+ *
+ * ```kotlin
+ * Stack(Modifier.padding(4)) {
+ *     Icon(Lucide.Bell)                                        // badge under
+ *     Text("3", Modifier.align(h = Align.End, v = Align.Start)) // badge on top
+ * }
+ * ```
+ *
+ * A child fills the cell unless `Modifier.align` says otherwise — GTK fills both axes by
+ * default, so a child that must keep its natural size asks for `Align.Start` (or `Center`).
+ */
+@Composable
+fun Stack(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    ComposeNode<GtkStackNode, GtkApplier>(
+        factory = { GtkStackNode().plain() },
         update = {
             set(modifier) { value -> applyModifier(value) }
         },
