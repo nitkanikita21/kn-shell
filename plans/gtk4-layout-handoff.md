@@ -1,12 +1,14 @@
-# Handoff: GTK4 layout semantics (K9 — continuation on the laptop)
+# Handoff: GTK4 layout semantics (K10 — останній крок, продовження на ноуті)
 
 Цей файл — точка входу після перерви. План-чекліст: `plans/gtk4-layout-semantics.md`
-(виконується, 8/10 кроків: K1…K8 позначені `[x]`).
+(виконується, 9/10 кроків: K1…K9 позначені `[x]`).
 
 ## 0. Стан на момент зупинки
-- K1 (тести), K2 (фікси C), K3 (`KnBoxLayout` + `weight`), **K4 (видалено `reconcileMainAxisAlign`,
-  чесний скид полів), K5 (max-size як стеля в `KnBoxLayout`) — зроблено**.
-- _suite_: `64 tests, 0 failed`. Навмисно червоних цілей більше немає: від тепер кожен крок
+- **K1–K9 зроблено**; лишився K10 (приклади + `size_request`-пін в `Image`/`ShaderCanvas`).
+  K4 = видалено `reconcileMainAxisAlign` + чесний скид полів; K5 = max-size як стеля в
+  `KnBoxLayout`; K6 = `CenterBox` з іменованими регіонами; K7 = `Stack` (а `Box` лишився
+  block flow); K8 = `Overlay` без невидимої головної дитини; K9 = `docs/layout-model.md`.
+- _suite_: `79 tests, 0 failed`. Навмисно червоних цілей більше немає: від тепер кожен крок
   починається з тесту, а green тримається весь час.
 - K5 лишив після себе **єдиний канал per-child властивостей лейауту**: `KnChildLayout
   { weight; max_width; max_height; }` у `kn_box_layout.c` + `setBoxChildWeight` /
@@ -242,27 +244,46 @@ DSL-канал: `Modifier.maxSizeCaps(): Pair<Int, Int>` → `GtkNode.pushChildL
 - Точність, яку варто памʼятати при нових тестах вирівнювання: GTK центрує з **ceil** —
   7px лейбл у 200px клітинці починається з 97, а не 96.
 
-## 2'''''. K9 — `docs/layout-model.md` (наступний крок)
+## 2. K9 — ВИКОНАНО (`docs/layout-model.md` і лінки)
 
-Мета: один документ, що описує модель розкладки так, як вона тепер працює, і фіксує межі.
-Матеріал уже зібраний у `plans/gtk4-layout-semantics.md` §6.1–6.5, його треба переписати для
-читача фреймворку (не для того, хто читав план):
+Створено `docs/layout-model.md` (≈6.8 KB): таблиця «контейнер → хто міряє», таблиця
+«модифікатор → GTK-поле → семантика» (`size` = мінімум, `minSize` = CSS-мінімум, `maxSize` =
+емуляція стелі з підлогою `min`, `weight` = поділ залишку, `align` = позиція в клітинці,
+`hExpand` = запит залишку, `margin` додає до виміру, `padding` всередині), розділ про
+ownership полів (`kn-modifier-*` qdata — чому `Image`/`Overlay`/`CenterRegion` не збиваються),
+«вибір контейнера», «що емулюємо, що не може працювати» (weight лише в `KnBoxLayout`,
+`maxSize` поза ним — лише явний `size()`, `align` без клітинки, без відсотків від батька, без
+baseline/intrinsic-ratio/другого проходу, текст не reflow-иться на shrink, «підлога» тексту) і
+«Debugging» (`GTK_DEBUG=layout`, хелпери `LayoutProbeTest`).
 
-1. Хто міряє: `KnBoxLayout` (C, `rust-core/src/kn_box_layout.c`) проти решти GTK (bottom-up).
-   Що з цього випливає для користувача: `size_request` — це **мінімум**, натюр-розмір рахується з
-   контенту, `maxWidth/maxHeight` — стеля з підлогою `min` (min beats max), вага — пропорційний
-   поділ залишку.
-2. Контейнери й коли який: `Row`/`Column` (KnBoxLayout, `weight`, `maxSize`), `Box` (block flow,
-   **не** Compose `Box`), `Stack` (стекінг, розмір за найбільшою дитиною), `Overlay` (діти не
-   впливають на розмір), `CenterBox` (три регіони, `shrink-center-last`), `Canvas`.
-3. Чесні межі (те, що люди ловлять як «баг»): `Modifier.weight` працює лише в
-   `Row`/`Column`/`Box` (поза `KnBoxLayout` нема куди його покласти); `maxSize` поза
-   `KnBoxLayout` стелює лише явний `size()`; `align` не створює комірку поза менеджером;
-   `Label(maxWidthChars)` vs `maxWidth` (еліпсис проти обрізання).
-4. Куди посилатись: `docs/shell-api.md` (Modifier-таблиця), `docs/bar-api.md` (модулі бару),
-   `docs/framework-api.md` (перелік віджетів).
-Після K9 — K10: приклад `Box` із подвійним `padding` (L10, файл `test.ui.kt` живе у вашій
-WIP-гілці, не в цьому клоні) + загальний прогін прикладів.
+Посилaння на нього додані у `docs/framework-api.md` (після таблиці `dev.knshell.compose`),
+`docs/bar-api.md` (перед розділом animated-size) і `docs/shell-api.md` (розділ «Text that does
+not affect layout»). У `docs/shell-api.md` також виправлено застаріле «`GtkOverlay` measures only
+its main child» (неправда після K8) і відновлено зіпсоване виділення «where the text *should*
+size its container». Таблиця модифікаторів уже мала K5-рядок для `maxWidth/maxHeight/maxSize` —
+не дублювали.
+
+Тести після K9: 79/79 (змін у коді не було).
+
+## 2'. K10 — останній крок (наступний)
+
+Мета: прибрати застарілі приклади й перевірити два місця, де розмір досі піниться через
+`size_request`, хоча тепер є чесніші шляхи.
+
+1. **L10 — подвійний `padding` у `test.ui.kt`.** Файл живе у вашій WIP-гілці (`shell-app` демо),
+   у цьому клоні його немає — правку робити там, де він є: `Box`/`Row` уже з `padding(...)`, а
+   дитина ще з власним `padding(...)`, що дає подвійний відступ.
+2. **`ui/primitives/Image.kt:86`** — `pinSize()` ставить `gtk_widget_set_size_request(w, h)` +
+   `halign/valign = START`. Тепер `size(w, h)` + `align(h = Start, v = Start)` дають те саме
+   через модифікатор, який K4 коректно скидає; перевірити, чи `pinSize()` ще потрібен, чи
+   `Image` може віддавати ці поля в `applyModifiers` (увага: `pinSize()` викликається ПОЗА
+   пайплайном, тому ownership-механізм його зараз захищає — якщо перенести в модифікатор,
+   поведінка стане «скидається разом з рештою», тобто `Image` без модифікатора втратить пін).
+3. **`compose/ShaderCanvas.kt:145`** — те саме питання для `size_request`-піна.
+4. Прогнати `:framework:linuxX64Test` (79/79) і візуально перевірити демо після прибирання.
+
+Після K10 — оновити §6.7 у `plans/gtk4-layout-semantics.md`, відмітити K10 `[x]`, і план
+закритий (K1–K10 усі `[x]`).
 
 ## 3. Рішення, які вже ухвалено (не переписувати)
 
@@ -343,7 +364,8 @@ K1–K8 **закомічені й запушені** на `gtk4-layout-semantics
 `896b552`/`4519329`/`f4e894d` (plans), `fd20e54` (K4), `30a30ae` (K5),
 `feat(centerbox): name the regions instead of counting attach calls` (K6),
 `feat(stack): add the z-stacking container Compose calls Box` (K7),
-`feat(overlay): drop the invisible main child GtkOverlay never needed` (K8).
+`feat(overlay): drop the invisible main child GtkOverlay never needed` (K8),
+`docs(layout): write down the layout model GTK actually implements` (K9).
 Робоче дерево чисте; ваш рефакторинг (shell-app DI/theme, `:icons:core`, `services/*.kt`) у
 цьому клоні відсутній, тому `git commit -- <paths>` без ризику захопити чуже.
 

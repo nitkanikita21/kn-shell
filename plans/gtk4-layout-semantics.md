@@ -70,7 +70,7 @@ Kotlin-шар (API лишається Android-подібний):
 - [x] **K6. CenterBox**: іменовані слоти замість лічильника (L7) + документація `shrink-center-last` (4.12).
 - [x] **K7. `Box` vs `Stack`** (L8): збереження block flow + новий `Stack`, чи перепис на стекінг. Вибір з урахуванням, що `docs/bar-api.md`/`docs/shell-api.md` уже описують `Box` як «div».
 - [x] **K8. Overlay без хаку**: рідні `measure_overlay`/`clip_overlay` (L11).
-- [ ] **K9. Docs**: `docs/framework-api.md` (модифієр→GTK таблиця), `docs/shell-api.md:256-303`, `docs/bar-api.md:117-172`, новий `docs/layout-model.md` — що GTK гарантує, що емулюємо, чого не може бути (max-size, % of parent).
+- [x] **K9. Docs**: `docs/framework-api.md` (модифієр→GTK таблиця), `docs/shell-api.md:256-303`, `docs/bar-api.md:117-172`, новий `docs/layout-model.md` — що GTK гарантує, що емулюємо, чого не може бути (max-size, % of parent).
 - [ ] **K10. Прибирання прикладів**: L10 у `test.ui.kt`; перевірка `ui/primitives/Image.kt:86` і `compose/ShaderCanvas.kt:145` (pin через `size_request` — тепер є чесний шлях).
 
 ## 5. Ризики
@@ -294,3 +294,11 @@ _Suite_: **79 тестів, 79 green**. Хак L11 закрито — і не т
 - Документація: `docs/shell-api.md` — абзац «Verified semantics» переписано (заглушка не потрібна,
   `Stack` — для контейнера розміром з найбільшу дитину); KDoc `Overlay`/`GtkOverlayNode`/`Stack`
   і `GtkOverlayBaseNode`.
+
+## 6.6 K9 — результати (2026-11-18, ноут)
+
+- Новий `docs/layout-model.md` — контракт розкладки: хто міряє (таблиця контейнер → менеджер: `Row`/`Column`/`Box` → `KnBoxLayout`, `CenterBox` → три внутрішні `GtkBox`, `Stack`/`Overlay` → `GtkOverlay`, animated → `KnAnimatedSizeLayout`, решта — сток GTK), чотири «ручки розміру» (`size` = мінімум, `minSize` = CSS-мінімум, `maxSize` = емуляція стелі з підлогою по `min`, `weight` = поділ залишку), ownership полів модифікатора (qdata-ключі `kn-modifier-*`, звідси `Image`/`Overlay`/`CenterRegion` зберігають своє), вибір контейнера, чесні обмеження (`weight` лише в `KnBoxLayout`; `maxSize` поза менеджером клампить лише явний `size()`; `align` без клітинки нічого не робить; відсотків від батька немає; без baseline/intrinsic-ratio/другого проходу; текст не reflow-иться на shrink) і розділ «Debugging» (`GTK_DEBUG=layout`, хелпери `LayoutProbeTest`).
+- Лінк на новий документ із `docs/framework-api.md` (після таблиці `dev.knshell.compose`), `docs/bar-api.md` (перед animated-size) і `docs/shell-api.md` (у розділі «Text that does not affect layout»).
+- `docs/shell-api.md` виправлено: застаріле «`GtkOverlay` measures only its main child» (неправда після K8) → «діти малюються поверх і не впливають на вимір»; відновлено зіпсоване виділення «where the text *should* size its container».
+- Таблиця модифієрів у `docs/shell-api.md` уже містила K5-рядок `maxWidth/maxHeight/maxSize` (емуляція, підлога по `min`) — не дублювали.
+- Тести після правок: `:framework:linuxX64Test` BUILD SUCCESSFUL, 79/79 (код не змінювався, лише docs).

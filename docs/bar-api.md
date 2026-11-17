@@ -146,6 +146,9 @@ Row(
 }
 ```
 
+Container semantics (block flow vs stacking, `weight`, caps, alignment) are in
+[`docs/layout-model.md`](layout-model.md).
+
 `animatedWidth` / `animatedHeight` / `animatedSize(axis, …)` are `Modifier` extensions on the
 container (`Row`/`Column`). There is no dedicated component — `AnimatedBox`/`AnimatedWidth` were
 removed.

@@ -319,9 +319,9 @@ Later modifiers win on order as usual: `background(color, radius = 8)` overrides
 ### Text that does not affect layout
 
 GTK measures children, so a `Label` forces its line height onto the parent — a 16px chip
-with a 13px label grows to ~17px. Put such content in [Overlay]: `GtkOverlay` measures only
-its main child, overlay children are painted on top (centered) and never affect the
-measured size. Combine with `clipOverflow()` to clip the overflow.
+with a 13px label grows to ~17px. Put such content in `Overlay`: its children are painted on
+top (centered) and never affect the measured size. Combine with `clipOverflow()` to clip the
+overflow. See `docs/layout-model.md` for the full contract.
 
 ```kotlin
 Overlay(

@@ -31,6 +31,9 @@ is an implementation detail and may change.
 | `Canvas`, `ShaderCanvas` | cairo / OpenGL drawing |
 | `installPlainReset` | resets the GTK theme (called by the runtime) |
 
+Layout semantics — who measures, what `size`/`minSize`/`maxSize`/`weight` really mean, which
+container to pick, and what GTK cannot express — are in [`docs/layout-model.md`](layout-model.md).
+
 ### Animated size (Compose-owned)
 
 The size animation is a **`Modifier`** — there is no dedicated component. `animatedWidth` /
