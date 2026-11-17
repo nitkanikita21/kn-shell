@@ -119,27 +119,18 @@ open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
         setBoxHomogeneous(containerHandle, homogeneous)
     }
 
-    /** Re-pushes every child's weight; covers the case where a child changed weight without
-     * leaving the tree (its modifier is applied before this node's recomposition runs). */
-    private fun syncWeights() {
-        children.forEach { it.pushWeight() }
+    /** Re-pushes every child's layout properties; covers the case where a child changed its
+     * weight or cap without leaving the tree (its modifier is applied before this node's
+     * recomposition runs). */
+    private fun syncChildLayouts() {
+        children.forEach { it.pushChildLayout() }
     }
-
-    /** Applies this node's `Modifier.weight` to the container it currently lives in. */
-    internal override fun pushWeight() {
-        val parent = gtk_widget_get_parent(widget)?.asContainerHandle() ?: return
-        setBoxChildWeight(parent, widget.rawValue.toLong().toULong(), modifier.mainAxisWeight())
-    }
-
-    private fun CPointer<GtkWidget>.asContainerHandle(): ULong? =
-        if (gtk_widget_get_layout_manager(this) == null) null
-        else this.rawValue.toLong().toULong()
 
     internal override fun applyModifier(modifier: Modifier) {
         super.applyModifier(modifier)
         // Our own chain changed nothing about the children, but theirs may have: a child that
-        // changed its weight without leaving the tree is only visible through its node.
-        syncWeights()
+        // changed its weight or its cap without leaving the tree is only visible through its node.
+        syncChildLayouts()
     }
 
     /**
@@ -150,15 +141,15 @@ open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
         val box = widget.reinterpret<GtkBox>()
         val previous = children.getOrNull(index - 1)?.widget
         gtk_box_insert_child_after(box, child, previous)
-        // The child's own modifier was applied before it got a parent, so its weight can only
-        // be pushed now (main-axis align needs no such revisit: the manager gives an aligned
-        // child a cell itself — plan L1).
-        children.lastOrNull { it.widget == child }?.pushWeight()
+        // The child's own modifier was applied before it got a parent, so its layout properties
+        // can only be pushed now (main-axis align needs no such revisit: the manager gives an
+        // aligned child a cell itself — plan L1).
+        children.lastOrNull { it.widget == child }?.pushChildLayout()
     }
 
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_box_append(widget.reinterpret<GtkBox>(), child)
-        children.lastOrNull { it.widget == child }?.pushWeight()
+        children.lastOrNull { it.widget == child }?.pushChildLayout()
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {

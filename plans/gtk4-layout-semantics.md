@@ -66,7 +66,7 @@ Kotlin-шар (API лишається Android-подібний):
 - [x] **K2. Точечні фікси чинного C-manager'а** (L2 vexpand-for-vertical, L3 min+natural+for_size, L4 `m < 1`, L5 packing) — окремим комітом, щоб потім було з чим порівнювати візуально.
 - [x] **K3. `KnBoxLayout` + per-child `weight`** у `rust-core` (C + `box_layout.rs` UniFFI + `compute_expand`), прикріплення з `GtkBoxNode`. Рішення на цьому кроці: merge з animated-size чи тонкий шар поверх спільної child-моделі.
 - [x] **K4. Видалення `reconcileMainAxisAlign()` + повний скид полів кожний прохід** в `applyModifiers` (L1, L9).
-- [ ] **K5. Max-size**: clamp у `KnBoxLayout` (рекомендовано, бо інакше `maxWidth()` лишається брехнею в DSL) — з явним записом у docs, що це емуляція; альтернатива — прибрати `maxWidth/maxHeight/maxSize` (L6).
+- [x] **K5. Max-size**: clamp у `KnBoxLayout` (рекомендовано, бо інакше `maxWidth()` лишається брехнею в DSL) — з явним записом у docs, що це емуляція; альтернатива — прибрати `maxWidth/maxHeight/maxSize` (L6).
 - [ ] **K6. CenterBox**: іменовані слоти замість лічильника (L7) + документація `shrink-center-last` (4.12).
 - [ ] **K7. `Box` vs `Stack`** (L8): збереження block flow + новий `Stack`, чи перепис на стекінг. Вибір з урахуванням, що `docs/bar-api.md`/`docs/shell-api.md` уже описують `Box` як «div».
 - [ ] **K8. Overlay без хаку**: рідні `measure_overlay`/`clip_overlay` (L11).
@@ -148,3 +148,42 @@ _Suite_: **54 тести, 54 green** (`./gradlew :framework:linuxX64Test`). Об
 - `alloc<IntVar>().value` не резолвиться у nativeTest — використовуй `allocArray<IntVar>(4)` + `+ n`;
 - тестовий клас, що чіпає GTK без init, ламає весь run — не додавати «швидких» тестових класів без
   ініціалізації.
+
+## 6.2 K5 — результати (2026-11-18, ноут)
+
+_Suite_: **64 тести, 64 green** (`./gradlew :framework:linuxX64Test`). +10 тестів проти K4.
+
+- **L6 закрито**: `maxWidth()/maxHeight()/maxSize()` більше не брехня в DSL. Стелю зберігає
+  `KnBoxLayout` поосі в child'а (`KnChildLayout { weight; max_width; max_height; }`,
+  `KN_NO_MAX = -1`), застосовує її в `kn_measure_child` (де GTK уже робить request мінімумом →
+  стеля вгору не тягне) і в `allocate()` на головному й поперечному полі — тож cap перемагає
+  `expand`, `homogeneous` і `weight`-частку. API: `setBoxChildMax(widget, child, max_width,
+  max_height)` (rust-core/src/box_layout.rs) + `getBoxChildMaxWidth/Height` для тестів; запис
+  чиститься, коли вага дефолтна й обидві стелі `-1` (правило L9: «absent = default», не лишає
+  сліду).
+- **Канал виштовхування — не лише для box'ів**: `GtkNode.pushChildLayout()` (було `pushWeight()`
+  на `GtkBoxNode`) перенесено в базовий клас і викликається з базового `applyModifier()`. Дитина
+  `Text`/`Image` у `Row` тепер сама передає свою вагу й стелю контейнеру; раніше вагу знав лише
+  box-подібний вузол (латентний ґап, знайдений тут же).
+- **Чесна межа емуляції (записана в docs і в тест):** стеля ніколи не перемагає *власний мінімум*
+  дитини — як CSS, де `min-width` сильніший за `max-width`. Примусова алокація нижче мінімуму в
+  GTK не обрізає віджет: `GtkLabel` малює весь рядок *поверх сусідів* (на пробовому скріншоті
+  клітинки лізли одна на одну) і height-for-width-негаціація відповідає
+  `Gtk-WARNING **: Trying to measure GtkLabel … for width of 203, but it needs at least 249`. Тому
+  cap діє, коли дитина *може* віддати ширину (`Label(ellipsize = true)` / `wrap = true`, у яких
+  мінімум = слово або «…»), і не діє на однорядковому label без ellipsize (мін = натюр). Для
+  тексту з багаторядковим обмеженням і далі кращий `Label(maxWidthChars = N)` — він знижує сам
+  мінімум.
+- Нові тести (група 4): `a cap clamps a child below its own natural size`, `a cap never squeezes a
+  child below its own minimum`, `a cap above the natural size changes nothing`, `a cap shrinks the
+  natural size the container reports`, `a weighted share respects the cap`, `a cap on one axis does
+  not touch the other`, `a cross-axis cap clamps the height of a child`, `a cross-axis cap stops at
+  the height the child asked for`, `clearing a cap restores the natural size`, `a maxWidth on a
+  child reaches the box that sizes it` (останній — DSL-шлях: `GtkBoxNode` + `Modifier.maxWidth(140)`
+  на `GtkNode`-дитині).
+- Візуал: тимчасовий probe-UI в `shell-app/main.kt` (три `Label` з cap 140/120 + `ellipsize`) —
+  жодного `Gtk-WARNING`, текст обрезается «…», клітинки не лізуть одна на одну; після перевірки
+  `main.kt` повернуто до стану commit (проба не потрапляє в історію).
+- Документація: KDoc `MaxSizeElement` у `framework/.../Modifier.kt` (тепер «two places» + межа
+  мінімуму + `min beats max`); `docs/shell-api.md` — рядок таблиці модифієрів і нотатка про
+  triкацию тексту. `docs/framework-api.md` переліковий, змін не потребував.

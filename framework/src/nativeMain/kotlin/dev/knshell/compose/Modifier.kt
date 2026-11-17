@@ -175,17 +175,50 @@ internal data class FocusRingElement(val color: Color, val width: Int, val offse
 internal data class MinSizeElement(val width: Int?, val height: Int?) : ModifierElement
 
 /**
- * Upper bound for an **explicit** size request.
+ * Upper bound for the size this widget may be given, on either axis.
  *
- * GTK has no `max-width`/`max-height`: `gtk_widget_set_size_request` is a minimum, so a
- * widget with big natural content cannot be shrunk from here. This element therefore clamps
- * the value you set with `width()`/`height()`/`size()`:
- * `Modifier.size(1000).maxWidth(220)` results in a 220 px request.
+ * GTK has no `max-width`/`max-height` — `gtk_widget_set_size_request` is a minimum — so the
+ * ceiling is applied in two places:
+ * 1. [applyModifiers] clamps the request written for `width()`/`height()`/`size()`, so
+ *    `Modifier.size(1000).maxWidth(220)` asks for 220 px;
+ * 2. `GtkNode.pushChildLayout` pushes the pair to the container's `KnBoxLayout`, which caps
+ *   what the child measures and what it is allocated (rust-core/src/kn_box_layout.c). That is
+ *   what makes `Modifier.maxWidth(220)` on its own mean something: the manager owns a child's
+ *   size, so it can take it below the natural size a GTK widget would otherwise insist on.
  *
- * For text use `Label(maxWidthChars = N)`: it lowers the label's *minimum* width, so Pango
- * ellipsizes ("…"). Pixel max on arbitrary content is not expressible in GTK.
+ * The ceiling never overrides the child's own minimum — same rule as CSS, where `min-width`
+ * beats `max-width`. That is not politeness: GTK widgets do not clip, so an allocation below
+ * the minimum makes the child paint over its neighbours, and the height-for-width negotiation
+ * answers it with `Gtk-WARNING **: Trying to measure GtkLabel … for width of 203, but it needs
+ * at least 249`. A cap therefore bites when the child CAN give width up
+ * (`Label(ellipsize = true)` / `wrap = true`, whose minimum is a word or an ellipsis) and is
+ * ignored by a child that cannot (a plain one-line label: minimum == natural).
+ *
+ * The second half is an **emulation**: a widget measured outside a managed box (a plain
+ * `GtkBox`, a `CenterBox` slot, an overlay) keeps the old behaviour — only an explicit request
+ * is capped. For text that must ellipsize rather than clip, use `Label(maxWidthChars = N)`:
+ * it lowers the label's *minimum*, so Pango draws "…" instead of cutting glyphs off.
  */
 internal data class MaxSizeElement(val width: Int?, val height: Int?) : ModifierElement
+
+/**
+ * The `maxWidth()`/`maxHeight()` ceilings [modifier] asks for, as `width to height`, with `-1`
+ * for an axis it does not cap. A chain is rebuilt from scratch every recomposition, so an absent
+ * cap has to be pushed as `-1` — it clears the previous one (L9).
+ */
+internal fun Modifier.maxSizeCaps(): Pair<Int, Int> {
+    var width = -1
+    var height = -1
+    for (element in elements) {
+        if (element is MaxSizeElement) {
+            val w = element.width
+            val h = element.height
+            if (w != null) width = w
+            if (h != null) height = h
+        }
+    }
+    return width to height
+}
 
 /** Typed styling of the GtkScale sub-nodes: trough, highlight and slider (knob). */
 internal data class SliderThemeElement(
@@ -602,7 +635,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             }
 
             // Weight is a property of the CONTAINER's layout manager, not of the widget: it is
-            // pushed by `GtkBoxNode.pushWeight()` when this node is attached or recomposed.
+            // pushed by `GtkBoxNode.pushChildLayout()` when this node is attached or recomposed.
             // Nothing to write here — but reading it from `modifier` is exactly what that does.
             is WeightElement -> Unit
 

@@ -1,14 +1,18 @@
-# Handoff: GTK4 layout semantics (K5 — continuation on the laptop)
+# Handoff: GTK4 layout semantics (K6 — continuation on the laptop)
 
 Цей файл — точка входу після перерви. План-чекліст: `plans/gtk4-layout-semantics.md`
-(виконується, 4/10 кроків: K1, K2, K3, K4 позначені `[x]`).
+(виконується, 5/10 кроків: K1, K2, K3, K4, K5 позначені `[x]`).
 
 ## 0. Стан на момент зупинки
-
 - K1 (тести), K2 (фікси C), K3 (`KnBoxLayout` + `weight`), **K4 (видалено `reconcileMainAxisAlign`,
-  чесний скид полів) — зроблено**.
--_suite_: `54 tests, 0 failed`. Навмисно червоних цілей більше немає: від тепер кожен крок
+  чесний скид полів), K5 (max-size як стеля в `KnBoxLayout`) — зроблено**.
+- _suite_: `64 tests, 0 failed`. Навмисно червоних цілей більше немає: від тепер кожен крок
   починається з тесту, а green тримається весь час.
+- K5 лишив після себе **єдиний канал per-child властивостей лейауту**: `KnChildLayout
+  { weight; max_width; max_height; }` у `kn_box_layout.c` + `setBoxChildWeight` /
+  `setBoxChildMax` (+ getter-и) у UniFFI, і `GtkNode.pushChildLayout()` (базовий клас, виклик з
+  базового `applyModifier()`). K6 (CenterBox) і K7…K10 мають будуватися на цьому ж каналі, а не
+  вигадувати новий. Деталі + чесна межа «min beats max» — `plans/gtk4-layout-semantics.md` §6.2.
 - K4 зроблено через **ownership полів на самому віджеті**: `g_object_set_data` з ключем
   `kn-modifier-<field>` ставиться, коли ланцюг модифієрів записав поле, і знімається зі
   скиданням до дефолту GTK, коли перестав. Поле, якого ланцюг ніколи не писав, не чіпается
@@ -68,7 +72,7 @@ KN_SHELL_MODE=windowed shell-app/build/bin/linuxX64/debugExecutable/shell-app.ke
 Симптом без фіксу: `Execution failed for task ':rust-core:cargoBuildLinuxX64Debug'` +
 `FileNotFoundException: …/build/quote/<hash>/output`.
 
-## 2. K4 — ВИКОНАНО (лишається як опис механіки, на якій будувати K5)
+## 2. K4 — ВИКОНАНО (лишається як опис механіки, на якій будувати K5+)
 
 Файл: `framework/src/nativeMain/kotlin/dev/knshell/compose/Modifier.kt`
 
@@ -157,23 +161,54 @@ frees, а читається лише факт наявності ключа. С
  `Long`. Записи `margin*` і `size_request` лишилися як були (умовний `size_request` — це
  майбутня K5, не L9).
 
-## 2'. K5 — max-size (наступний крок)
+## 2'. K5 — ВИКОНАНО (лишається як опис механіки, на якій будувати K6)
 
-Дефект L6: `MaxSizeElement` (`Modifier.kt:188`, збір `≈633-639`, clamp `≈727-730`) обмежує
-лише явний `width()`/`size()`. Без явного розміру `maxWidth()` — no-op, тобто брехня в DSL.
+Дефект L6 закритий варіантом 1 (clamp у `KnBoxLayout`). Стелю зберігає та сама table
+`KnChildLayout`, що й `weight`, поосі дитини (`max_width`/`max_height`, `KN_NO_MAX = -1`), тож
+переорієнтація контейнера не переписує сенс `maxWidth(220)`. Застосування — у двох місцях:
+`kn_measure_child()` (натюр тиснеться до стелі, але не нижче мінімуму дитини) і фінальний цикл
+`allocate()` (головне поле `child_main`/`m` і поперечне `cross_own`). `weight`, `homogeneous` і
+surplus-пази проходять через той самий clamp, тому cap має останнє слово.
 
-Варіанти (plan §4 K5):
-1. **clamp у `KnBoxLayout`** (рекомендація плану): менеджер знає `main_size` родителя й
-   `minimum/natural` дитини, тож може чеснісно обмежити бажане; потребує per-child стану
-   (`max_main`/`max_cross`) у тій самій моделі, що й `weight` — див. `kn_box_layout.c`
-   (`set_weight`/`get_weight`) і `box_layout.rs` (13 export-ів UniFFI).
-2. **прибрати `maxWidth/maxHeight/maxSize` з DSL** — чесніше, але ламає публічний API
-   (тест `size request is a floor and never a ceiling` документує, чому GTK не дає альтернативи).
+DSL-канал: `Modifier.maxSizeCaps(): Pair<Int, Int>` → `GtkNode.pushChildLayout()` shoves
+`setBoxChildMax(parent, child, w, h)`; попереду `pushChildLayout()` викликається з базового
+`applyModifier()`, тому cap доходить і до `Text`/`Image` (раніше вагу знав лише `GtkBoxNode`).
+Скидання — `-1` по осі (запис видаляється, коли вага дефолтна й обидві стелі `-1`) — те саме
+правило L9 «absent = default».
 
-Обов'язково починати з тесту: зараз harness уже вміє міряти `measure`/`allocate` без display
-(групи 1/4), тож «cap не може бути більшим за natural, але й не меншим за minimum» —
-окрема червона ціль до правки C. Не чіпати `Label(maxWidthChars=…)` — це інший механізм
- (Pango-еліпсис, lowering minimum), див. `compose/Widgets.kt:547-570`.
+**Обмеження, яке не виправляється (документоване в KDoc `MaxSizeElement`, `docs/shell-api.md` і
+в тестах):** стеля не може бути нижчою за *власний мінімум* дитини. GTK не кліпає — алокація
+нижче мінімуму змушує `GtkLabel` малювати поверх сусідів і породжує
+`Gtk-WARNING **: Trying to measure GtkLabel … for width of 203, but it needs at least 249` (обидва
+відтворені на живому вікні з probe-UI). Тож `maxWidth` чесний на child'ах, що *можуть* стиснутись
+(`Label(ellipsize = true)` / `wrap = true`), і сумний на однорядковому label — там капітал
+`squeeze` неможливий у принципі. Це той самий компроміс, що й у CSS.
+
+Не чіпано: `Label(maxWidthChars=…)` (`compose/Widgets.kt:547-570`) — Pango-еліпсис, інший
+механізм (знижує сам мінімум).
+
+## 2''. K6 — CenterBox: іменовані слоти замість лічильника (наступний крок, L7)
+
+Факт із групи 3: `shrink-center-last` у `GtkCenterBox` = **default TRUE**, але на практиці обидва
+значення дають однакову алокацію, бо центр завжди `width − (start + end)`, і жоден із них не
+висловлює «що стискається першим». Дефект L7 — `GtkCenterBoxNode` (`compose/Widgets.kt:146-165`)
+визначає слот за **лічильником `attached`**: перший приєднаний = start, другий = center, третій =
+end; порядок обходу/перекомпозиції тому змінює семантику, а `detachChild` лічильник не відкочує
+(проверити в коді — це й буде перший червоний тест).
+
+Пропозиція плану: іменовані слоти (`slot = Slot.Start | Center | End`) в DSL-етикеті вузла, що
+гарантує `gtk_center_box_set_start_widget/…_center_widget/…_end_widget` поза Dependence на
+порядку; документація `shrink-center-last` (4.12) — чому на ньому не можна будувати.
+
+Порядок дій (той самий, що працював K3/K4/K5):
+1. Червоні тести в групі 3 `LayoutProbeTest.kt` (перекомпозиція/перестановка не змінює слотів;
+   видалення start-дитини не зсуває center в end; …) — 64 green мають лишитися, нові — red.
+2. Правка `compose/Widgets.kt` (+ DSL-параметр, якщо треба новий `enum` — див., як зроблено
+   `Align`/`AlignElement`).
+3. `rg -n 'attached' framework/src/nativeMain/kotlin/dev/knshell/compose/Widgets.kt` — переконатись,
+   що лічильник не лишився єдиним джерелом правди.
+4. Візуал — K5 показав, що probe-UI в `shell-app/main.kt` найкращий інструмент (потім повернути
+   `main.kt` до стану commit! резервна копія: `cp main.kt /tmp/main.kt.bak` ДО правки).
 
 ## 3. Рішення, які вже ухвалено (не переписувати)
 
@@ -215,20 +250,23 @@ frees, а читається лише факт наявності ключа. С
   `kn-modifier-*` ключів і `fieldWritten`/`setFieldWritten` — у кінці файлу.
 - `framework/src/nativeMain/kotlin/dev/knshell/compose/Layout.kt` — `Modifier.weight(value)`.
 - `framework/src/nativeMain/kotlin/dev/knshell/compose/GtkApplier.kt` — `GtkNode.modifier`,
-  `open fun applyModifier`, `open fun pushWeight()`.
+  `open fun applyModifier`, `open fun pushChildLayout()` (з K5 — вага **і** стеля, у базовому
+  класі, виклик з базового `applyModifier()`), `fun CPointer<GtkWidget>.asContainerHandle()`.
 - `framework/src/nativeMain/kotlin/dev/knshell/compose/Widgets.kt` — `GtkBoxNode`
-  (`configureBox`, `syncWeights`, `pushWeight`, `attachBoxLayout`), `gtkBox(...)`,
+  (`configureBox`, `syncChildLayouts`, `attachBoxLayout`), `gtkBox(...)`,
   `Row(spacing, homogeneous, modifier, content)`, `Column(...)`, `Box`.
-- `framework/src/nativeTest/kotlin/dev/knshell/compose/LayoutProbeTest.kt` — 28 тестів,
+- `framework/src/nativeTest/kotlin/dev/knshell/compose/LayoutProbeTest.kt` — 64 тестів,
   групи: 1 «GTK native semantics», 2 «DSL contract» (red → K4), 3 «The animated box»,
-  4 «KnBoxLayout (K3)». Хелпери на file-scope: `box(..., root)`, `managedBox(..., root)`,
+  4 «KnBoxLayout (K3)» (тут і кап-тести K5). Хелпери на file-scope: `box(..., root)`,
+  `managedBox(..., root)`,
   `measure`, `Requested`, `cell`, `childrenOf`, `rooted`, `css`, `weight`, `label`,
-  `wrappingLabel`, `applyModifier`, `attachAnimated`, `animatedContent`, `pushCurrent`,
+  `wrappingLabel`, `truncatableLabel`, `minimumWidth`, `minimumHeight`, `maxSize`,
+  `applyModifier`, `attachAnimated`, `animatedContent`, `pushCurrent`,
   `allocRect`.
 - `scripts/anim-bench.sh:326` — `C_LAYOUT` тепер вказує на `kn_box_layout.c` (gate:
   `gtk_widget_add_tick_callback|g_get_monotonic_time|kn_ease` — 0 хітів ✓).
 
-## 5. Побіжна загроза для K4/K7 (не блокує, але не забути)
+## 5. Побіжна загроза для K6/K7 (не блокує, але не забути)
 
 `docs/bar-api.md` / `docs/shell-api.md` описують `Box` як «div», а код робить з нього
 вертикальний `GtkBox` (block flow). Це L8 = K7. Не лікувати в K4.
@@ -245,13 +283,20 @@ frees, а читається лише факт наявності ключа. С
   **не** чіпали. Тому правки наших файлів комітити лише з явним переліком шляхів
   (`git commit -- <paths>`) — `git add -A` схопив би їхній staged-рефакторинг.
 
-## 7. Стан git (на 2026-11-17 23:05)
+## 7. Стан git (на 2026-11-18 01:10)
 
-Робота K1–K3 **закомічена** на окремій гілці, ваш рефакторинг лишився у робочому дереві
-(індекс недоторканий: 13 staged-записів shell-app):
+K1–K4 **закомічені** на окремій гілці (`af82a6d` код K1–K3, `896b552`/`4519329`/`f4e894d` plans,
+`fd20e54` = K4), ваш рефакторинг лишився у робочому дереві (індекс недоторканий: 13
+staged-записів shell-app). K5 — черга наступного коміту (`feat(layout): cap a child's size in the
+box layout manager`, файли:
+`rust-core/src/kn_box_layout.c`, `rust-core/src/box_layout.rs`, `compose/{Modifier,GtkApplier,Widgets}.kt`,
+`LayoutProbeTest.kt`, `docs/shell-api.md`, `plans/*.md`).
 
 ```
-* gtk4-layout-semantics  HEAD   docs(plans): GTK4 layout plan and laptop handoff note
+* gtk4-layout-semantics  HEAD   fd20e54 feat(modifier): own the layout fields a chain wrote, reset only those
+                          f4e894d docs(plans): master is pushed too — the laptop clone lands on master, not the work branch
+                          4519329 docs(plans): record the git incident — `commit --amend -- <path>` commits the whole index
+                          896b552 docs(plans): GTK4 layout plan and laptop handoff note
                           af82a6d feat(layout): GTK4-correct box layout via a single KnBoxLayout
   master                 7dbac56 build: bump Kotlin 2.1.0 -> 2.4.20, add Inara DI, ...
 ```
@@ -290,8 +335,9 @@ cd KN-shell && git checkout gtk4-layout-semantics
 source .tools/env.sh
 ./gradlew :rust-core:compileReleaseKotlinAndroid :framework:compileKotlinLinuxX64 --console=plain -q
 ./gradlew :framework:linuxX64Test --console=plain -q --tests '*LayoutProbeTest*'
-# очікування: 28 тестів, 2 red (обидва — цілі K4). Якщо red більше — не чіпати K4,
-# а з'ясувати чому (зазвичай не перекомпільований rust-core або немає display).
+# очікування: 64 тестів, 0 red (стан після K5). Якщо red > 0 — не чіпати наступний крок,
+# а з'ясувати чому (зазвичай не перекомпільований rust-core, не той toolchain або немає display).
+# `.tools/env.sh` у репо нема — `source` дасть помилку, вона безневинна (див. §1.1 про rust 1.90.0).
 ```
 
 Контекст з цією сесією не переноситься: на ноуті прочитай `plans/gtk4-layout-handoff.md`

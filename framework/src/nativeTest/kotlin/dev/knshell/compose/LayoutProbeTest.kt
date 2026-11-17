@@ -5,6 +5,9 @@ package dev.knshell.compose
 import dev.knshell.core.animatedSizeContent
 import dev.knshell.core.attachBoxLayout
 import dev.knshell.core.forgetBoxChild
+import dev.knshell.core.getBoxChildMaxWidth
+import dev.knshell.core.getBoxChildWeight
+import dev.knshell.core.setBoxChildMax
 import dev.knshell.core.setBoxChildWeight
 import dev.knshell.core.setBoxHomogeneous
 import dev.knshell.core.setBoxOrientation
@@ -106,6 +109,12 @@ class LayoutProbeTest {
     // ---------------------------------------------------------------- helpers
 
     private fun naturalWidth(widget: CPointer<GtkWidget>) = measure(widget, HORIZONTAL, -1).natural
+
+    /** The smallest width this widget can be given and still draw itself — the floor every
+     *  `maxWidth()` ceiling stops at (see `a cap never squeezes a child below its own minimum`). */
+    private fun minimumWidth(widget: CPointer<GtkWidget>) = measure(widget, HORIZONTAL, -1).min
+
+    private fun minimumHeight(widget: CPointer<GtkWidget>) = measure(widget, VERTICAL, -1).min
     private fun naturalHeight(widget: CPointer<GtkWidget>) = measure(widget, VERTICAL, -1).natural
 
     /** Allocates a widget by hand — the same call a parent makes during a layout pass. */
@@ -126,6 +135,18 @@ class LayoutProbeTest {
 
     private fun wrappingLabel(text: String): CPointer<GtkWidget> =
         label(text).also { gtk_label_set_wrap(it.reinterpret<GtkLabel>(), 1) }
+
+    /**
+     * A label that may be truncated: its natural width is still the whole line, but its MINIMUM
+     * drops to a few characters, because Pango can draw `…` instead. That gap between minimum and
+     * natural is exactly the room a `maxWidth()` ceiling needs to have any effect — a label that
+     * neither wraps nor ellipsizes has minimum == natural and cannot be capped at all (see
+     * `a cap never squeezes a child below its own minimum`).
+     */
+    private fun truncatableLabel(text: String): CPointer<GtkWidget> =
+        label(text).also {
+            gtk_label_set_ellipsize(it.reinterpret<GtkLabel>(), PangoEllipsizeMode.PANGO_ELLIPSIZE_END)
+        }
 
     private fun applyModifier(widget: CPointer<GtkWidget>, modifier: Modifier) =
         applyModifiers(widget, modifier, InlineStyle(widget))
@@ -590,6 +611,171 @@ class LayoutProbeTest {
     }
 
     @Test
+    fun `a cap clamps a child below its own natural size`() {
+        // Plan L6: `Modifier.maxWidth()` used to clamp only an explicit `size()` request, because
+        // a GTK request is a minimum and there is no ceiling in the widget API. The manager owns
+        // the child's size, so the ceiling is applied here — this is the case the old code could
+        // not express at all. The label is ELLIPSIZED: its minimum drops to a few characters, so
+        // a cap between that and the one-line natural is a size the child can honestly honour.
+        val wide = truncatableLabel("the quick brown fox jumps over the lazy dog")
+        val natural = naturalWidth(wide)
+        val minimum = minimumWidth(wide)
+        val row = managedBox(children = listOf(wide))
+        maxSize(row, wide, 140, -1)
+        allocate(row, width = 600, height = 30)
+
+        assertTrue(minimum < 140 && 140 < natural,
+            "precondition: the cap must sit between the child's minimum ($minimum) and natural ($natural)")
+        assertEquals(140, allocRect(wide).width, "the cap is the child's new main-axis limit")
+    }
+
+    @Test
+    fun `a cap never squeezes a child below its own minimum`() {
+        // The limit of the emulation, stated as a test: a label that neither wraps nor ellipsizes
+        // has minimum width == natural width, and GTK's contract is that it is never allocated
+        // less. Forcing it anyway does not clip the text — GtkLabel paints the whole line over its
+        // neighbours (seen in the probe window as two labels drawn on each other) and the
+        // height-for-width negotiation answers `Gtk-WARNING: Trying to measure GtkLabel … for
+        // width of 203, but it needs at least 249`. So a ceiling the child cannot honour loses to
+        // the child's minimum, exactly like CSS, where `min-width` beats `max-width`.
+        val wide = label("the quick brown fox jumps over the lazy dog")
+        val natural = naturalWidth(wide)
+        val row = managedBox(children = listOf(wide))
+        maxSize(row, wide, 50, -1)
+        allocate(row, width = 600, height = 30)
+
+        assertTrue(natural > 50, "precondition: the cap is below what one line needs ($natural px)")
+        assertEquals(natural, allocRect(wide).width,
+            "the cap cannot make a non-wrapping label narrower than one line")
+    }
+
+    @Test
+    fun `a cap above the natural size changes nothing`() {
+        // A ceiling must not become a floor: an uncapped-looking child is not stretched because
+        // somebody wrote a generous `maxWidth`.
+        val narrow = label("ab")
+        val natural = naturalWidth(narrow)
+        val row = managedBox(children = listOf(narrow))
+        maxSize(row, narrow, 10_000, -1)
+        allocate(row, width = 600, height = 30)
+
+        assertEquals(natural, allocRect(narrow).width, "the natural size still decides")
+    }
+
+    @Test
+    fun `a cap shrinks the natural size the container reports`() {
+        // The container negotiates with its parent, so a capped child must lower what the box
+        // itself calls natural — otherwise a `Row` keeps asking for the uncapped width.
+        val wide = truncatableLabel("the quick brown fox jumps over the lazy dog")
+        val row = managedBox(children = listOf(wide))
+        val before = naturalWidth(row)
+        maxSize(row, wide, 140, -1)
+
+        val after = naturalWidth(row)
+        assertTrue(after < before, "capping the child must cap the box too ($before -> $after)")
+        assertEquals(140, after, "the box's natural is the sum of the capped children")
+    }
+
+    @Test
+    fun `a weighted share respects the cap`() {
+        // `weight` hands out the leftover and the homogeneous pass hands out equal cells; both
+        // compute a size the child never asked for, so the clamp belongs at the allocation, not
+        // only in `measure`.
+        val a = label("a")
+        val b = label("b")
+        val row = managedBox(children = listOf(a, b))
+        maxSize(row, a, 80, -1)
+        weight(row, a, 1.0)
+        weight(row, b, 1.0)
+        allocate(row, width = 600, height = 30)
+
+        assertEquals(80, allocRect(a).width, "half of 600 is 300, the cap has the last word")
+        assertEquals(300, allocRect(b).width, "the other weighted child still takes its share")
+    }
+
+    @Test
+    fun `a cap on one axis does not touch the other`() {
+        // `maxWidth` must not leak into the height (the manager measures the two axes separately,
+        // and the caps are stored in the child's own frame).
+        val tall = truncatableLabel("the quick brown fox jumps over the lazy dog")
+        val row = managedBox(children = listOf(tall))
+        maxSize(row, tall, 140, -1)
+        allocate(row, width = 600, height = 100)
+
+        val box = allocRect(tall)
+        assertEquals(140, box.width, "the width is capped")
+        assertEquals(100, box.height, "the height is still the container's cross size")
+    }
+
+    @Test
+    fun `a cross-axis cap clamps the height of a child`() {
+        // The cross axis is where a bar pins an icon: the container is 40px tall, the child is
+        // capped at 16 and must not be stretched over the whole row. An empty label is never
+        // shorter than one line of its font, so the floor here is the child's own minimum —
+        // whatever it is, the cap must keep the icon well out of the full row height.
+        val icon = gtk_label_new("")!!.also { gtk_widget_set_size_request(it, 16, 16) }
+        val text = label("text")
+        val row = managedBox(children = listOf(icon, text))
+        val ownMinimum = minimumHeight(icon)
+        maxSize(row, icon, -1, 16)
+        allocate(row, width = 600, height = 40)
+
+        assertEquals(maxOf(16, ownMinimum), allocRect(icon).height,
+            "the cross-axis cap is applied down to the child's own minimum ($ownMinimum)")
+        assertEquals(40, allocRect(text).height, "and only for that child")
+    }
+
+    @Test
+    fun `a cross-axis cap stops at the height the child asked for`() {
+        // Same minimum rule on the cross axis: `height(30)` is a request, and `maxHeight(20)`
+        // does not revoke it. An icon squashed below the size it was given does not shrink — it
+        // draws itself outside the box it was handed.
+        val icon = gtk_label_new("")!!.also { gtk_widget_set_size_request(it, 16, 30) }
+        val text = label("text")
+        val row = managedBox(children = listOf(icon, text))
+        maxSize(row, icon, -1, 20)
+        allocate(row, width = 600, height = 40)
+
+        assertEquals(30, allocRect(icon).height, "the child's own request is the floor")
+        assertEquals(40, allocRect(text).height, "the sibling still gets the whole row")
+    }
+
+    @Test
+    fun `clearing a cap restores the natural size`() {
+        // Same rule as `weight` and as the modifier reset in L9: a chain rebuilt without
+        // `maxWidth()` must leave no trace of the previous value.
+        val wide = truncatableLabel("the quick brown fox jumps over the lazy dog")
+        val natural = naturalWidth(wide)
+        val row = managedBox(children = listOf(wide))
+        maxSize(row, wide, 140, -1)
+        allocate(row, width = 600, height = 30)
+        assertEquals(140, allocRect(wide).width, "precondition: the cap held")
+
+        maxSize(row, wide, -1, -1)
+        allocate(row, width = 600, height = 30)
+        assertEquals(natural, allocRect(wide).width, "an absent cap behaves like no cap at all")
+    }
+
+    @Test
+    fun `a maxWidth on a child reaches the box that sizes it`() {
+        // The rest of the DSL path. `maxWidth` is not a GTK property, so a node has to hand it to
+        // the container's layout manager — and it has to work for a child that is not itself a
+        // box, which is what the bar writes (`Row { Text(Modifier.maxWidth(220)) }`). A push
+        // implemented only on `GtkBoxNode` would silently drop the cap of every Text and Image.
+        val wide = truncatableLabel("the quick brown fox jumps over the lazy dog")
+        val natural = naturalWidth(wide)
+        val row = GtkBoxNode(rooted(gtk_box_new(HORIZONTAL, 0)!!))
+        val child = GtkNode(wide)
+        row.insertChild(0, child)
+        child.applyModifier(Modifier.maxWidth(140))
+        allocate(row.widget, width = 600, height = 30)
+
+        assertTrue(natural > 140, "precondition: the text wants more than the cap ($natural px)")
+        assertEquals(140, allocRect(wide).width, "the chain's cap is what the manager enforces")
+        assertEquals(140, getBoxChildMaxWidth(row.widget.handle(), wide.handle()), "…in the manager too")
+    }
+
+    @Test
     fun `homogeneous gives every child an equal share of the container`() {
         // Measured against gtkboxlayout.c: each cell is `(container - spacing) / n_children`,
         // NOT "as large as the largest child" — the whole width is consumed, and a CENTER/END
@@ -805,6 +991,16 @@ private fun managedBox(
 }
 
 private fun CPointer<GtkWidget>.handle(): ULong = rawValue.toLong().toULong()
+
+/** The framework spells this `Modifier.maxWidth()`/`maxHeight()`; here it is set directly. */
+private fun maxSize(
+    container: CPointer<GtkWidget>,
+    child: CPointer<GtkWidget>,
+    width: Int,
+    height: Int,
+) {
+    setBoxChildMax(container.handle(), child.handle(), width, height)
+}
 
 /** The framework spells this `Modifier.weight()`; here it is set directly on the container. */
 private fun weight(container: CPointer<GtkWidget>, child: CPointer<GtkWidget>, value: Double) {

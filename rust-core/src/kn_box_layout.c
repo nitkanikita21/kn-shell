@@ -50,6 +50,10 @@
 /* `weight` value meaning "this child has no explicit weight" (i.e. behave like plain GTK). */
 #define KN_NO_WEIGHT 0.0f
 
+/* Max-size value meaning "this child asks for no ceiling on this axis". A cap of 0 px is legal
+ * (`Modifier.maxWidth(0)`), so "absent" cannot be 0 — same reason `weight` uses `<= 0`. */
+#define KN_NO_MAX (-1)
+
 typedef struct _KnBoxLayout KnBoxLayout;
 typedef struct _KnBoxLayoutClass KnBoxLayoutClass;
 
@@ -60,8 +64,8 @@ struct _KnBoxLayout {
     guint spacing;
     gboolean homogeneous;
 
-    /* Per-child `weight` (and, from K5 on, min/max). Sparse on purpose: a box with no weights
-     * pays nothing and behaves exactly like the plain manager it replaced. */
+    /* Per-child `weight` and per-child max-size caps. Sparse on purpose: a box with no weights
+     * and no caps pays nothing and behaves exactly like the plain manager it replaced. */
     GHashTable *child_layouts;   /* GtkWidget* -> KnChildLayout* */
 
     /* --- animated main-axis size (Compose-owned, see the header) --- */
@@ -82,6 +86,12 @@ struct _KnBoxLayoutClass {
 
 typedef struct {
     float weight;
+    /* Upper bounds in px, stored in the CHILD's own axes (`maxWidth`/`maxHeight` of the DSL), not
+     * in the container's main/cross — re-orienting the container must not change what
+     * `Modifier.maxWidth(220)` means. -1 = uncapped. GTK has no ceiling for a widget's size, so
+     * this clamp is the emulation the plan asks for (docs/layout-model.md, plan L6). */
+    int max_width;
+    int max_height;
 } KnChildLayout;
 
 G_DEFINE_TYPE(KnBoxLayout, kn_box_layout, GTK_TYPE_LAYOUT_MANAGER)
@@ -102,6 +112,8 @@ static KnChildLayout *kn_child_layout_get(KnBoxLayout *self, GtkWidget *child) {
     if (data == NULL) {
         data = g_new0(KnChildLayout, 1);
         data->weight = KN_NO_WEIGHT;
+        data->max_width = KN_NO_MAX;
+        data->max_height = KN_NO_MAX;
         g_hash_table_insert(self->child_layouts, child, data);
     }
     return data;
@@ -116,6 +128,14 @@ static float kn_child_weight(KnBoxLayout *self, GtkWidget *child) {
     return data == NULL ? KN_NO_WEIGHT : data->weight;
 }
 
+/* The ceiling `child` asks for along `orientation`, or KN_NO_MAX. A child with no record at all
+ * answers KN_NO_MAX, which is what keeps an unweighted, uncapped box allocation-free. */
+static int kn_child_max(KnBoxLayout *self, GtkWidget *child, GtkOrientation orientation) {
+    KnChildLayout *data = kn_child_layout_peek(self, child);
+    if (data == NULL) return KN_NO_MAX;
+    return orientation == GTK_ORIENTATION_HORIZONTAL ? data->max_width : data->max_height;
+}
+
 /* ----------------------------------------------------------------------- measurements */
 
 static GtkOrientation kn_main_orientation(const KnBoxLayout *self) {
@@ -123,11 +143,32 @@ static GtkOrientation kn_main_orientation(const KnBoxLayout *self) {
                                               : GTK_ORIENTATION_HORIZONTAL;
 }
 
-static void kn_measure_child(GtkWidget *child, GtkOrientation orientation, int for_size,
-                            int *minimum, int *natural) {
+static void kn_measure_child(KnBoxLayout *self, GtkWidget *child, GtkOrientation orientation,
+                            int for_size, int *minimum, int *natural) {
     int mn = 0, nat = 0, minimum_baseline = -1, natural_baseline = -1;
     gtk_widget_measure(child, orientation, for_size, &mn, &nat,
                       &minimum_baseline, &natural_baseline);
+    /* The `Modifier.maxWidth()`/`maxHeight()` ceiling of this child (plan L6). GTK has no
+     * ceiling, so the number the child answers with is capped here — in the child's OWN axis,
+     * which is what lets a capped island stop the whole bar from asking for pixels nobody may
+     * use.
+     *
+     * The ceiling stops at the child's minimum, and that is not laziness: a GtkLabel that
+     * neither wraps nor ellipsizes has minimum width == natural width, and GTK's contract is
+     * that it is never allocated less. Ask it anyway and it does not clip — it paints its full
+     * line over the neighbours (seen in the probe window: two labels drawn on each other), and
+     * reporting the smaller minimum makes the height-for-width negotiation ask it for a height
+     * at a width it cannot honour:
+     *   Gtk-WARNING: Trying to measure GtkLabel 0x… for width of 203, but it needs at least 249
+     * So `max` means "never grow past here", and content that refuses to shrink keeps its size —
+     * `Label(wrap = true)`/`ellipsize = true`/`maxWidthChars` is what lowers a label's minimum
+     * and makes a tight cap real. Same rule as Compose, where a constraint is coerced to
+     * `min <= max` instead of being broken. */
+    int cap = kn_child_max(self, child, orientation);
+    if (cap >= 0 && nat > cap) {
+        nat = cap;
+        if (nat < mn) nat = mn;
+    }
     if (minimum != NULL) *minimum = mn;
     if (natural != NULL) *natural = nat;
 }
@@ -160,7 +201,7 @@ static void kn_content_main_size(KnBoxLayout *self, GtkWidget *widget, int for_s
          child != NULL;
          child = gtk_widget_get_next_sibling(child)) {
         int mn = 0, nat = 0;
-        kn_measure_child(child, main, for_size, &mn, &nat);
+        kn_measure_child(self, child, main, for_size, &mn, &nat);
         if (mn > max_min) max_min = mn;
         if (nat > max_nat) max_nat = nat;
         total_min += mn;
@@ -261,7 +302,7 @@ static void kn_box_layout_measure(GtkLayoutManager *manager,
             int mn = 0, nat = 0;
             /* `for_size` is the main-axis size the caller is negotiating with: passing it
              * through is the whole height-for-width contract (plan L3). */
-            kn_measure_child(child, orientation, for_size, &mn, &nat);
+            kn_measure_child(self, child, orientation, for_size, &mn, &nat);
             if (mn > cross_min) cross_min = mn;
             if (nat > cross_nat) cross_nat = nat;
         }
@@ -302,6 +343,13 @@ static void kn_box_layout_allocate(GtkLayoutManager *manager,
     gboolean *child_expand = g_new0(gboolean, n);
     gboolean *child_fill = g_new0(gboolean, n);
     int *child_size = g_new0(int, n);
+    /* The ceiling `Modifier.maxWidth()`/`maxHeight()` asked for, in the CHILD's own axes:
+     * `child_cap` is the cap along the direction this box lays children out, `child_cross_cap`
+     * the one across it. `kn_measure_child` clamps what a child reports about itself, but a size
+     * the MANAGER hands out — a `weight` share, a homogeneous cell, a share of the surplus — the
+     * child never measured, so those passes have to be clamped by hand. */
+    int *child_cap = g_new0(int, n);
+    int *child_cross_cap = g_new0(int, n);
 
     int n_expand = 0;
     int n_weighted = 0;
@@ -313,11 +361,14 @@ static void kn_box_layout_allocate(GtkLayoutManager *manager,
         GtkWidget *c = (GtkWidget *) g_list_nth_data(children, i);
         int mn = 0, nat = 0;
         /* The cross size of THIS pass is the child's `for_size` (height-for-width). */
-        kn_measure_child(c, main, cross_size, &mn, &nat);
+        kn_measure_child(self, c, main, cross_size, &mn, &nat);
         if (mn > max_min) max_min = mn;
         if (nat > max_nat) max_nat = nat;
         child_min[i] = mn;
         child_nat[i] = nat;
+        child_cap[i] = kn_child_max(self, c, main);
+        child_cross_cap[i] = kn_child_max(self, c, vertical ? GTK_ORIENTATION_HORIZONTAL
+                                                            : GTK_ORIENTATION_VERTICAL);
         child_weight[i] = kn_child_weight(self, c);
         /* Main-axis expansion is decided by the expand flag OF THE MAIN AXIS: counting hexpand
          * for a vertical container handed leftover height to `fillWidth()` children (plan L2).
@@ -345,6 +396,8 @@ static void kn_box_layout_allocate(GtkLayoutManager *manager,
         for (int i = 0; i < n; i++) {
             child_min[i] = max_min;
             child_nat[i] = homogeneous_cell + (i < hom_extra ? 1 : 0);
+            /* No cap arithmetic here: the equal cell is clamped once, at allocation, next to
+             * every other size the container computed for the child. */
         }
     }
 
@@ -374,6 +427,13 @@ static void kn_box_layout_allocate(GtkLayoutManager *manager,
              * pass had nothing to take it from (room = size - minimum = 0 when the minimum is
              * the one-line width). Stock GtkBox clamps the same overflow when it allocates. */
             if (wanted > main_size) wanted = main_size;
+            /* A share a cap limits stays limited: 80px asked for on a `weight(1f)` child in a
+             * 600px row is 80px, not 300. Clamped BEFORE the minimum floor on the next line, so
+             * a cap the child cannot honour still loses to its minimum — the one rule
+             * `kn_measure_child` states for every axis. The space a cap frees is NOT handed to
+             * the other weighted children: they keep the share their weights say, and the row
+             * simply does not fill. */
+            if (child_cap[i] >= 0 && wanted > child_cap[i]) wanted = child_cap[i];
             if (wanted < child_min[i]) wanted = child_min[i];
             child_size[i] = wanted;
         }
@@ -460,12 +520,24 @@ static void kn_box_layout_allocate(GtkLayoutManager *manager,
     for (int i = 0; i < n; i++) {
         GtkWidget *c = (GtkWidget *) g_list_nth_data(children, i);
         int m = child_size[i];
+        /* Last word for the ceiling in the main direction. A share, a homogeneous cell and a
+         * surplus are all arithmetic the child never measured, so they can each hand out more
+         * than `maxWidth()` asked for. Never below the child's own minimum, for the reason in
+         * `kn_measure_child`: GTK widgets do not clip, they overlap. */
+        if (child_cap[i] >= 0) {
+            int limit = child_cap[i] > child_min[i] ? child_cap[i] : child_min[i];
+            if (m > limit) m = limit;
+        }
         /* A FILL child gets the whole cell; a CENTER/END child is allocated its constrained
          * natural size and positioned inside the cell — and may well be WIDER than the cell,
          * which is exactly what stock GtkBox does. The old `child_main > m` clamp plus the
          * `m > main_size` clamp turned every aligned child into a squeezed widget, so the
          * alignment was only ever observable as a gap. */
         int child_main = child_fill[i] ? m : child_nat[i];
+        if (child_cap[i] >= 0 && child_main > child_cap[i]) {
+            int limit = child_cap[i] > child_min[i] ? child_cap[i] : child_min[i];
+            if (child_main > limit) child_main = limit;
+        }
         int main_pos = position;
         if (!child_fill[i]) {
             GtkAlign align = kn_main_align(vertical, c);
@@ -474,27 +546,44 @@ static void kn_box_layout_allocate(GtkLayoutManager *manager,
             if (main_pos < 0) main_pos = 0;
         }
 
-        int child_width = vertical ? cross_size : child_main;
-        int child_height = vertical ? child_main : cross_size;
-
         /* Cross axis: GtkBox allocates every child the full cross size (`child_allocation
          * .height = height`), and the widget's own align then decides what it does with it —
          * a CENTER-aligned Label floats in the middle of a taller Row, a Button fills it.
-         * Re-measuring the cross size here would fight that and break the baseline path. */
+         * Re-measuring the cross size here would fight that and break the baseline path — with
+         * one exception: `cross_own` is what the child is actually allocated, so the cross-axis
+         * ceiling (`Modifier.height(16).maxHeight(16)` on an icon in a 40px row) is applied to
+         * it below, and the align places the shortened box in the row. */
         GtkAlign cross_align = vertical ? gtk_widget_get_halign(c) : gtk_widget_get_valign(c);
-        int cross_pos = 0;
+        int cross_own = cross_size;
         if (cross_align == GTK_ALIGN_CENTER || cross_align == GTK_ALIGN_END) {
             /* Not FILL along the cross axis: ask the child how tall (wide) it wants to be at
              * the main size it just got, and place that box inside the cross size. */
             GtkOrientation cross = vertical ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL;
             int cross_min = 0, cross_nat = 0;
-            kn_measure_child(c, cross, child_main, &cross_min, &cross_nat);
-            int own = cross_nat > cross_size ? cross_size : cross_nat;
-            cross_pos = cross_align == GTK_ALIGN_CENTER
-                ? (cross_size - own) / 2
-                : cross_size - own;
-            if (cross_pos < 0) cross_pos = 0;
+            kn_measure_child(self, c, cross, child_main, &cross_min, &cross_nat);
+            cross_own = cross_nat > cross_size ? cross_size : cross_nat;
         }
+        if (child_cross_cap[i] >= 0 && cross_own > child_cross_cap[i]) {
+            /* The same floor as the main axis, and it needs the child's own cross minimum:
+             * an icon that asked for 30px of height is not made 20px tall by `maxHeight(20)`.
+             * Clamped to `cross_size` afterwards, because GtkBox already allocates less than a
+             * child needs when the ROW itself is shorter than that — a cap must not make the
+             * child taller than the container instead. */
+            int own_min = 0, own_nat = 0;
+            kn_measure_child(self, c, vertical ? GTK_ORIENTATION_HORIZONTAL
+                                               : GTK_ORIENTATION_VERTICAL,
+                            child_main, &own_min, &own_nat);
+            int limit = child_cross_cap[i] > own_min ? child_cross_cap[i] : own_min;
+            if (limit > cross_size) limit = cross_size;
+            cross_own = limit;
+        }
+        int cross_pos = 0;
+        if (cross_align == GTK_ALIGN_CENTER) cross_pos = (cross_size - cross_own) / 2;
+        else if (cross_align == GTK_ALIGN_END) cross_pos = cross_size - cross_own;
+        if (cross_pos < 0) cross_pos = 0;
+
+        int child_width = vertical ? cross_own : child_main;
+        int child_height = vertical ? child_main : cross_own;
 
         graphene_point_t point = vertical
             ? GRAPHENE_POINT_INIT((float) cross_pos, (float) main_pos)
@@ -512,6 +601,8 @@ static void kn_box_layout_allocate(GtkLayoutManager *manager,
     g_free(child_expand);
     g_free(child_fill);
     g_free(child_size);
+    g_free(child_cap);
+    g_free(child_cross_cap);
     g_list_free(children);
 }
 
@@ -631,6 +722,46 @@ double kn_box_get_weight(GtkWidget *widget, GtkWidget *child) {
     KnBoxLayout *self = kn_layout_get(widget);
     if (self == NULL || child == NULL) return 0.0;
     return (double) kn_child_weight(self, child);
+}
+
+/* Sets the `Modifier.maxWidth()`/`maxHeight()` ceiling of one child (KN_NO_MAX = "no ceiling on
+ * this axis\). Like `weight`, this is a per-child property of THIS container, which is the only
+ * place a ceiling can be enforced: GTK would otherwise hand the child its natural size.
+ *
+ * A child whose weight and both caps are back to their defaults loses its record entirely, so an
+ * unmanaged-looking box really is allocation-free again (plan L9's "absent means default"). */
+void kn_box_set_child_max(GtkWidget *widget, GtkWidget *child, int max_width, int max_height) {
+    KnBoxLayout *self = kn_layout_get(widget);
+    if (self == NULL || child == NULL || !GTK_IS_WIDGET(child)) return;
+    int want_w = max_width < KN_NO_MAX ? KN_NO_MAX : max_width;
+    int want_h = max_height < KN_NO_MAX ? KN_NO_MAX : max_height;
+
+    KnChildLayout *data = kn_child_layout_peek(self, child);
+    if (data == NULL) {
+        if (want_w == KN_NO_MAX && want_h == KN_NO_MAX) return;   /* nothing to clear */
+        data = kn_child_layout_get(self, child);
+    }
+    if (data->max_width == want_w && data->max_height == want_h) return;
+    data->max_width = want_w;
+    data->max_height = want_h;
+    if (data->weight <= KN_NO_WEIGHT && want_w == KN_NO_MAX && want_h == KN_NO_MAX) {
+        kn_forget_child(self, child);
+    }
+    self->have_probe = FALSE;
+    kn_queue_resize(widget);
+}
+
+/* Current ceiling of `child` (KN_NO_MAX when it asks for none). Diagnostics and tests. */
+int kn_box_get_child_max_width(GtkWidget *widget, GtkWidget *child) {
+    KnBoxLayout *self = kn_layout_get(widget);
+    if (self == NULL || child == NULL) return KN_NO_MAX;
+    return kn_child_max(self, child, GTK_ORIENTATION_HORIZONTAL);
+}
+
+int kn_box_get_child_max_height(GtkWidget *widget, GtkWidget *child) {
+    KnBoxLayout *self = kn_layout_get(widget);
+    if (self == NULL || child == NULL) return KN_NO_MAX;
+    return kn_child_max(self, child, GTK_ORIENTATION_VERTICAL);
 }
 
 /* Drops the per-child record of a child that has been removed (Kotlin calls this from

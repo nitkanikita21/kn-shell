@@ -5,7 +5,11 @@ package dev.knshell.compose
 import androidx.compose.runtime.AbstractApplier
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
+import dev.knshell.core.setBoxChildMax
+import dev.knshell.core.setBoxChildWeight
 import kn.gtk.GtkWidget
+import kn.gtk.gtk_widget_get_layout_manager
+import kn.gtk.gtk_widget_get_parent
 
 /**
  * A single node of the widget tree that mirrors the Compose node tree.
@@ -23,9 +27,10 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
     /**
      * The [Modifier] currently applied to this node.
      *
-     * A container reads it to decide about its child: `weight` is a per-child property of the
-     * layout manager (`KnBoxLayout`), so [GtkBoxNode] pushes `child.modifier.mainAxisWeight()`
-     * whenever the child is attached or recomposed. Default is `Modifier` (no elements), which
+     * A container reads it to decide about its child: `weight` and the `maxWidth()`/`maxHeight()`
+     * ceiling are per-child properties of the layout manager (`KnBoxLayout`), so [GtkBoxNode]
+     * pushes `child.modifier.mainAxisWeight()` and `child.modifier.maxSizeCaps()` whenever the
+     * child is attached or recomposed. Default is `Modifier` (no elements), which
      * keeps the whole chain "absent means default" — the same rule that makes an empty chain
      * clear `hexpand` (plan L9).
      */
@@ -35,18 +40,40 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
     internal open fun applyModifier(modifier: Modifier) {
         this.modifier = modifier
         applyModifiers(widget, modifier, inlineStyle)
+        // Compose applies a node's chain without asking its parent, and `weight`/`maxWidth()`
+        // live in the parent: a chain that dropped them has to clear them there too (L9).
+        pushChildLayout()
     }
 
     /**
-     * Lets a container push a per-child layout property it reads from [modifier].
+     * Pushes the per-child layout properties [modifier] asks for — `weight` and the max-size
+     * ceiling — to the layout manager that owns this node's size.
      *
-     * `weight` lives in the parent's layout manager (GTK has no child properties for a managed
-     * box), so a node cannot apply it to itself: [GtkBoxNode] overrides this and calls
-     * `setBoxChildWeight(parent, child, weight)`. The default is a no-op for leaves and for
-     * containers that do not manage weights. Called by the parent on attach and on every
-     * recomposition of the child's own chain.
+     * Neither lives on the widget: GTK has no child properties for a managed box, so they are
+     * `KnBoxLayout` child records — `setBoxChildWeight(parent, child, weight)` and
+     * `setBoxChildMax(parent, child, maxWidth, maxHeight)`. Every node type pushes its own, not
+     * just a node that happens to be a box: `Row { Text(Modifier.weight(1f)) }` has a Text node as
+     * the weighted child, and a container that only pushed what its own children could see would
+     * quietly drop the weight of anything that is not itself a box.
+     *
+     * Both are pushed even when absent — `weight = 0` and `cap = -1` clear whatever the previous
+     * chain left behind. A parent with no layout manager (a plain `GtkBox`, `Box`, `Stack`) has
+     * nowhere to put them, which is exactly where the cap keeps its old, narrower meaning: only
+     * an explicit request is clamped. Called on attach and on every recomposition of this chain.
      */
-    internal open fun pushWeight() {}
+    internal open fun pushChildLayout() {
+        val parent = gtk_widget_get_parent(widget)?.asContainerHandle() ?: return
+        val child = widget.rawValue.toLong().toULong()
+        setBoxChildWeight(parent, child, modifier.mainAxisWeight())
+        val (maxWidth, maxHeight) = modifier.maxSizeCaps()
+        setBoxChildMax(parent, child, maxWidth, maxHeight)
+    }
+
+    /** This widget's own handle if it is a container a layout manager sizes, otherwise null. */
+    internal fun CPointer<GtkWidget>.asContainerHandle(): ULong? =
+        if (gtk_widget_get_layout_manager(this) == null) null
+        else this.rawValue.toLong().toULong()
+
     open fun insertChild(index: Int, child: GtkNode) {
         val safeIndex = index.coerceIn(0, children.size)
         children.add(safeIndex, child)

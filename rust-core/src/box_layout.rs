@@ -4,8 +4,9 @@
 //! gtk4-rs — attaching a Rust subclass corrupts the widget it is given). One manager serves both
 //! jobs:
 //!
-//!  * plain box packing — orientation, spacing, homogeneous, per-child `weight`, main-axis
-//!    alignment via a cell (so Kotlin never has to switch on `hexpand` to align something);
+//!  * plain box packing — orientation, spacing, homogeneous, per-child `weight`, per-child
+//!    max-size cap, main-axis alignment via a cell (so Kotlin never has to switch on `hexpand`
+//!    to align something);
 //!  * the Compose-owned animated main-axis size — the manager only applies the value Compose
 //!    pushes and reports the natural content size back. The animation itself (spec, retarget,
 //!    interruption) and the clock live in Compose, see
@@ -23,6 +24,14 @@ extern "C" {
     fn kn_box_set_homogeneous(widget: *mut c_void, homogeneous: c_int);
     fn kn_box_set_weight(widget: *mut c_void, child: *mut c_void, weight: c_double);
     fn kn_box_get_weight(widget: *mut c_void, child: *mut c_void) -> c_double;
+    fn kn_box_set_child_max(
+        widget: *mut c_void,
+        child: *mut c_void,
+        max_width: c_int,
+        max_height: c_int,
+    );
+    fn kn_box_get_child_max_width(widget: *mut c_void, child: *mut c_void) -> c_int;
+    fn kn_box_get_child_max_height(widget: *mut c_void, child: *mut c_void) -> c_int;
     fn kn_box_forget_child(widget: *mut c_void, child: *mut c_void);
     fn kn_box_content(widget: *mut c_void) -> f64;
     fn kn_box_set_current(widget: *mut c_void, current: f64);
@@ -181,6 +190,38 @@ pub fn get_box_child_weight(widget: u64, child: u64) -> f64 {
     }
     check_main_thread("get_box_child_weight");
     unsafe { kn_box_get_weight(handle(widget), handle(child)) as f64 }
+}
+
+/// Caps of `child` inside `widget`, in px, in the CHILD's own axes: `max_width` is what
+/// `Modifier.maxWidth()` asked for, `-1` means "no ceiling". GTK has no ceiling for a widget's
+/// size, so `KnBoxLayout` enforces it (plan L6, docs/layout-model.md).
+#[uniffi::export]
+pub fn set_box_child_max(widget: u64, child: u64, max_width: i32, max_height: i32) {
+    if widget == 0 || child == 0 {
+        return;
+    }
+    check_main_thread("set_box_child_max");
+    unsafe { kn_box_set_child_max(handle(widget), handle(child), max_width, max_height) }
+}
+
+/// Current width cap of `child` (-1 = none). Diagnostics and tests.
+#[uniffi::export]
+pub fn get_box_child_max_width(widget: u64, child: u64) -> i32 {
+    if widget == 0 || child == 0 {
+        return -1;
+    }
+    check_main_thread("get_box_child_max_width");
+    unsafe { kn_box_get_child_max_width(handle(widget), handle(child)) }
+}
+
+/// Current height cap of `child` (-1 = none). Diagnostics and tests.
+#[uniffi::export]
+pub fn get_box_child_max_height(widget: u64, child: u64) -> i32 {
+    if widget == 0 || child == 0 {
+        return -1;
+    }
+    check_main_thread("get_box_child_max_height");
+    unsafe { kn_box_get_child_max_height(handle(widget), handle(child)) }
 }
 
 /// Drops the per-child record of a child that left the container. Called from
