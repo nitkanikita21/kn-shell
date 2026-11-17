@@ -185,6 +185,13 @@ fun MyBar() {
 }
 ```
 
+`start`, `center` and `end` are three **regions**, and each region is a real box: anything you
+compose into one region shares that box, so `start = { Clock(); Space(8); Workspaces() }` needs no
+wrapper `Row`. The slot is structural (`CenterSlot.Start/Center/End`), so conditional content in
+one region can never move the others. Sizing is GTK's: the centre region keeps its natural width
+and the slack goes to a region that contains an expanding child (`Modifier.fillWidth()` inside
+`start` still stretches), which is the `shrink-center-last` default of `GtkCenterBox`.
+
 Services are plain `StateFlow`s — collect them into Compose state yourself:
 
 ```kotlin

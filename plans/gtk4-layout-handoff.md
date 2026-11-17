@@ -1,7 +1,7 @@
-# Handoff: GTK4 layout semantics (K6 — continuation on the laptop)
+# Handoff: GTK4 layout semantics (K7 — continuation on the laptop)
 
 Цей файл — точка входу після перерви. План-чекліст: `plans/gtk4-layout-semantics.md`
-(виконується, 5/10 кроків: K1, K2, K3, K4, K5 позначені `[x]`).
+(виконується, 6/10 кроків: K1…K6 позначені `[x]`).
 
 ## 0. Стан на момент зупинки
 - K1 (тести), K2 (фікси C), K3 (`KnBoxLayout` + `weight`), **K4 (видалено `reconcileMainAxisAlign`,
@@ -11,7 +11,7 @@
 - K5 лишив після себе **єдиний канал per-child властивостей лейауту**: `KnChildLayout
   { weight; max_width; max_height; }` у `kn_box_layout.c` + `setBoxChildWeight` /
   `setBoxChildMax` (+ getter-и) у UniFFI, і `GtkNode.pushChildLayout()` (базовий клас, виклик з
-  базового `applyModifier()`). K6 (CenterBox) і K7…K10 мають будуватися на цьому ж каналі, а не
+  базового `applyModifier()`). K7…K10 мають будуватися на цьому ж каналі, а не
   вигадувати новий. Деталі + чесна межа «min beats max» — `plans/gtk4-layout-semantics.md` §6.2.
 - K4 зроблено через **ownership полів на самому віджеті**: `g_object_set_data` з ключем
   `kn-modifier-<field>` ставиться, коли ланцюг модифієрів записав поле, і знімається зі
@@ -187,28 +187,60 @@ DSL-канал: `Modifier.maxSizeCaps(): Pair<Int, Int>` → `GtkNode.pushChildL
 Не чіпано: `Label(maxWidthChars=…)` (`compose/Widgets.kt:547-570`) — Pango-еліпсис, інший
 механізм (знижує сам мінімум).
 
-## 2''. K6 — CenterBox: іменовані слоти замість лічильника (наступний крок, L7)
+## 2''. K6 — ВИКОНАНО (опис механіки, на якій будувати K7+)
 
-Факт із групи 3: `shrink-center-last` у `GtkCenterBox` = **default TRUE**, але на практиці обидва
-значення дають однакову алокацію, бо центр завжди `width − (start + end)`, і жоден із них не
-висловлює «що стискається першим». Дефект L7 — `GtkCenterBoxNode` (`compose/Widgets.kt:146-165`)
-визначає слот за **лічильником `attached`**: перший приєднаний = start, другий = center, третій =
-end; порядок обходу/перекомпозиції тому змінює семантику, а `detachChild` лічильник не відкочує
-(проверити в коді — це й буде перший червоний тест).
+`CenterSlot` + регіони замінили лічильник `attached`:
+- `enum class CenterSlot { Start, Center, End }`;
+  `class GtkCenterRegionNode(slot) : GtkBoxNode(gtk_box_new(HORIZONTAL))` — регіон є справжнім
+  box'ом, тож кілька модулів в одному регіоні працюють без обгортки `Row`.
+- `GtkCenterBoxNode.place(child)` бере `slot` з вузла (`(node as? GtkCenterRegionNode)?.slot`), а
+  для не-регіонів — з позиції в `children` (не з mutable-лічильника). Тому `rebuildOrder()`
+  (detach усього → attach усього, виклик на Compose `move`) більше не перевертає бар.
+- DSL: `CenterBox(...)` компонує `CenterRegion(CenterSlot.Start) { start() }` тощо; `CenterRegion`
+  на рекомпозиції оновлює `slot` (`set(slot) { value -> this.slot = value }`).
+- Обмеження GTK (задокументоване + затестоване): один віджет на регіон; 4-та *звичайна* дитина
+  замінює END-віджет. З DSL недосяжно — три регіони створюються завжди.
+- Виміряно: `shrink-center-last` = TRUE за замовчуванням → центр тримає натюр-ширину, вільне місце
+  йде регіону з expand-дитиною; expand проходить крізь регіон (`GtkBox` пропагує expand дітей),
+  тому `Row(Modifier.fillWidth())` у `start` поводиться як до K6.
+- Деталі й мутаційна перевірка (2 тести падають від повернутого лічильника) —
+  `plans/gtk4-layout-semantics.md` §6.3.
 
-Пропозиція плану: іменовані слоти (`slot = Slot.Start | Center | End`) в DSL-етикеті вузла, що
-гарантує `gtk_center_box_set_start_widget/…_center_widget/…_end_widget` поза Dependence на
-порядку; документація `shrink-center-last` (4.12) — чому на ньому не можна будувати.
+## 2'''. K7 — `Box` vs `Stack` (L8): спершу рішення, потім код
 
-Порядок дій (той самий, що працював K3/K4/K5):
-1. Червоні тести в групі 3 `LayoutProbeTest.kt` (перекомпозиція/перестановка не змінює слотів;
-   видалення start-дитини не зсуває center в end; …) — 64 green мають лишитися, нові — red.
-2. Правка `compose/Widgets.kt` (+ DSL-параметр, якщо треба новий `enum` — див., як зроблено
-   `Align`/`AlignElement`).
-3. `rg -n 'attached' framework/src/nativeMain/kotlin/dev/knshell/compose/Widgets.kt` — переконатись,
-   що лічильник не лишився єдиним джерелом правди.
-4. Візуал — K5 показав, що probe-UI в `shell-app/main.kt` найкращий інструмент (потім повернути
-   `main.kt` до стану commit! резервна копія: `cp main.kt /tmp/main.kt.bak` ДО правки).
+Факти, зібрані перед кроком (переперевірити `rg`, стан на 2026-11-18):
+- `compose/Widgets.kt:~515` `fun Box(modifier, content)` = `GtkBoxNode(gtk_box_new(VERTICAL, 0))` з
+  `configureBox(vertical = true, spacing = 0, homogeneous = false)` → **block flow**, і KDoc прямо
+  це й каже («the "div" of this toolkit», «Children stack vertically»).
+- Compose-семантика `Box` — **не** block flow, а z-стек: діти один на одному, розмір за
+  найбільшою дитиною. Саме звідси L8.
+- Викликів `Box(...)` у продуктивному коді нема (тільки `ui/primitives/Utilities.kt:29,35` —
+  `Spacer`/`Space` через `Box(Modifier.size(...))` — і doc-коментарі). `test.ui.kt` цієї гілки
+  **не існує** (він у вашому WIP/master), тому «зламати приклад» зараз нічому.
+- `Stack` у коді немає; згадки тільки в `plans/*.md` і в doc-коментарі `GtkApplier.kt:60`.
+- `Overlay` є (`GtkOverlayNode`), але з хачем невидимої 0×0 головної дитини — це L11 = K8.
+
+Варіанти (рішення записати в §6.4 плану ПЕРЕД кодом):
+1. **Лишити block flow, додати окремий `Stack`** — нуль поломок, docs лишаються правдивими;
+   z-стек отримує власний віджет. Мінус: ім'я `Box` розходиться з Compose, треба один рядок у docs
+   («це не Compose `Box`; для z-стеку — `Stack`»).
+2. Переписати `Box` на стекінг (Compose-сумісність) — ламає docs/bar-api + `Space`/`Spacer`
+   семантику (порожній `Box(size(w,h))` стає контейнером, що не має власного розміру).
+3. Не чіпати `Box`, а `Stack` зробити тонким аліасом `Overlay` — найдешевше, але розмір стека тоді
+   визначається хачем L11, тобто стекінг і далі нечесний.
+
+Рекомендація: **(1)**. `Stack` реалізувати разом із K8 на рідному
+`gtk_overlay_set_measure_overlay()`/`clip-overlay`, бо інакше K8 і K7 роблять одне й те саме двічі.
+
+Порядок дій:
+1. Записати рішення в `plans/gtk4-layout-semantics.md` §6.4 (вибір + чому), поставити K7 `[x]`.
+2. Docs-рядок про `Box` (block flow ≠ Compose `Box`) у `docs/shell-api.md:171` і
+   `docs/bar-api.md:10`, плюс KDoc `Box`.
+3. Якщо `Stack` робиться в K7 (а не в K8) — спершу червоні тести в `LayoutProbeTest.kt`
+   (нова група): дві дитини різного розміру → контейнер дорівнює **більшій**, обидві отримують
+   клітинку контейнера, менша центрується; потім реалізація.
+4. Візуал — probe в `shell-app/src/nativeMain/kotlin/main.kt` (backup `cp main.kt /tmp/main.kt.bak`
+   ДО правки, після — повернути до стану commit).
 
 ## 3. Рішення, які вже ухвалено (не переписувати)
 
@@ -266,10 +298,10 @@ end; порядок обходу/перекомпозиції тому змін�
 - `scripts/anim-bench.sh:326` — `C_LAYOUT` тепер вказує на `kn_box_layout.c` (gate:
   `gtk_widget_add_tick_callback|g_get_monotonic_time|kn_ease` — 0 хітів ✓).
 
-## 5. Побіжна загроза для K6/K7 (не блокує, але не забути)
+## 5. Побіжна загроза для K7 (не блокує, але не забути)
 
 `docs/bar-api.md` / `docs/shell-api.md` описують `Box` як «div», а код робить з нього
-вертикальний `GtkBox` (block flow). Це L8 = K7. Не лікувати в K4.
+вертикальний `GtkBox` (block flow). Це L8 = K7 (факти й варіанти — §2''').
 
 ## 6. Правила безпеки правок (досвід цього session)
 
@@ -283,22 +315,21 @@ end; порядок обходу/перекомпозиції тому змін�
   **не** чіпали. Тому правки наших файлів комітити лише з явним переліком шляхів
   (`git commit -- <paths>`) — `git add -A` схопив би їхній staged-рефакторинг.
 
-## 7. Стан git (на 2026-11-18 01:10)
+## 7. Стан git (на 2026-11-18 01:35)
 
-K1–K4 **закомічені** на окремій гілці (`af82a6d` код K1–K3, `896b552`/`4519329`/`f4e894d` plans,
-`fd20e54` = K4), ваш рефакторинг лишився у робочому дереві (індекс недоторканий: 13
-staged-записів shell-app). K5 — черга наступного коміту (`feat(layout): cap a child's size in the
-box layout manager`, файли:
-`rust-core/src/kn_box_layout.c`, `rust-core/src/box_layout.rs`, `compose/{Modifier,GtkApplier,Widgets}.kt`,
-`LayoutProbeTest.kt`, `docs/shell-api.md`, `plans/*.md`).
+K1–K5 **закомічені й запушені** на `gtk4-layout-semantics`
+(`af82a6d` код K1–K3, `896b552`/`4519329`/`f4e894d` plans, `fd20e54` = K4,
+`30a30ae` = K5). Робоче дерево чисте, ваш рефакторинг (shell-app DI/theme, `:icons:core`,
+`services/*.kt`, `docs/*`) у цьому клоні відсутній.
+
+K6 — у коміті `feat(centerbox): name the regions instead of counting attach calls`:
+`framework/src/nativeMain/kotlin/dev/knshell/compose/Widgets.kt`,
+`framework/src/nativeTest/kotlin/dev/knshell/compose/LayoutProbeTest.kt`,
+`docs/shell-api.md`, `docs/bar-api.md`, `plans/*.md`.
 
 ```
-* gtk4-layout-semantics  HEAD   fd20e54 feat(modifier): own the layout fields a chain wrote, reset only those
-                          f4e894d docs(plans): master is pushed too — the laptop clone lands on master, not the work branch
-                          4519329 docs(plans): record the git incident — `commit --amend -- <path>` commits the whole index
-                          896b552 docs(plans): GTK4 layout plan and laptop handoff note
-                          af82a6d feat(layout): GTK4-correct box layout via a single KnBoxLayout
-  master                 7dbac56 build: bump Kotlin 2.1.0 -> 2.4.20, add Inara DI, ...
+# свіжий лог замість зашитих хешів:
+git log --oneline -8 gtk4-layout-semantics
 ```
 Обидві гілки є на `origin`; default = `master`. Тобто `git clone` дає чистий `master`,
 наш лейаут — тільки в `gtk4-layout-semantics`.
@@ -335,7 +366,7 @@ cd KN-shell && git checkout gtk4-layout-semantics
 source .tools/env.sh
 ./gradlew :rust-core:compileReleaseKotlinAndroid :framework:compileKotlinLinuxX64 --console=plain -q
 ./gradlew :framework:linuxX64Test --console=plain -q --tests '*LayoutProbeTest*'
-# очікування: 64 тестів, 0 red (стан після K5). Якщо red > 0 — не чіпати наступний крок,
+# очікування: 71 тест, 0 red (стан після K6). Якщо red > 0 — не чіпати наступний крок,
 # а з'ясувати чому (зазвичай не перекомпільований rust-core, не той toolchain або немає display).
 # `.tools/env.sh` у репо нема — `source` дасть помилку, вона безневинна (див. §1.1 про rust 1.90.0).
 ```

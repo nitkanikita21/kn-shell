@@ -349,6 +349,11 @@ fun main() = Shell.run {
 }
 ```
 
+Each of `start` / `center` / `end` is a region — a real box — so a region can hold several
+modules without a wrapper `Row` (`start = { Clock(); Space(8); Workspaces() }`). The centre keeps
+its natural width and the slack goes to a region with an expanding child, which is `GtkCenterBox`'s
+`shrink-center-last` default; see [shell-api.md](shell-api.md) for the full contract.
+
 ## Animations
 
 Any Compose state works; animate with `dev.knshell.animation.animateFloatAsState` — either the

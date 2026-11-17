@@ -165,10 +165,6 @@ open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
 }
 
 /**
- * Three-region bar layout (`GtkCenterBox`): start / center / end.
- * Children are attached bottom-up in composition order (start, center, end).
- */
-/**
  * GtkOverlay where overlay children are painted on top but **do not affect the measured
  * size** (`gtk_overlay_set_measure_overlay` stays false). The node keeps an invisible
  * empty main child, so the overlay can be as small as its parent requests — e.g. a 16px
@@ -199,17 +195,55 @@ class GtkOverlayNode : GtkNode(gtk_overlay_new()!!) {
     }
 }
 
-class GtkCenterBoxNode : GtkNode(gtk_center_box_new()!!) {
-    private var attached = 0
+/**
+ * Which region of a [CenterBox] a node occupies.
+ */
+enum class CenterSlot { Start, Center, End }
 
-    override fun attachChild(child: CPointer<GtkWidget>) {
+/**
+ * The horizontal box that hosts one region of a [CenterBox].
+ *
+ * A region is a real box, so it can hold several widgets without the caller wrapping them in a
+ * `Row` (`start = { Clock(); Space(8) }`). The parent [GtkCenterBoxNode] reads [slot] off the
+ * node instead of counting attach calls: the slot therefore survives `rebuildOrder()` (which
+ * detaches and re-attaches every child) and composition order cannot shift a region to the
+ * other side of the bar.
+ */
+class GtkCenterRegionNode(slot: CenterSlot) :
+    GtkBoxNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!) {
+    /** Set again on recomposition, so a region can move between slots. */
+    var slot: CenterSlot = slot
+}
+
+/**
+ * Three-region bar layout (`GtkCenterBox`): start / center / end.
+ *
+ * A child that is a [GtkCenterRegionNode] goes to the slot the region names. Any other child
+ * falls back to composition order (`start`, `center`, `end`), and — because `GtkCenterBox`
+ * holds exactly one widget per region — a fourth one takes the `end` slot instead of being
+ * left unparented.
+ *
+ * Sizing is GTK's, not Compose's: the start and end regions get their natural width, the centre
+ * region keeps its natural width too and the slack goes to a region with an expanding child
+ * (`gtk_center_box_set_shrink_center_last()` defaults to TRUE — see `docs/shell-api.md`).
+ */
+class GtkCenterBoxNode : GtkNode(gtk_center_box_new()!!) {
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) = place(child)
+
+    override fun attachChild(child: CPointer<GtkWidget>) = place(child)
+
+    private fun place(child: CPointer<GtkWidget>) {
         val box = widget.reinterpret<GtkCenterBox>()
-        when (attached) {
-            0 -> gtk_center_box_set_start_widget(box, child)
-            1 -> gtk_center_box_set_center_widget(box, child)
-            2 -> gtk_center_box_set_end_widget(box, child)
+        val node = children.firstOrNull { it.widget == child }
+        // Region nodes carry their slot; a plain child is placed by its position in the child
+        // list (never by a mutable call counter — `rebuildOrder()` re-attaches out of order).
+        val slot = (node as? GtkCenterRegionNode)?.slot
+            ?: CenterSlot.entries.getOrElse(children.indexOfFirst { it.widget == child }) { CenterSlot.End }
+        when (slot) {
+            CenterSlot.Start -> gtk_center_box_set_start_widget(box, child)
+            CenterSlot.Center -> gtk_center_box_set_center_widget(box, child)
+            CenterSlot.End -> gtk_center_box_set_end_widget(box, child)
         }
-        attached += 1
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {
@@ -522,9 +556,24 @@ fun CenterBox(modifier: Modifier = Modifier, start: @Composable () -> Unit, cent
             set(modifier) { value -> applyModifier(value) }
         },
     ) {
-        start()
-        center()
-        end()
+        // Each region is a node of its own, so its slot is structural rather than positional:
+        // conditional content inside a region cannot move the others (plan L7).
+        CenterRegion(CenterSlot.Start) { start() }
+        CenterRegion(CenterSlot.Center) { center() }
+        CenterRegion(CenterSlot.End) { end() }
+    }
+}
+
+/** One region of a [CenterBox]: children compose into the region's own horizontal box. */
+@Composable
+private fun CenterRegion(slot: CenterSlot, content: @Composable () -> Unit) {
+    ComposeNode<GtkCenterRegionNode, GtkApplier>(
+        factory = { GtkCenterRegionNode(slot).plain() },
+        update = {
+            set(slot) { value -> this.slot = value }
+        },
+    ) {
+        content()
     }
 }
 

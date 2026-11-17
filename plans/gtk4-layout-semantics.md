@@ -67,7 +67,7 @@ Kotlin-шар (API лишається Android-подібний):
 - [x] **K3. `KnBoxLayout` + per-child `weight`** у `rust-core` (C + `box_layout.rs` UniFFI + `compute_expand`), прикріплення з `GtkBoxNode`. Рішення на цьому кроці: merge з animated-size чи тонкий шар поверх спільної child-моделі.
 - [x] **K4. Видалення `reconcileMainAxisAlign()` + повний скид полів кожний прохід** в `applyModifiers` (L1, L9).
 - [x] **K5. Max-size**: clamp у `KnBoxLayout` (рекомендовано, бо інакше `maxWidth()` лишається брехнею в DSL) — з явним записом у docs, що це емуляція; альтернатива — прибрати `maxWidth/maxHeight/maxSize` (L6).
-- [ ] **K6. CenterBox**: іменовані слоти замість лічильника (L7) + документація `shrink-center-last` (4.12).
+- [x] **K6. CenterBox**: іменовані слоти замість лічильника (L7) + документація `shrink-center-last` (4.12).
 - [ ] **K7. `Box` vs `Stack`** (L8): збереження block flow + новий `Stack`, чи перепис на стекінг. Вибір з урахуванням, що `docs/bar-api.md`/`docs/shell-api.md` уже описують `Box` як «div».
 - [ ] **K8. Overlay без хаку**: рідні `measure_overlay`/`clip_overlay` (L11).
 - [ ] **K9. Docs**: `docs/framework-api.md` (модифієр→GTK таблиця), `docs/shell-api.md:256-303`, `docs/bar-api.md:117-172`, новий `docs/layout-model.md` — що GTK гарантує, що емулюємо, чого не може бути (max-size, % of parent).
@@ -187,3 +187,43 @@ _Suite_: **64 тести, 64 green** (`./gradlew :framework:linuxX64Test`). +10 
 - Документація: KDoc `MaxSizeElement` у `framework/.../Modifier.kt` (тепер «two places» + межа
   мінімуму + `min beats max`); `docs/shell-api.md` — рядок таблиці модифієрів і нотатка про
   triкацию тексту. `docs/framework-api.md` переліковий, змін не потребував.
+
+## 6.3 K6 — результати (2026-11-18, ноут)
+
+_Suite_: **71 тест, 71 green** (`./gradlew :framework:linuxX64Test`). +7 тестів проти K5.
+
+- **L7 закрито**: `GtkCenterBoxNode` більше не має mutable-лічильника `attached`. Слот береться з
+  вузла — `GtkCenterRegionNode.slot` (`enum class CenterSlot { Start, Center, End }`); для дитини,
+  що не є регіоном, — з її позиції в `children`, не з кількості викликів `attachChild()`. Тому
+  `GtkApplier.rebuildOrder()` (detach усього → attach усього; викликається на Compose `move`) не
+  перевертає бар: раніше регіони мінялися сторонами саме там.
+- **Регіон — справжній box** (`class GtkCenterRegionNode(slot) : GtkBoxNode(gtk_box_new(HORIZONTAL))`).
+  Наслідок: у регіоні можна тримати кілька віджетів без обгортки `Row` —
+  `start = { Clock(); Space(8); Workspaces() }`. DSL `CenterBox(...)` тепер компонує три
+  `CenterRegion(slot) { … }` замість послідовних `start(); center(); end()`, тобто слот структурний:
+  умовний контент в одному регіоні не зсуває інші.
+- **Обмеження GTK, задокументоване й затестоване**: у `GtkCenterBox` рівно три слоти, по одному
+  віджету. Четверта *звичайна* (не-регіон) дитина замінює END-віджет, а не зникає безслідно
+  (`a CenterBox holds one widget per region`). З DSL цей випадок недосяжний: три регіони завжди
+  створюються, а «більше трьох модулів» — це кілька дітей у регіоні.
+- **`shrink-center-last` (4.12) — виміряно, не припущено**: дефолт TRUE означає, що центр тримає
+  свою натюр-ширину, а вільне місце йде регіону, у якому є expand-дитина. Тест
+  `a region grows only when its content expands`: `start` 19 px → 182 px з `hexpand`-дитиною,
+  центр і інший бік не міняються. Тобто `Row(Modifier.fillWidth())` усередині `start` тягнеться як і
+  до K6: `GtkBox` пропагує expand дітей, тож регіон передає запит далі в `GtkCenterBox`.
+- **Мутаційна перевірка тестів** (тимчасово повернутий лічильник): падають рівно два тести
+  ідентичності слотів — `a region lands in the slot it names whatever the attach order`,
+  `a region keeps its slot after the applier rebuilds the child order` (70/71 з мутантом). Решта
+  тестів регіонів кодують семантику GTK і від лічильника не залежать.
+- Нові тести (група 3): `a region lands in the slot it names whatever the attach order`,
+  `a region keeps its slot after the applier rebuilds the child order`,
+  `a CenterBox holds one widget per region`, `one region holds several widgets without a wrapper`,
+  `a plain child still goes by composition order` (сумісність із руками зібраним GTK-деревом),
+  `a region is measured and allocated as one cell`, `a region grows only when its content expands`.
+- Візуал: probe-UI в `shell-app/main.kt` — `CenterBox(Modifier.fillWidth().height(36))` з двома
+  `Text` у `start` (без `Row`), центром-лейблом і `Row(Modifier.fillWidth())` в `end`. Лог без
+  `Gtk-WARNING`/`CRITICAL`; скріншот: «1 2» ліворуч, «|centre|» по центру, «end-start end-finish»
+  праворуч. `main.kt` повернуто до стану commit.
+- Документація: `docs/shell-api.md` (абзац про регіони + структурний слот + `shrink-center-last`),
+  `docs/bar-api.md` (те саме, коротко), KDoc `GtkCenterRegionNode`/`GtkCenterBoxNode`; старий
+  коментар тесту `CenterBox cannot express which side is squeezed first` переписано в минулий час.

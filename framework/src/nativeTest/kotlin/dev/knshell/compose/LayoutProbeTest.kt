@@ -23,6 +23,7 @@ import kn.gtk.gtk_widget_get_hexpand
 import kn.gtk.gtk_widget_set_valign
 import kn.gtk.GtkAllocation
 import kn.gtk.GtkBox
+import kn.gtk.GtkCenterBox
 import kn.gtk.GtkLabel
 import kn.gtk.GtkOverlay
 import kn.gtk.GtkOrientation
@@ -30,7 +31,10 @@ import kn.gtk.GtkWidget
 import kn.gtk.PangoEllipsizeMode
 import kn.gtk.gtk_box_append
 import kn.gtk.gtk_box_new
+import kn.gtk.gtk_center_box_get_center_widget
+import kn.gtk.gtk_center_box_get_end_widget
 import kn.gtk.gtk_center_box_get_shrink_center_last
+import kn.gtk.gtk_center_box_get_start_widget
 import kn.gtk.gtk_center_box_new
 import kn.gtk.gtk_center_box_set_center_widget
 import kn.gtk.gtk_center_box_set_end_widget
@@ -303,9 +307,9 @@ class LayoutProbeTest {
         // `shrink-center-last` defaults to TRUE and round-trips through its setter, but both
         // settings produce identical allocations for a centre that fits its own minimum: GtkCenter
         // Box gives the centre exactly `width − (start + end)` and never lets the sides lose. The
-        // framework therefore cannot express "centre wins over the sides" with GtkCenterBox — which
-        // is what plan K6 needs to know before replacing the slot-order counter (L7) with named
-        // slots.
+        // framework therefore cannot express "centre wins over the sides" with GtkCenterBox — the
+        // reason K6 documented the setting instead of "fixing" it when the slot-order counter
+        // (L7) was replaced by named regions.
         fun centerBox(shrinkCenterLast: Int): List<Rect> {
             val center = label("center-label-that-is-quite-long-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").also {
                 gtk_label_set_ellipsize(it.reinterpret<GtkLabel>(), PangoEllipsizeMode.PANGO_ELLIPSIZE_END)
@@ -328,6 +332,151 @@ class LayoutProbeTest {
             return boxes
         }
         assertEquals(centerBox(shrinkCenterLast = 0), centerBox(shrinkCenterLast = 1))
+    }
+
+    @Test
+    fun `a region lands in the slot it names whatever the attach order`() {
+        // The slot used to come from a call counter, so the first child attached became `start`.
+        // `rebuildOrder()` (a Compose `move`) detaches every child and re-attaches them, and
+        // conditional content changes the order — both used to move regions around the bar.
+        val box = GtkCenterBoxNode()
+        val start = GtkCenterRegionNode(CenterSlot.Start)
+        val center = GtkCenterRegionNode(CenterSlot.Center)
+        val end = GtkCenterRegionNode(CenterSlot.End)
+        // Deliberately NOT start/center/end order.
+        box.insertChild(0, end)
+        box.insertChild(1, start)
+        box.insertChild(2, center)
+
+        val cb = box.widget.reinterpret<GtkCenterBox>()
+        assertEquals(start.widget, gtk_center_box_get_start_widget(cb), "the START region sits on the left")
+        assertEquals(center.widget, gtk_center_box_get_center_widget(cb), "the CENTER region sits in the middle")
+        assertEquals(end.widget, gtk_center_box_get_end_widget(cb), "the END region sits on the right")
+    }
+
+    @Test
+    fun `a region keeps its slot after the applier rebuilds the child order`() {
+        // What `GtkApplier.rebuildOrder()` does: detach everything, attach everything again.
+        val box = GtkCenterBoxNode()
+        val start = GtkCenterRegionNode(CenterSlot.Start)
+        val center = GtkCenterRegionNode(CenterSlot.Center)
+        val end = GtkCenterRegionNode(CenterSlot.End)
+        listOf(start, center, end).forEachIndexed { index, region -> box.insertChild(index, region) }
+
+        val cb = box.widget.reinterpret<GtkCenterBox>()
+        box.removeChild(0, 3)
+        // Re-attached in reverse: with a counter this swaps the sides of the bar.
+        listOf(end, center, start).forEachIndexed { index, region -> box.insertChild(index, region) }
+
+        assertEquals(start.widget, gtk_center_box_get_start_widget(cb), "START survived the rebuild")
+        assertEquals(center.widget, gtk_center_box_get_center_widget(cb), "CENTER survived the rebuild")
+        assertEquals(end.widget, gtk_center_box_get_end_widget(cb), "END survived the rebuild")
+    }
+
+    @Test
+    fun `a CenterBox holds one widget per region`() {
+        // `GtkCenterBox` has exactly three slots, so a fourth *plain* child replaces the END
+        // widget instead of landing somewhere invisible. This is a GTK limit, not a framework
+        // one: the DSL wraps every region in a `GtkCenterRegionNode` box, so `start = { a(); b() }`
+        // is the supported way to put several widgets in one region.
+        val box = GtkCenterBoxNode()
+        val kids = listOf(GtkNode(label("a")), GtkNode(label("b")), GtkNode(label("c")), GtkNode(label("d")))
+        kids.forEachIndexed { index, kid -> box.insertChild(index, kid) }
+
+        val cb = box.widget.reinterpret<GtkCenterBox>()
+        assertEquals(kids[0].widget, gtk_center_box_get_start_widget(cb), "START keeps the first child")
+        assertEquals(kids[1].widget, gtk_center_box_get_center_widget(cb), "CENTER keeps the second")
+        assertEquals(kids[3].widget, gtk_center_box_get_end_widget(cb), "the last child wins the END slot")
+    }
+
+    @Test
+    fun `one region holds several widgets without a wrapper`() {
+        // A region is a box of its own, so `start = { Clock(); Space(8); Workspaces() }` composes
+        // into one slot instead of each widget fighting for the single `start` widget.
+        val box = GtkCenterBoxNode()
+        val start = GtkCenterRegionNode(CenterSlot.Start)
+        box.insertChild(0, start)
+        val first = GtkNode(label("clock"))
+        val second = GtkNode(label("volume"))
+        start.insertChild(0, first)
+        start.insertChild(1, second)
+
+        assertEquals(2, childrenOf(start.widget).size, "both widgets live in the region")
+        assertEquals(start.widget, gtk_widget_get_parent(first.widget), "first widget is a child of the region")
+        assertEquals(start.widget, gtk_widget_get_parent(second.widget), "second widget is too")
+    }
+
+    @Test
+    fun `a plain child still goes by composition order`() {
+        // Backwards compatibility for hand-built GTK trees: a child that is not a region node
+        // keeps the old positional rule (start, center, end).
+        val box = GtkCenterBoxNode()
+        val first = GtkNode(label("start"))
+        val second = GtkNode(label("center"))
+        val third = GtkNode(label("end"))
+        box.insertChild(0, first)
+        box.insertChild(1, second)
+        box.insertChild(2, third)
+
+        val cb = box.widget.reinterpret<GtkCenterBox>()
+        assertEquals(first.widget, gtk_center_box_get_start_widget(cb))
+        assertEquals(second.widget, gtk_center_box_get_center_widget(cb))
+        assertEquals(third.widget, gtk_center_box_get_end_widget(cb))
+    }
+
+    @Test
+    fun `a region is measured and allocated as one cell`() {
+        // Level 1 of the contract only: the region box owns the space GtkCenterBox hands it, and
+        // its own children are packed by `KnBoxLayout` inside that cell.
+        val box = GtkCenterBoxNode()
+        val start = GtkCenterRegionNode(CenterSlot.Start)
+        box.insertChild(0, start)
+        val clock = GtkNode(label("12:00"))
+        val volume = GtkNode(label("80%"))
+        start.insertChild(0, clock)
+        start.insertChild(1, volume)
+
+        allocate(box.widget, width = 400, height = 30)
+        val regionWidth = allocRect(start.widget).width
+        assertEquals(
+            naturalWidth(clock.widget) + naturalWidth(volume.widget),
+            regionWidth,
+            "the start region gets the natural width of its contents",
+        )
+        assertEquals(0, allocRect(clock.widget).x - allocRect(start.widget).x, "the first widget starts the region")
+        assertEquals(naturalWidth(clock.widget), allocRect(clock.widget).width, "and keeps its natural width")
+    }
+
+    @Test
+    fun `a region grows only when its content expands`() {
+        // Measured, not assumed: with `shrink-center-last` at its default (TRUE) the centre keeps
+        // its natural size and the slack goes to whichever region contains an expanding child — a
+        // `Row(Modifier.fillWidth())` in `start` therefore still stretches the way it did before
+        // regions existed, and the centre does not eat the leftover. `GtkBox` propagates a child's
+        // expand flag, so the region box passes the request up to the `GtkCenterBox`.
+        fun widths(expandingChild: Boolean): Triple<Int, Int, Int> {
+            val box = GtkCenterBoxNode()
+            val start = GtkCenterRegionNode(CenterSlot.Start)
+            val center = GtkCenterRegionNode(CenterSlot.Center)
+            val end = GtkCenterRegionNode(CenterSlot.End)
+            listOf(start, center, end).forEachIndexed { index, region -> box.insertChild(index, region) }
+            val left = GtkNode(label("left"))
+            start.insertChild(0, left)
+            center.insertChild(0, GtkNode(label("centre")))
+            end.insertChild(0, GtkNode(label("right")))
+            if (expandingChild) gtk_widget_set_hexpand(left.widget, 1)
+
+            allocate(box.widget, width = 400, height = 30)
+            return Triple(allocRect(start.widget).width, allocRect(center.widget).width, allocRect(end.widget).width)
+        }
+
+        val flat = widths(expandingChild = false)
+        assertEquals(naturalWidth(label("left")), flat.first, "a region of non-expanding content stays natural")
+
+        val growing = widths(expandingChild = true)
+        assertTrue(growing.first > flat.first, "expand propagates through the region box")
+        assertEquals(flat.second, growing.second, "the centre keeps its natural size (shrink-center-last)")
+        assertEquals(flat.third, growing.third, "and so does the other side")
     }
 
     // --------------------------------------------------------- 2. DSL contract
