@@ -21,13 +21,14 @@
 На ноуті достатньо:
 
 ```bash
-git clone https://github.com/nitkanikita21/kn-shell.git KN-shell
-cd KN-shell && git checkout gtk4-layout-semantics   # якщо clone не взяв гілку автоматом
+git clone https://github.com/nitkanikita21/kn-shell.git KN-shell   # приходить master (default)
+cd KN-shell && git checkout gtk4-layout-semantics
 ```
 
-`master` на GitHub немає — історія до 7dbac56 приїхала разом з цією гілкою як предки.
-Твій незакомічений рефакторинг (shell-app DI/theme, `:icons:core`, docs) лишився на
-десктопі, на ноуті його не буде (див. §7).
+На GitHub дві гілки: `master` = 7dbac56 (твій, без нашого лейаута) і
+`gtk4-layout-semantics` = 7dbac56 + af82a6d + 4519329 (наша робота). Твій
+**незакомічений** рефакторинг (shell-app DI/theme, `:icons:core`, `docs/*`) не заїде
+нікуди — він лишається на десктопі (див. §7).
 
 ## 1. Як прогнати тести (з того, що вже працює)
 
@@ -185,6 +186,8 @@ source .tools/env.sh
                           af82a6d feat(layout): GTK4-correct box layout via a single KnBoxLayout
   master                 7dbac56 build: bump Kotlin 2.1.0 -> 2.4.20, add Inara DI, ...
 ```
+Обидві гілки є на `origin`; default = `master`. Тобто `git clone` дає чистий `master`,
+наш лейаут — тільки в `gtk4-layout-semantics`.
 
 У коміт `af82a6d` свідомо **не** входять (це ваш icons/DI-workstream, не лейаут):
 `compose/AnimatedSize.kt` (тільки KDoc-приклад з `Icon(Lucide.Clock)`),
