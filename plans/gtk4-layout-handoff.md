@@ -224,3 +224,27 @@ source .tools/env.sh
 
 Контекст з цією сесією не переноситься: на ноуті прочитай `plans/gtk4-layout-handoff.md`
 повністю й починай з §2 (K4).
+
+## 8. Інцидент з git (записано, щоб не повторити)
+
+Під час першого пуша в коміт потрапив **чужий staged-рефакторинг** (13 файлів `shell-app/…` +
+`plans/icons-lucide.md`). Причина — одна конкретна команда:
+
+```bash
+git commit --amend --no-edit -- plans     # НЕБЕЗПЕЧНО при забрудненому індексі
+```
+
+`git commit <pathspec>` без `--amend` працює в режимі `--only` (бере лише вказані шляхи —
+саме так чистий `af82a6d`). Але `--amend` із pathspec'ом игнорує `--only` і бере **весь
+індекс**, тож усі staged-записи користувача поїхали у мій коміт.
+
+Правила на майбутнє (на цій гілці індекс користувача містить його WIP):
+1. Ніколи не роби `git commit --amend` при нечистому індексі. Замість цього — новий коміт
+   `git commit -- <paths>` (без `--amend`), або plumbing:
+   `GIT_INDEX_FILE=/tmp/x git read-tree <base>^{tree} && git update-index --add -- <paths> &&
+   TREE=$(git write-tree) && C=$(git commit-tree $TREE -p <base> -m "...") &&
+   git update-ref refs/heads/<branch> $C` — індекс при цьому не чіпається взагалі.
+2. Перед будь-яким пушем: `git diff --name-status <base> HEAD` і перевірити, що там тільки наші шляхи.
+3. Історія вже переписана (force-with-lease): гілка = `af82a6d` + `896b552`. Старі
+   `3d563ea`/`92cf8fc` доступні за SHA доки GitHub не запустив GC — **користувач свідомо
+   обрав «залишити як є»**. На ноуті брати саме `896b552` (remote HEAD).
