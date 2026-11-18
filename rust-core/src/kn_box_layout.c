@@ -274,6 +274,141 @@ static GtkSizeRequestMode kn_box_layout_get_request_mode(GtkLayoutManager *manag
     return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
 }
 
+/* ------------------------------------------------------------------ cross size at a main size
+ *
+ * GtkBox computes "how much cross size do I need, given this main size" by first handing
+ * EVERY child its own share of that main size, and only then asking the child how much cross
+ * size it needs AT ITS SHARE (gtkboxlayout.c:388, `compute_opposite_size_for_size`).
+ *
+ * Forwarding the container's own main size to each child instead — which is what this
+ * replaces — tells a child it is as big along the main axis as the whole container. Anything
+ * that derives one axis from the other (`Modifier.aspectRatio()`, a height-for-width Label)
+ * answers with a cross size proportional to that lie, so a column of square tiles requests
+ * width = tiles x container_height. Measured in the demo app: a 1391px-wide window asked its
+ * content for 9400px of width and never handed the UI the width it had — the symptom was
+ * "the UI does not follow the window", with text of neighbouring rows drawn over each other.
+ * Every share is clamped to `available` here, so the request cannot exceed the negotiation.
+ */
+static void kn_cross_size_for_main(KnBoxLayout *self, GtkWidget *widget, int main_size,
+                                   int *minimum, int *natural) {
+    GtkOrientation main = kn_main_orientation(self);
+    GtkOrientation cross = (main == GTK_ORIENTATION_HORIZONTAL)
+                         ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL;
+
+    int n = 0;
+    for (GtkWidget *c = gtk_widget_get_first_child(widget); c != NULL;
+         c = gtk_widget_get_next_sibling(c)) n++;
+    if (n == 0) { *minimum = 0; *natural = 0; return; }
+
+    int spacing = n > 1 ? kn_effective_spacing(self, widget) * (n - 1) : 0;
+    int available = main_size - spacing;
+    if (available < 0) available = 0;
+
+    GtkWidget **kids = g_newa(GtkWidget *, n);
+    int *mins = g_newa(int, n);
+    int *nats = g_newa(int, n);
+    int *share = g_newa(int, n);
+    int *idx = 0; (void) idx;
+
+    int i = 0, sum_min = 0, sum_nat = 0, n_claim = 0;
+    float total_weight = 0.0f;
+    for (GtkWidget *c = gtk_widget_get_first_child(widget); c != NULL;
+         c = gtk_widget_get_next_sibling(c), i++) {
+        int mn = 0, nat = 0;
+        kn_measure_child(self, c, main, -1, &mn, &nat);
+        kids[i] = c; mins[i] = mn; nats[i] = nat;
+        sum_min += mn; sum_nat += nat;
+        if (kn_child_weight(self, c) > KN_NO_WEIGHT || kn_child_ratio(self, c) > KN_NO_RATIO
+            || gtk_widget_compute_expand(c, main)) n_claim++;
+        if (kn_child_weight(self, c) > KN_NO_WEIGHT) total_weight += kn_child_weight(self, c);
+    }
+
+    if (self->homogeneous) {
+        /* The same equal cell allocate() hands out (GtkBox semantics). */
+        int cell = available / n;
+        int extra = available % n;
+        for (i = 0; i < n; i++) share[i] = cell + (i < extra ? 1 : 0);
+    } else {
+        /* Start every child at its minimum, grow towards its natural in proportion to how
+         * much room it has left — `gtk_distribute_natural_allocation`, which is a private
+         * GTK symbol, reimplemented here. */
+        int grow_total = sum_nat - sum_min;
+        if (grow_total < 0) grow_total = 0;
+        int room = available > sum_min ? available - sum_min : 0;
+        int used = 0;
+        for (i = 0; i < n; i++) {
+            int add = 0;
+            if (grow_total > 0) {
+                int child_room = nats[i] - mins[i];
+                if (child_room < 0) child_room = 0;
+                add = (int)(((long long) room * child_room) / grow_total);
+            }
+            share[i] = mins[i] + add;
+            used += share[i];
+        }
+        /* The surplus over the naturals belongs to the children that claim space — by weight
+         * if any carries one (the model allocate() uses: weight is a proportional expand),
+         * otherwise split evenly over the expanding children. */
+        int leftover = available - used;
+        if (leftover > 0 && n_claim > 0) {
+            if (total_weight > 0.0f) {
+                for (i = 0; i < n; i++) {
+                    float w = kn_child_weight(self, kids[i]);
+                    if (w > KN_NO_WEIGHT)
+                        share[i] += (int)(((long long) leftover * (long long)(w * 1000.0))
+                                          / (long long)(total_weight * 1000.0));
+                }
+            } else {
+                int per = leftover / n_claim;
+                int one = leftover % n_claim;
+                int given = 0;
+                for (i = 0; i < n && given < leftover; i++) {
+                    gboolean claims = kn_child_weight(self, kids[i]) > KN_NO_WEIGHT
+                        || kn_child_ratio(self, kids[i]) > KN_NO_RATIO
+                        || gtk_widget_compute_expand(kids[i], main) != FALSE;
+                    if (!claims) continue;
+                    int add = per + (given < one ? 1 : 0);
+                    share[i] += add;
+                    given += add;
+                }
+            }
+        }
+    }
+    for (i = 0; i < n; i++) {
+        if (share[i] > available) share[i] = available;
+        if (share[i] < 0) share[i] = 0;
+    }
+
+    int cross_min = 0, cross_nat = 0;
+    for (i = 0; i < n; i++) {
+        int mn = 0, nat = 0;
+        double weight = kn_child_weight(self, kids[i]);
+        double ratio = kn_child_ratio(self, kids[i]);
+        kn_measure_child(self, kids[i], cross, share[i], &mn, &nat);
+        if (weight > KN_NO_WEIGHT && ratio > KN_NO_RATIO) {
+            /* A child that is weighted *and* has a ratio answers like a CSS flex
+             * item with `flex: 1; aspect-ratio: 1`: its main share above is the
+             * definite axis, so the cross size is transferred from it
+             * (cross = main / ratio).  Without this the row reports the children's
+             * own height, the ratio then takes the main axis back from that, and
+             * seven `weight(1.0).aspectRatio(1f)` swatches become seven tiny tiles
+             * hugging the left edge instead of seven squares tiling the width.
+             * The child's own cross minimum still wins, so content is never
+             * squeezed out of the box. */
+            int derived = (int)lround((double)share[i] / ratio);
+            if (derived < mn) derived = mn;
+            if (derived > cross_min) cross_min = derived;
+            if (derived > cross_nat) cross_nat = derived;
+            continue;
+        }
+        if (mn > cross_min) cross_min = mn;
+        if (nat > cross_nat) cross_nat = nat;
+    }
+    *minimum = cross_min;
+    *natural = cross_nat;
+    if (*natural < *minimum) *natural = *minimum;
+}
+
 static void kn_box_layout_measure(GtkLayoutManager *manager,
                                  GtkWidget *widget,
                                  GtkOrientation orientation,
@@ -317,15 +452,18 @@ static void kn_box_layout_measure(GtkLayoutManager *manager,
     } else if (self->fixed_cross >= 0) {
         *minimum = self->fixed_cross;
         *natural = self->fixed_cross;
+    } else if (for_size >= 0) {
+        /* Negotiated cross size: hand each child its own share of `for_size` first, exactly
+         * like GtkBox (see kn_cross_size_for_main). */
+        kn_cross_size_for_main(self, widget, for_size, minimum, natural);
     } else {
         int cross_min = 0, cross_nat = 0;
         for (GtkWidget *child = gtk_widget_get_first_child(widget);
              child != NULL;
              child = gtk_widget_get_next_sibling(child)) {
             int mn = 0, nat = 0;
-            /* `for_size` is the main-axis size the caller is negotiating with: passing it
-             * through is the whole height-for-width contract (plan L3). */
-            kn_measure_child(self, child, orientation, for_size, &mn, &nat);
+            /* Unconstrained: the child's own cross preference, no negotiation to honour. */
+            kn_measure_child(self, child, orientation, -1, &mn, &nat);
             if (mn > cross_min) cross_min = mn;
             if (nat > cross_nat) cross_nat = nat;
         }

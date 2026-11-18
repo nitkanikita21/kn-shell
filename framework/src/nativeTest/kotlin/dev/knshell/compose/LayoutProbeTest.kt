@@ -716,6 +716,33 @@ class LayoutProbeTest {
     }
 
     @Test
+    fun `a weighted ratio child asks for the height its weighted share implies`() {
+        // `Modifier.weight(1.0).aspectRatio(1f)` is the CSS `flex: 1; aspect-ratio: 1`
+        // pattern the demo uses for a row of equal colour swatches: the weight makes the
+        // width definite, so the ratio transfers it into the height.  Reporting the
+        // children's own height here would collapse the row and shrink every swatch to it.
+        val tiles = listOf("bg", "fg").map { name ->
+            GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!).also { gtk_box_append(it.widget.reinterpret<GtkBox>(), label(name)) }
+        }
+        val row = managedBox(spacing = 8, children = tiles.map { it.widget })
+        tiles.forEach { it.applyModifier(Modifier.weight(1.0).aspectRatio(1f)) }
+
+        // One child only: two weighted children make GtkBox hand the odd pixel of the
+        // remainder to the first one, and that rounding is not what is under test.
+        val single = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!).also {
+            gtk_box_append(it.widget.reinterpret<GtkBox>(), label("bg"))
+        }
+        val soloRow = managedBox(children = listOf(single.widget))
+        single.applyModifier(Modifier.weight(1.0).aspectRatio(1f))
+        assertEquals(208, measure(soloRow, VERTICAL, 208).natural,
+            "the height asked for is the weighted share, not the label's own height")
+
+        allocate(row, 208, 100)
+        assertEquals(Rect(0, 0, 100, 100), allocRect(tiles[0].widget), "the first swatch is a square")
+        assertEquals(Rect(108, 0, 100, 100), allocRect(tiles[1].widget), "the second tiles beside it, not on top of it")
+    }
+
+    @Test
     fun `a chain that drops the ratio goes back to content packing`() {
         val chip = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!)
         val row = managedBox(children = listOf(chip.widget))
@@ -727,6 +754,39 @@ class LayoutProbeTest {
         chip.applyModifier(Modifier)
         allocate(row, 200, 80)
         assertEquals(0, allocRect(chip.widget).width, "an empty chain clears the record, so the box packs its empty content")
+    }
+
+    @Test
+    fun `a negotiated cross size does not multiply the container size into a ratio child`() {
+        // The shape the demo composes: a Column of Rows of square tiles. Asking the Column how
+        // wide it is at a given HEIGHT must not answer `tiles x height`: a ratio derives a
+        // child's main size from ITS cross size, and the container's main size is not that.
+        // GtkBox solves this by handing every child its own share of the negotiation size first
+        // (gtkboxlayout.c:388); forwarding `for_size` straight to the children used to. Seen in
+        // the app: a 1391px window requested 9400px of width and the UI never got the width back.
+        val tiles = (0..2).map { GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!) }
+        val row = managedBox(spacing = 8, children = tiles.map { it.widget }, root = false)
+        val column = managedBox(spacing = 8, vertical = true, children = listOf(row))
+        // Only after the tiles are children of the row: `ratio` lives in the PARENT's record.
+        tiles.forEach { it.applyModifier(Modifier.aspectRatio(1f).requiredSize(2)) }
+
+        assertEquals(22, measure(column, HORIZONTAL, 800).natural,
+            "three 2px tiles plus two 8px gaps: the request is the content, not 3x800")
+    }
+
+    @Test
+    fun `the width a column requests does not depend on the height it is negotiated at`() {
+        // Height-for-width negotiation asks the same question at several sizes. If the answer
+        // grows with the question, GTK oscillates and the window ends up wider than its content.
+        val tiles = (0..2).map { GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!) }
+        val row = managedBox(spacing = 8, children = tiles.map { it.widget }, root = false)
+        val column = managedBox(spacing = 8, vertical = true, children = listOf(row))
+        // Only after the tiles are children of the row: `ratio` lives in the PARENT's record.
+        tiles.forEach { it.applyModifier(Modifier.aspectRatio(1f).requiredSize(2)) }
+
+        val at400 = measure(column, HORIZONTAL, 400).natural
+        val at800 = measure(column, HORIZONTAL, 800).natural
+        assertEquals(at400, at800, "the request is stable: $at400 at 400px tall, $at800 at 800px tall")
     }
 
     // ------------------------------------------- 3e. exact sizes (plan L13)

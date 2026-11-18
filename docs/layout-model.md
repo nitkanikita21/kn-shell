@@ -22,13 +22,22 @@ and adds only where a Compose expectation cannot be expressed:
 A container that is not one of the above is a plain GTK widget: no `weight`, no cap, no
 alignment cell.
 
+**Cross-axis negotiation.** A box asked for its size on the *cross* axis at a given main size has
+to split that main size between children first — into the same shares `allocate()` will later hand
+out — and only then measure each child's cross axis at its own share. That is what
+`gtk_box_layout_compute_opposite_size_for_size()` does in GTK and `kn_cross_size_for_main()` does
+here. Forwarding the container's whole main size to every child instead is invisible until a child
+turns a size into a shape: seven `aspectRatio(1f)` children in a 1336px-tall column each answered
+1336px of width, the window therefore asked for 9400px, and the UI could not follow the window
+width at all.
+
 ## The four size knobs, and what each really means
 
 | Modifier | GTK field | Semantics |
 | --- | --- | --- |
 | `size(w, h)` / `width` / `height` | `gtk_widget_set_size_request` | a **minimum**, not a size: the widget never gets smaller, but a parent may give it more |
 | `requiredSize(w, h)` / `requiredWidth` / `requiredHeight` | size request **+** `Align.Start` on the named axes | an **exact** size (compose's `requiredSize`): the parent cannot stretch those axes, so `requiredSize(44)` stays 44×44 in a taller `Row` and a chip keeps its 1:1 |
-| `aspectRatio(r)` | per-child `ratio` in `KnBoxLayout` | keeps a shape instead of a number: the **cross** axis decides (a `Fill` child takes the container's whole cross size) and the **main** axis becomes `cross * r`. So `aspectRatio(1f)` in a `Row` is "as tall as the row, and exactly that wide". A `weight`/`hExpand()` on the same child is ignored — the ratio already owns those pixels |
+| `aspectRatio(r)` | per-child `ratio` in `KnBoxLayout` | keeps a shape instead of a number: the **cross** axis decides (a `Fill` child takes the container's whole cross size) and the **main** axis becomes `cross * r`. So `aspectRatio(1f)` in a `Row` is "as tall as the row, and exactly that wide". An `hExpand()` on the same child is ignored — the ratio already owns those pixels. A `weight` is not: when the box is asked for its cross size, a weighted ratio child answers `share / r` rather than its content height (CSS `flex: 1; aspect-ratio: 1`), so seven `weight(1.0).aspectRatio(1f)` swatches tile the row as squares instead of shrinking to the label height |
 | `minWidth` / `minHeight` / `minSize` | CSS `min-width` / `min-height` | also a minimum, applied by the theme layer after the plain reset removed the theme's own |
 | `maxWidth` / `maxHeight` / `maxSize` | *no GTK equivalent* | a **ceiling**, emulated: it clamps an explicit `size()` request and, inside a `KnBoxLayout` container, the width the manager hands out. Clamped to the child's own minimum (`min` beats `max`, as in CSS) |
 | `align(h, v)` | `gtk_widget_set_halign` / `valign` | picks a position inside the cell the parent hands out. `Fill` = take the cell. `Center`/`End` = natural size, aligned |
@@ -110,5 +119,8 @@ expansion explicitly with `Modifier.align(h = Align.Fill)` / `fillWidth()`.
 * `LayoutProbeTest.kt` helpers are the quickest way to ask GTK a direct question:
   `gtk_widget_measure`, then `allocate(widget, w, h)` (a test-only helper that sizes an unmapped
   widget) and `allocRect(child)`.
+* An `Overlay` — like any container that leaves `gtk_overlay_set_measure_overlay()` off — adds no
+  size of its own. `Box { Overlay { Label } }` therefore measures its border and nothing else, and
+  a row of those collapses to 2px. `Stack` is the one that sizes to what it stacks.
 * GTK's own warnings are meaningful: `Trying to measure … for width of N, but it needs at least
   M` means a minimum beat a cap or a cell.

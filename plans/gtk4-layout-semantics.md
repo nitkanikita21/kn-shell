@@ -346,3 +346,51 @@ _Suite_: **79 тестів, 79 green**. Хак L11 закрито — і не т
 - **Тести (група `3f. aspect ratio`)**: fill-cross-and-derive-main; ratio 2f масштабує; у `Column` cross — це ширина; дитина з `weight(1.0)` не розтягується і поступається сусідом-експандером; ланцюг без ratio повертає content-упаковку. Разом **91/91**.
 - **Демо**: `TestUi()` — `Stack(Modifier.aspectRatio(1f).radius(12).background(c.accent))` у хедер-`Row`; плашка стала ~46×46 логічних px (замір по скріншоту), тобто справді 1:1 від висоти ряду.
 - `docs/layout-model.md`: рядок `aspectRatio(r)` у таблиці «The four size knobs» і примітка, що `weight` та `aspectRatio` живуть лише в `KnBoxLayout` (`Row`/`Column`/`Box`/`CenterBox`-регіон).
+
+## 6.9 L15 — узгодження cross-осі та `weight` + `aspectRatio` разом (2026-11-18)
+
+Симптом від користувача: «чомусь ширина UI не підлаштовується під ширину вікна». Скріншот показував
+кашу з тексту в нижній частині вікна; рядки з `weight` у хедері (`KN Shell` + підзаголовок) не
+malювались взагалі.
+
+- **Причина 1 (рушій).** Cross-гілка `kn_box_layout_measure()` передавала власний main-розмір
+  контейнера кожній дитині як `for_size` (`kn_measure_child(self, child, orientation, for_size, ...)`),
+  замість того, щоб спочатку розділити `for_size` на частки — як потім робить `allocate()`. Стоковий
+  `GtkBox` робить саме розділення: `gtk_box_layout_measure` (gtkboxlayout.c:610) →
+  `gtk_box_layout_compute_opposite_size_for_size` (:388), `available = for_size - (n-1)*spacing` (:419),
+  homogeneous → `available/n` + 1px першим (`:421-444`), інакше сталий розмір мінусується, решта —
+  `distribute_remaining_size` (:501) + `gtk_distribute_natural_allocation` (:509) + надлишок
+  експандерам (:514-554), і лише тоді `gtk_widget_measure(child, OPPOSITE, child_size, ...)` (:558).
+  У поєднанні з L14 (плашка з `ratio` підміняє main на `for_size * ratio`) це давало
+  `7 * 1336 + 48 = 9400` px мінімальної ширини кореневого стовпця при вікні 1391 px: вікно ніколи не
+  могло стати тим, чим його запросили. Нова функція `kn_cross_size_for_main()` у
+  `rust-core/src/kn_box_layout.c` робить розділення (мінус natural-и, потім частки за `weight`,
+  інакше порівну між тими, хто претендує), і лише тоді міряє cross кожній дитині на її частці.
+  Регресія: `a negotiated cross size does not multiply the container size into a ratio child` і
+  `the width a column requests does not depend on the height it is negotiated at` (група `3f`).
+  На «старому» C падають як `Expected <22>, actual <2416>` — тобто тест справді захищає фікс.
+- **Причина 2 (демо).** `shell-app/.../ui/test.ui.kt:105` обгортає мітку зразка кольору в
+  `Overlay(Modifier.fillAll())`. `GtkOverlayNode` створюється з `measureChildren = false`
+  (`gtk_overlay_set_measure_overlay()` лишається false), тобто overlay не додає розміру взагалі:
+  кожна плашка мірилась як 0 + 2px рамки, ряд — як 2px заввишки, а сім `ratio`-дітей отримували
+  `main = cross * ratio = 2` і малювались одна на одній. виправлено на `Stack { ... }` (той самий
+  `GtkOverlay`, але з `measure-overlay = true` по кожному дитинчату) — семантика «Box як у compose».
+- **Причина 3 (семантика).** `weight(1.0)` + `aspectRatio(1f)` одночасно: коментар у демо каже
+  «seven swatches share the column evenly», а L14 виводив main із cross і ігнорував вагу, тому
+  зразки ставали 24px плитками ліворуч. Правило «як у вебі» (`flex: 1; aspect-ratio: 1`): вага
+  робить main-вісь визначеною, тож cross має переноситися з неї. Реалізовано в
+  `kn_cross_size_for_main()` — дитина з `weight > 0` і `ratio > 0` відповідає замість своєї висоти
+  `share / ratio` (але не менше за власний мінімум, щоб контент не виїжджав за межі). `allocate()`
+  не чіпано, тому їхній тест `a ratio child is left out of the weight and surplus passes`
+  (чип 50×50 поруч з hexpand-сусідом 250 у ряду 300×50) лишається зеленим: cross контейнера
+  визначений, і ratio по ньому й рахує.
+- **Тести**: `a weighted ratio child asks for the height its weighted share implies` (попередньому
+  варіанті вистачало `[208 x 100]`-асерта; з двома дітьми GtkBox віддає останній пікель першій, тому
+  асертується одиночна дитина: `measure(soloRow, VERTICAL, 208).natural == 208`, а далі
+  `allocate(row, 208, 100)` → два квадрати 100×100 з x=0 i x=108). Разом **70/70** у
+  `LayoutProbeTest`, падінь немає.
+- **Візуально**: сім зразків кольору тепер справді сім квадратів на всю ширину (`bg surface
+  surface2 border mutedFg fg acc…`), заголовок хедера з підзаголовком і дзвіночком — на місці.
+- `docs/layout-model.md`: абзац «Cross-axis negotiation» у «Who measures», оновлений рядок
+  `aspectRatio(r)` у таблиці («вага не ігнорується — cross переноситься з частки»), і булет у
+  «Debugging a layout» про те, що `Overlay` не додає розміру.
