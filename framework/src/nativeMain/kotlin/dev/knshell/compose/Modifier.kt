@@ -761,13 +761,19 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
         val resolvedWidth = width?.let { maxWidth?.let { max -> minOf(it, max) } ?: it }
         val resolvedHeight = height?.let { maxHeight?.let { max -> minOf(it, max) } ?: it }
         gtk_widget_set_size_request(widget, resolvedWidth ?: -1, resolvedHeight ?: -1)
+        setFieldWritten(widget, SIZE_KEY, true)
+    } else if (fieldWritten(widget, SIZE_KEY)) {
+        // -1 is GTK's "no request": the widget falls back to its natural size, which for a node
+        // that pins itself is the pin it puts in front of the caller's chain (`Modifier.size`).
+        gtk_widget_set_size_request(widget, -1, -1)
+        setFieldWritten(widget, SIZE_KEY, false)
     }
 
     // A `Modifier` chain is rebuilt from scratch on every recomposition, so a field the chain no
     // longer mentions must go back to its GTK default (plan L9) — without this, `fillWidth()` stuck
-    // to a widget forever. Only fields the chain itself wrote are reset: `Image.pinSize()` and
-    // `GtkOverlayNode.attachChild()` set alignment directly, outside the pipeline, and `applyModifiers`
-    // runs after them.
+    // to a widget forever. Only fields the chain itself wrote are reset: a writer outside the
+    // pipeline (`GtkOverlayNode.attachChild()` centring its children) keeps its value, because
+    // `applyModifiers` runs after it.
     if (hexpand != null) {
         gtk_widget_set_hexpand(widget, if (hexpand == true) 1 else 0)
         setFieldWritten(widget, HEXPAND_KEY, true)
@@ -826,6 +832,7 @@ private const val VEXPAND_KEY = "kn-modifier-vexpand"
 private const val HALIGN_KEY = "kn-modifier-halign"
 private const val VALIGN_KEY = "kn-modifier-valign"
 private const val OPACITY_KEY = "kn-modifier-opacity"
+private const val SIZE_KEY = "kn-modifier-size"
 
 /** Whether a [Modifier] chain has written this layout field on [widget] before. */
 private fun fieldWritten(widget: CPointer<GtkWidget>, key: String): Boolean =

@@ -38,7 +38,6 @@ import kn.gtk.gtk_gl_area_queue_render
 import kn.gtk.gtk_gl_area_set_required_version
 import kn.gtk.gtk_widget_get_height
 import kn.gtk.gtk_widget_get_width
-import kn.gtk.gtk_widget_set_size_request
 
 // GL enums (values are ABI-stable).
 private const val GL_VERTEX_SHADER = 0x8B31u
@@ -141,8 +140,23 @@ class GtkShaderCanvasNode(
     @Suppress("unused")
     private val selfRef = StableRef.create(this)
 
+    /** The caller's chain, kept so a dropped `size()` falls back to the canvas' own size. */
+    private var userModifier: Modifier = Modifier
+
+    private var canvasWidth = width
+    private var canvasHeight = height
+
+    /**
+     * The canvas size is a **modifier** (`Modifier.size`), not a write from [init]: only then
+     * does `applyModifiers` own the field, so a chain that drops its `size()` lands back on the
+     * canvas' own size instead of GTK's `-1`.
+     */
+    override fun applyModifier(modifier: Modifier) {
+        userModifier = modifier
+        super.applyModifier(Modifier.size(canvasWidth, canvasHeight).then(modifier))
+    }
+
     init {
-        gtk_widget_set_size_request(widget, width, height)
         val area = widget.reinterpret<GtkGLArea>()
         gtk_gl_area_set_required_version(area, 3, 3)
 

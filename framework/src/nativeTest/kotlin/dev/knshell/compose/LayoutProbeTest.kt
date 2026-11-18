@@ -55,6 +55,7 @@ import kn.gtk.gtk_widget_get_allocation
 import kn.gtk.gtk_widget_get_first_child
 import kn.gtk.gtk_widget_get_next_sibling
 import kn.gtk.gtk_widget_get_parent
+import kn.gtk.gtk_widget_get_size_request
 import kn.gtk.gtk_widget_get_style_context
 import kn.gtk.gtk_widget_get_valign
 import kn.gtk.gtk_widget_measure
@@ -66,6 +67,7 @@ import kn.gtk.gtk_widget_size_allocate
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.IntVar
+import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.alloc
 import kotlinx.cinterop.allocArray
 import kotlinx.cinterop.get
@@ -74,6 +76,7 @@ import kotlinx.cinterop.memScoped
 import kotlinx.cinterop.ptr
 import kotlinx.cinterop.rawValue
 import kotlinx.cinterop.reinterpret
+import dev.knshell.ui.primitives.GtkPictureNode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -616,6 +619,48 @@ class LayoutProbeTest {
         )
     }
 
+    // ------------------------------------------- 3d. intrinsic pins (plan K10)
+    //
+    // An `Image` and a `ShaderCanvas` have a size of their own. They express it as a modifier in
+    // front of the caller's chain rather than writing `gtk_widget_set_size_request` from `init`,
+    // so the K4 ownership rules apply to them too: a chain that drops an override falls back to
+    // the pin, not to GTK's default.
+
+    @Test
+    fun `a size request does not survive a chain that dropped it`() {
+        val widget = label()
+        applyModifier(widget, Modifier.size(120, 40))
+        assertEquals(120 to 40, sizeRequest(widget), "the request is applied")
+
+        applyModifier(widget, Modifier)
+        assertEquals(-1 to -1, sizeRequest(widget), "a dropped size() goes back to the natural size")
+    }
+
+    @Test
+    fun `an image keeps its pin when a chain drops an override`() {
+        val icon = GtkPictureNode("", 24, 24)
+        icon.applyModifier(Modifier.align(v = Align.Fill))
+        assertEquals(GTK_ALIGN_FILL, gtk_widget_get_valign(icon.widget), "the caller's align wins while it is there")
+
+        icon.applyModifier(Modifier)
+        assertEquals(
+            GTK_ALIGN_START,
+            gtk_widget_get_valign(icon.widget),
+            "a dropped align must land back on the icon pin, not stretch the icon",
+        )
+        assertEquals(24 to 24, sizeRequest(icon.widget), "and the pin keeps its own size")
+    }
+
+    @Test
+    fun `a shader canvas keeps its own size when a chain drops a size`() {
+        val canvas = GtkShaderCanvasNode(120, 40, "")
+        canvas.applyModifier(Modifier.size(300, 300))
+        assertEquals(300 to 300, sizeRequest(canvas.widget), "the caller's size wins while it is there")
+
+        canvas.applyModifier(Modifier)
+        assertEquals(120 to 40, sizeRequest(canvas.widget), "a dropped size() goes back to the canvas size")
+    }
+
     // --------------------------------------------------------- 2. DSL contract
 
     @Test
@@ -664,11 +709,12 @@ class LayoutProbeTest {
 
     @Test
     fun `the reset never touches a field the modifier chain never wrote`() {
-        // K4 protection: `Image.pinSize()` (ui/primitives/Image.kt) pins a picture with
-        // `GTK_ALIGN_START`, and `GtkOverlayNode.attachChild()` (compose/Widgets.kt) centres its
-        // children — both by writing GTK properties directly, outside the modifier pipeline, and
-        // both before `applyModifiers` runs. A reset to the global default would erase that work on
-        // every widget whose chain only talks about padding, so ownership is what guards it.
+        // K4 protection: a widget can be aligned outside the modifier pipeline — `Image` used to
+        // pin a picture with `GTK_ALIGN_START` straight on the widget (now it pins through the
+        // pipeline, see the `3d. intrinsic pins` group), and `GtkOverlayNode.attachChild()`
+        // (compose/Widgets.kt) still centres its children that way, before `applyModifiers` runs.
+        // A reset to the global default would erase that work on every widget whose chain only
+        // talks about padding, so ownership is what guards it.
         val icon = label("icon")
         gtk_widget_set_size_request(icon, 28, 28)
         gtk_widget_set_halign(icon, GTK_ALIGN_START)
@@ -1294,6 +1340,14 @@ private fun weight(container: CPointer<GtkWidget>, child: CPointer<GtkWidget>, v
 }
 
 private fun label(text: String = "label"): CPointer<GtkWidget> = gtk_label_new(text)!!
+
+/** `gtk_widget_get_size_request` as a pair; `-1` means "no request", i.e. natural size. */
+private fun sizeRequest(widget: CPointer<GtkWidget>): Pair<Int, Int> = memScoped {
+    val width = alloc<IntVar>()
+    val height = alloc<IntVar>()
+    gtk_widget_get_size_request(widget, width.ptr, height.ptr)
+    width.ptr[0] to height.ptr[0]
+}
 
 private fun wrappingLabel(text: String): CPointer<GtkWidget> =
     label(text).also { gtk_label_set_wrap(it.reinterpret<GtkLabel>(), 1) }

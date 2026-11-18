@@ -6,8 +6,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
 import dev.knshell.compose.GtkApplier
 import dev.knshell.compose.GtkNode
+import dev.knshell.compose.Align
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.align
 import dev.knshell.compose.plain
+import dev.knshell.compose.size
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.reinterpret
@@ -22,10 +25,6 @@ import kn.gtk.gtk_picture_new
 import kn.gtk.gtk_picture_set_can_shrink
 import kn.gtk.gtk_picture_set_content_fit
 import kn.gtk.gtk_picture_set_paintable
-import kn.gtk.gtk_widget_set_halign
-import kn.gtk.gtk_widget_set_size_request
-import kn.gtk.gtk_widget_set_valign
-import kn.gtk.GTK_ALIGN_START
 
 /**
  * Image from a file path, scaled to [width]×[height] pixels at load time
@@ -69,30 +68,36 @@ internal class GtkPictureNode(path: String, width: Int, height: Int) :
     private var requestedWidth = width
     private var requestedHeight = height
 
+    /** The caller's chain, kept so [resize] can re-apply the pin around it. */
+    private var userModifier: Modifier = Modifier
+
     init {
         val picture = widget.reinterpret<GtkPicture>()
         gtk_picture_set_content_fit(picture, GtkContentFit.GTK_CONTENT_FIT_CONTAIN)
         gtk_picture_set_can_shrink(picture, 1)
-        pinSize()
         load(path, width, height)
     }
 
     /**
-     * A widget's size request is only a minimum, and `GtkPicture` fills its cross axis by
-     * default, so a 28x28 icon would still be drawn at the row height. START alignment plus
-     * the request makes the allocation exactly the requested size.
+     * The pinned size is a **modifier**, not a write from [init]: a size request is only a
+     * minimum and `GtkPicture` fills its cross axis, so a 28x28 icon needs both the request and
+     * `START` alignment to be allocated exactly 28x28. Expressed as modifiers they go through
+     * `applyModifiers`, which owns every layout field it writes — a recomposition that drops a
+     * caller's `align`/`size` therefore falls back to the pin instead of to `FILL` forever.
      */
-    private fun pinSize() {
-        gtk_widget_set_size_request(widget, requestedWidth, requestedHeight)
-        gtk_widget_set_halign(widget, GTK_ALIGN_START)
-        gtk_widget_set_valign(widget, GTK_ALIGN_START)
+    override fun applyModifier(modifier: Modifier) {
+        userModifier = modifier
+        super.applyModifier(pinned().then(modifier))
     }
+
+    private fun pinned(): Modifier =
+        Modifier.size(requestedWidth, requestedHeight).align(h = Align.Start, v = Align.Start)
 
     fun resize(width: Int, height: Int) {
         if (width == requestedWidth && height == requestedHeight) return
         requestedWidth = width
         requestedHeight = height
-        pinSize()
+        applyModifier(userModifier)
         load(path = lastPath, width = width, height = height)
     }
 
