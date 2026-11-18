@@ -1,0 +1,25 @@
+/*
+ * C interop for librsvg 2.x — the SVG renderer behind :icons:core.
+ *
+ * Include paths are injected by build.gradle.kts from `pkg-config --cflags
+ * librsvg-2.0` (same pattern as the framework's gtk4.def). Only the gobject
+ * runtime libs are declared as linker opts here; libcairo and the GLib stack
+ * already arrive through the framework's kn.gtk klib, so repeating them would
+ * only grow the link line of every consumer.
+ *
+ * gtk/gtk.h is part of the header list on purpose: the widget→surface bridge
+ * used for HiDPI scaling (gtk_widget_get_surface / gdk_surface_get_scale_factor)
+ * is exposed only there. The duplicate declarations against kn.gtk are
+ * harmless — both packages reference the same C symbols and cinterop metadata
+ * is per-klib (the same layout the framework's own gtk4+gl pair uses).
+ *
+ * string.h joins the list for plain memcpy — Kotlin/Native 2.4 dropped the
+ * CArrayPointer set operators, so byte-array → native-buffer copies go through C.
+ *
+ * API surface used by the renderer: rsvg_handle_new_from_data,
+ * rsvg_handle_render_document (rsvg-cairo.h, included by rsvg.h), and the
+ * cairo_t/RsvgRectangle types.
+ */
+package = kn.rsvg
+headers = librsvg/rsvg.h gtk/gtk.h string.h
+linkerOpts = -L/usr/lib -lrsvg-2 -lgtk-4 -lgobject-2.0 -lglib-2.0

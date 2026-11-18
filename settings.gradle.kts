@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("icons-plugin")
     repositories {
         gradlePluginPortal()
         mavenCentral()
@@ -19,4 +20,6 @@ rootProject.name = "kn-shell"
 include(":rust-core")
 include(":palette-core")
 include(":framework")
+include(":icons:core")
+include(":icons-packs:lucide")
 include(":shell-app")

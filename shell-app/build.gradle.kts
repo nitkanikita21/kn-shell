@@ -1,7 +1,7 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // Gobley writes palette-core's static archive into the crate's own `target/` (same
@@ -41,21 +41,20 @@ kotlin {
     }
 
     sourceSets {
-        nativeMain.dependencies {
-            implementation(project(":framework"))
-            implementation(project(":rust-core"))
-            implementation(libs.kotlinx.datetime)
-            // Inara (Kodein's compile-time DI): `inara-runtime` is the generated-module
-            // runtime; `inara-processor` (via KSP) generates module implementations for
-            // @DIModule interfaces. Inara 0.2.0 requires Kotlin 2.4.x.
-            implementation(libs.inara.runtime)
+        nativeMain {
+            dependencies {
+                implementation(project(":framework"))
+                implementation(project(":icons-packs:lucide"))
+                implementation(project(":rust-core"))
+                implementation(libs.kotlinx.datetime)
+                implementation(libs.kache)
+                implementation(libs.kotlinx.serialization.json)
+                implementation(libs.kotlinx.serialization.core)
+                implementation(libs.kotlinx.coroutines.core)
+                implementation(libs.koin.core)
+            }
         }
     }
-}
-
-// KSP processor that generates Inara @DIModule implementations (linuxX64 only).
-dependencies {
-    add("kspLinuxX64", libs.inara.processor)
 }
 
 // `./gradlew run` — the single entry point promised by the specification:

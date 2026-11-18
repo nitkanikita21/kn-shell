@@ -2,23 +2,28 @@
 kotlin = "2.4.20"
 gobley = "0.3.7"
 composeRuntime = "1.8.1"
-kotlinxCoroutines = "1.9.0"
+kotlinxCoroutines = "1.10.2"
 kotlinxDatetime = "0.6.2"
 # KSP has no 2.4.x line yet (latest stable 2.3.14, 2026-11-13). 2.3.14 works with Kotlin 2.4.20.
 ksp = "2.3.14"
-inara = "0.2.0"
+koin = "4.0.4"
+# Upstream SVG asset set consumed by :icons-packs:lucide (npm tarball, pinned).
+lucideStatic = "1.74.0"
 
 [libraries]
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeRuntime" }
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinxCoroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
-inara-runtime = { module = "org.kodein.di.inara:inara-runtime", version.ref = "inara" }
-inara-processor = { module = "org.kodein.di.inara:inara-processor", version.ref = "inara" }
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version = "1.8.1" }
+kotlinx-serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-core", version = "1.8.1" }
+kache = { module = "com.mayakapps.kache:kache", version = "2.1.1" }
+koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 
 [plugins]
 kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-atomicfu = { id = "org.jetbrains.kotlin.plugin.atomicfu", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 gobley-cargo = { id = "dev.gobley.cargo", version.ref = "gobley" }
 gobley-rust = { id = "dev.gobley.rust", version.ref = "gobley" }
 gobley-uniffi = { id = "dev.gobley.uniffi", version.ref = "gobley" }

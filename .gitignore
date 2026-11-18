@@ -34,3 +34,6 @@ Cargo.lock.bak
 # Local sandbox caches
 .rustup/
 .scratch/
+
+# Icon pipeline cache (lucide-static tarball unpacked by the generator plugin).
+.cache/
