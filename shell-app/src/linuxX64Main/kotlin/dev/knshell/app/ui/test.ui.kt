@@ -5,6 +5,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import dev.knshell.app.theme.ThemeTokens
 import dev.knshell.app.ui.helpers.collectTheme
 import dev.knshell.compose.Align
 import dev.knshell.compose.Box
@@ -15,112 +16,70 @@ import dev.knshell.compose.Label
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.Overlay
 import dev.knshell.compose.Row
+import dev.knshell.compose.Slider
 import dev.knshell.compose.Stack
 import dev.knshell.compose.align
+import dev.knshell.compose.aspectRatio
 import dev.knshell.compose.background
 import dev.knshell.compose.bold
-import dev.knshell.compose.centerBoth
-import dev.knshell.compose.fillWidth
-import dev.knshell.compose.onHover
+import dev.knshell.compose.clipOverflow
 import dev.knshell.compose.fillAll
+import dev.knshell.compose.fillHeight
+import dev.knshell.compose.fillWidth
 import dev.knshell.compose.fontFamily
+import dev.knshell.compose.height
+import dev.knshell.compose.hoverBackground
+import dev.knshell.compose.medium
+import dev.knshell.compose.onClick
+import dev.knshell.compose.onHover
 import dev.knshell.compose.padding
+import dev.knshell.compose.pointerCursor
 import dev.knshell.compose.radius
-import dev.knshell.compose.aspectRatio
-import dev.knshell.compose.size
+import dev.knshell.compose.requiredSize
 import dev.knshell.compose.textColor
+import dev.knshell.compose.weight
+import dev.knshell.compose.width
 import dev.knshell.icons.lucide.Lucide
 import dev.knshell.ui.primitives.Text
 
 /**
- * A single, flat demo surface that exercises every [DesignTokens] entry against a
- * real wallpaper-derived theme. No sub-components — one big composable so the
- * token-to-widget mapping is easy to eyeball while the palette reloads.
+ * A single, flat demo surface that exercises the toolkit against a real wallpaper-derived
+ * theme: a header, a tab bar that switches the whole body, a list with hover rows, settings
+ * rows with a hand-rolled switch, sliders, buttons and the token swatches.
+ *
+ * Deliberately one file with a handful of small private composables — it is a *specimen* for
+ * humans to eyeball while the palette reloads, not an app architecture. Nothing here is
+ * reused from the real shell: every line is the demo for one modifier or token.
  */
 @Composable
 fun TestUi() {
     val theme by collectTheme()
     val c = theme.colors
+    var tab by remember { mutableStateOf(0) }
+    val tabs = listOf("Overview" to Lucide.LayoutGrid, "List" to Lucide.List, "Settings" to Lucide.SlidersHorizontal)
 
     Column(
         spacing = 16,
-        modifier = Modifier
-            .fillWidth()
-            .background(c.bg)
-            .padding(24)
+        modifier = Modifier.width(440).background(c.bg).padding(20),
     ) {
-        // Header/
-        Row(spacing = 12, modifier = Modifier.fillWidth()) {
-            // `Stack`, not `Box`: a block-flow `Box` packs its children along the main
-            // axis, so `align(v = Center)` has no claimed cell to centre into — the icon
-            // would sit at the top edge. `Stack` hands every child the whole 44x44 cell.
-            // `requiredSize`, not `size`: a `size()` request is only a GTK floor, so this
-            // row would stretch the chip to its own height and it would stop being 1:1.
-            Stack(
-                Modifier
-                    .aspectRatio(1f)
-                    .radius(12)
-                    .background(c.accent),
-            ) { Icon(Lucide.Home, size = 22, color = c.bg, modifier = Modifier.align(v = Align.Center, h = Align.Center)) }
+        Header(c)
 
-            Column(spacing = 4) {
-                Text("KN Shell", size = 22, color = c.fg, modifier = Modifier.bold())
-                Text("theme demo · ${if (c.isDark) "dark" else "light"}", size = 13, color = c.mutedFg)
+        // Tab bar. `onClick` is a gesture on the plain Box, so the tab is not a GTK Button and
+        // keeps the exact pill shape: no button chrome to fight with `kn-plain`.
+        Row(spacing = 6, modifier = Modifier.fillWidth()) {
+            for ((index, entry) in tabs.withIndex()) {
+                val (name, icon) = entry
+                TabPill(c, name, icon, active = tab == index) { tab = index }
             }
         }
 
-        // Accent button + pill
-        Row(spacing = 12) {
-            Box(
-                Modifier
-                    .padding(horizontal = 16, vertical = 10)
-                    .radius(999, 999)
-                    .background(c.accent),
-            ) { Text("Accent", size = 14, color = c.bg, modifier = Modifier.bold()) }
-
-            Box(
-                Modifier
-                    .padding(horizontal = 16, vertical = 10)
-                    .radius(999, 999)
-                    .background(c.surface2)
-                    .textColor(c.fg),
-            ) { Text("Surface", size = 14) }
+        when (tab) {
+            0 -> OverviewTab(c)
+            1 -> ListTab(c)
+            else -> SettingsTab(c)
         }
 
-        // Card with surface
-        Box(
-            Modifier
-                .fillWidth()
-                .padding(16)
-                .radius(12)
-                .background(c.surface)
-                .padding(16),
-        ) {
-            Column(spacing = 8) {
-                Text("Card title", size = 16, color = c.fg, modifier = Modifier.bold())
-                Text(
-                    "Muted helper text that sits on the surface token to check " +
-                        "foreground legibility against the derived palette.",
-                    size = 13,
-                    color = c.mutedFg,
-                )
-                var powerHover by remember { mutableStateOf(false) }
-                Row(
-                    spacing = 8,
-                    modifier = Modifier.onHover(
-                        onEnter = { powerHover = true },
-                        onExit = { powerHover = false },
-                    ),
-                ) {
-                    // Vector icon with an animated tint: the tween runs on the frame
-                    // clock, so hovering does not recompose this subtree per frame.
-                    Icon(Lucide.Power, size = 16, color = if (powerHover) c.fg else c.accent, transitionMs = 180)
-                    Text("Icon in accent", size = 13, color = c.fg)
-                }
-            }
-        }
-
-        // Token swatches — every entry in ThemeTokens
+        // Every entry in ThemeTokens, so a bad palette is visible at a glance.
         val swatches = listOf(
             "bg" to c.bg,
             "surface" to c.surface,
@@ -130,18 +89,17 @@ fun TestUi() {
             "fg" to c.fg,
             "accent" to c.accent,
         )
-        Row(spacing = 10, modifier = Modifier.fillWidth()) {
+        Row(spacing = 8, modifier = Modifier.fillWidth()) {
             for ((name, color) in swatches) {
+                // `weight`, not a fixed width: the seven swatches share the column evenly.
                 Box(
-                    Modifier
-                        .size(64)
-                        .radius(10)
-                        .background(color, borderWidth = if (color == c.border) 0 else 1, borderColor = c.border),
+                    Modifier.weight(1.0).aspectRatio(1f).radius(8)
+                        .background(color, borderWidth = 1, borderColor = c.border),
                 ) {
                     Overlay(Modifier.fillAll()) {
                         Label(
                             name,
-                            modifier = Modifier
+                            modifier = Modifier.padding(5)
                                 .fontFamily("JetBrainsMono Nerd Font")
                                 .textColor(textOn(color, c)),
                         )
@@ -149,19 +107,260 @@ fun TestUi() {
                 }
             }
         }
-
-        // Border line demo
-        Box(
-            Modifier
-                .fillWidth()
-                .size(0, 2)
-                .background(c.border),
-        )
     }
 }
 
+// ------------------------------------------------------------------ header
+
+@Composable
+private fun Header(c: ThemeTokens) {
+    Row(spacing = 12, modifier = Modifier.fillWidth()) {
+        // `Stack`, not `Box`: a block-flow `Box` packs its children along the main axis, so
+        // `align(v = Center)` would have no claimed cell to centre into.
+        // `aspectRatio(1f)`, not `size(44)`: a size *request* is only a GTK floor, so the row
+        // would stretch the chip to its own height and it would stop being 1:1.
+        Stack(
+            Modifier.aspectRatio(1f).radius(12).background(c.accent),
+        ) {
+            Icon(
+                Lucide.Home,
+                size = 22,
+                color = c.bg,
+                modifier = Modifier.align(v = Align.Center, h = Align.Center),
+            )
+        }
+        Column(spacing = 4, modifier = Modifier.weight(1.0).align(v = Align.Center)) {
+            Text("KN Shell", size = 22, color = c.fg, modifier = Modifier.bold())
+            Text(
+                "theme demo · ${if (c.isDark) "dark" else "light"} · ${c.accent.hex()}",
+                size = 12,
+                color = c.mutedFg,
+            )
+        }
+        Icon(Lucide.Bell, size = 18, color = c.mutedFg, modifier = Modifier.align(v = Align.Center))
+    }
+}
+
+// ------------------------------------------------------------------ tabs
+
+@Composable
+private fun TabPill(c: ThemeTokens, name: String, icon: dev.knshell.icons.IconRef, active: Boolean, onClick: () -> Unit) {
+    Row(
+        spacing = 6,
+        modifier = Modifier
+            .onClick(onClick)
+            .pointerCursor()
+            .padding(horizontal = 12, vertical = 8)
+            .radius(999, 999)
+            .background(if (active) c.accent else c.surface2),
+    ) {
+        Icon(icon, size = 14, color = if (active) c.bg else c.mutedFg)
+        Text(name, size = 13, color = if (active) c.bg else c.fg, modifier = Modifier.medium())
+    }
+}
+
+// ------------------------------------------------------------------ tab 0: overview
+
+@Composable
+private fun OverviewTab(c: ThemeTokens) {
+    Column(spacing = 16, modifier = Modifier.fillWidth()) {
+        Card(c, "Card title", "Muted helper text that sits on the surface token to check foreground legibility against the derived palette.") {
+            var powerHover by remember { mutableStateOf(false) }
+            Row(
+                spacing = 8,
+                modifier = Modifier.onHover(
+                    onEnter = { powerHover = true },
+                    onExit = { powerHover = false },
+                ),
+            ) {
+                // Vector icon with an animated tint: the tween runs on the frame clock, so
+                // hovering does not recompose this subtree per frame.
+                Icon(Lucide.Power, size = 16, color = if (powerHover) c.fg else c.accent, transitionMs = 180)
+                Text("Hover the icon — the tint animates", size = 13, color = c.fg)
+            }
+        }
+
+        Row(spacing = 10, modifier = Modifier.fillWidth()) {
+            Pill(c, "Accent", filled = true)
+            Pill(c, "Surface", filled = false)
+        }
+
+        Column(spacing = 8, modifier = Modifier.fillWidth()) {
+            Row(spacing = 8, modifier = Modifier.fillWidth()) {
+                Text("Session progress", size = 13, color = c.fg, modifier = Modifier.weight(1.0))
+                Text("68%", size = 13, color = c.mutedFg)
+            }
+            // Two boxes in a Row instead of a Stack: the fill is a share of the width, which is
+            // exactly what `weight` means here.
+            Row(spacing = 0, modifier = Modifier.fillWidth().height(6).radius(999, 999).clipOverflow()) {
+                Box(Modifier.width(190).fillHeight().background(c.accent))
+                Box(Modifier.weight(1.0).fillHeight().background(c.surface2))
+            }
+        }
+
+        var volume by remember { mutableStateOf(62f) }
+        Column(spacing = 6, modifier = Modifier.fillWidth()) {
+            Row(spacing = 8, modifier = Modifier.fillWidth()) {
+                Icon(Lucide.Volume2, size = 16, color = c.mutedFg)
+                Text("Volume", size = 13, color = c.fg, modifier = Modifier.weight(1.0))
+                Text("${volume.toInt()}%", size = 13, color = c.mutedFg)
+            }
+            Slider(value = volume, min = 0f, max = 100f, onValueChange = { volume = it })
+        }
+    }
+}
+
+// ------------------------------------------------------------------ tab 1: list
+
+private data class ListEntry(val icon: dev.knshell.icons.IconRef, val title: String, val subtitle: String, val value: String)
+
+@Composable
+private fun ListTab(c: ThemeTokens) {
+    val entries = listOf(
+        ListEntry(Lucide.Wifi, "Wi-Fi", "kn-shell-5G", "Connected"),
+        ListEntry(Lucide.Bluetooth, "Bluetooth", "No devices paired", "Off"),
+        ListEntry(Lucide.Volume2, "Output", "PipeWire · built-in speakers", "62%"),
+        ListEntry(Lucide.Battery, "Battery", "Charging over USB-C", "87%"),
+        ListEntry(Lucide.Sun, "Brightness", "eDP-1 adaptive", "Auto"),
+        ListEntry(Lucide.Monitor, "Display", "1920×1080 @ 1.25", "120 Hz"),
+    )
+    Column(spacing = 2, modifier = Modifier.fillWidth()) {
+        for (entry in entries) ListRow(c, entry)
+    }
+}
+
+@Composable
+private fun ListRow(c: ThemeTokens, entry: ListEntry) {
+    var hover by remember { mutableStateOf(false) }
+    Row(
+        spacing = 12,
+        modifier = Modifier.fillWidth()
+            .onHover(onEnter = { hover = true }, onExit = { hover = false })
+            .padding(horizontal = 10, vertical = 9)
+            .radius(9)
+            .hoverBackground(c.surface),
+    ) {
+        // A tinted tile keeps the rows aligned even though the icons have different aspect.
+        Stack(
+            Modifier.requiredTile().radius(8).background(if (hover) c.accent else c.surface2),
+        ) {
+            Icon(
+                entry.icon,
+                size = 16,
+                color = if (hover) c.bg else c.fg,
+                modifier = Modifier.align(v = Align.Center, h = Align.Center),
+            )
+        }
+        Column(spacing = 2, modifier = Modifier.weight(1.0)) {
+            Text(entry.title, size = 14, color = c.fg, modifier = Modifier.medium())
+            Text(entry.subtitle, size = 12, color = c.mutedFg, ellipsize = true)
+        }
+        Text(entry.value, size = 13, color = c.mutedFg, modifier = Modifier.align(v = Align.Center))
+        Icon(Lucide.ChevronRight, size = 16, color = if (hover) c.fg else c.mutedFg, modifier = Modifier.align(v = Align.Center))
+    }
+}
+
+// ------------------------------------------------------------------ tab 2: settings
+
+@Composable
+private fun SettingsTab(c: ThemeTokens) {
+    var wifi by remember { mutableStateOf(true) }
+    var bluetooth by remember { mutableStateOf(false) }
+    var focus by remember { mutableStateOf(true) }
+    var scale by remember { mutableStateOf(1.25f) }
+
+    Column(spacing = 14, modifier = Modifier.fillWidth()) {
+        SwitchRow(c, "Wi-Fi", "Join kn-shell-5G automatically", wifi) { wifi = it }
+        SwitchRow(c, "Bluetooth", "Discoverable for 2 minutes", bluetooth) { bluetooth = it }
+        SwitchRow(c, "Do not disturb", "Silence notifications for 1 hour", focus) { focus = it }
+
+        Box(Modifier.fillWidth().height(1).background(c.border))
+
+        Column(spacing = 6, modifier = Modifier.fillWidth()) {
+            Row(spacing = 8, modifier = Modifier.fillWidth()) {
+                Icon(Lucide.SlidersHorizontal, size = 16, color = c.mutedFg)
+                Text("Interface scale", size = 13, color = c.fg, modifier = Modifier.weight(1.0))
+                Text(twoDecimals(scale ?: 1.0f) + "×", size = 13, color = c.mutedFg)
+            }
+            Slider(value = scale ?: 1.0f, min = 0.75f, max = 2f, step = 0.05f, onValueChange = { scale = it })
+        }
+
+        Row(spacing = 10, modifier = Modifier.fillWidth()) {
+            Pill(c, "Apply", filled = true)
+            Pill(c, "Reset", filled = false)
+        }
+    }
+}
+
+@Composable
+private fun SwitchRow(c: ThemeTokens, title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        spacing = 12,
+        modifier = Modifier.fillWidth()
+            .onClick { onChange(!checked) }
+            .pointerCursor()
+            .padding(vertical = 2),
+    ) {
+        Column(spacing = 2, modifier = Modifier.weight(1.0)) {
+            Text(title, size = 14, color = c.fg, modifier = Modifier.medium())
+            Text(subtitle, size = 12, color = c.mutedFg, ellipsize = true)
+        }
+        // Hand-rolled switch: a rounded track with a knob on the left or the right. `Stack`
+        // gives the knob the whole cell, `align` puts it at one end of it.
+        Stack(
+            Modifier.width(44).height(24).radius(999, 999)
+                .background(if (checked) c.accent else c.surface2)
+                .padding(3),
+        ) {
+            Box(
+                Modifier.width(18).height(18).radius(999, 999).background(c.bg)
+                    .align(h = if (checked) Align.End else Align.Start, v = Align.Center),
+            )
+        }
+    }
+}
+
+// ------------------------------------------------------------------ shared bits
+
+@Composable
+private fun Card(c: ThemeTokens, title: String, body: String, content: @Composable () -> Unit) {
+    Box(Modifier.fillWidth().radius(12).background(c.surface).padding(16)) {
+        Column(spacing = 8) {
+            Text(title, size = 16, color = c.fg, modifier = Modifier.bold())
+            Text(body, size = 13, color = c.mutedFg)
+            content()
+        }
+    }
+}
+
+@Composable
+private fun Pill(c: ThemeTokens, text: String, filled: Boolean) {
+    Row(
+        spacing = 6,
+        modifier = Modifier.padding(horizontal = 16, vertical = 10).radius(999, 999)
+            .background(if (filled) c.accent else c.surface2),
+    ) {
+        Text(text, size = 14, color = if (filled) c.bg else c.fg, modifier = if (filled) Modifier.bold() else Modifier.medium())
+    }
+}
+
+/** A 30×30 tile: `requiredSize` because a `Row` would otherwise stretch it to the row height. */
+private fun Modifier.requiredTile(): Modifier = requiredSize(30)
+
 /** Pick a readable label color: light text on dark swatches, dark on light. */
-private fun textOn(swatch: Color, theme: dev.knshell.app.theme.ThemeTokens): Color {
+private fun textOn(swatch: Color, theme: ThemeTokens): Color {
     // Luminance-ish heuristic using the green channel as proxy.
     return if (swatch.g + swatch.r + swatch.b > 384) theme.bg else theme.fg
+}
+
+/** Kotlin/Native has no `String.format`, and a slider would otherwise print 1.2500001. */
+private fun twoDecimals(value: Float): String {
+    val hundredths = (value * 100f).toInt()
+    return "${hundredths / 100}.${(hundredths % 100).toString().padStart(2, '0')}"
+}
+
+/** `#rrggbb` for the "theme demo · dark · #8ab4f8" line — no dependency on a colour library. */
+private fun Color.hex(): String {
+    fun part(value: Int): String = value.toString(16).padStart(2, '0')
+    return "#${part(r)}${part(g)}${part(b)}"
 }

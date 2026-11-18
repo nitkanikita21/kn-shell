@@ -26,8 +26,11 @@ fun main() {
 
     runComposeWindow(
         title = "KN Shell",
-        width = 640,
-        height = 120,
+        // 0 = let GTK size the window to its content (natural size). Anything > 0 becomes
+        // `gtk_window_set_default_size`, which is only a floor — the demo asks for the smallest
+        // window that fits, so a floating compositor window is exactly the UI's own size.
+        width = 0,
+        height = 0,
     ) {
         ProvideKoin {
             AppRoot()
