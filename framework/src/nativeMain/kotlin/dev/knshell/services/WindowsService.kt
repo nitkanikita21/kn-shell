@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Toplevel windows reported by the compositor (`ext-foreign-toplevel-list-v1`). */
-class WindowsService internal constructor() : ShellService {
+class WindowsService() : ShellService {
 
     private val mutable = MutableStateFlow<List<WindowInfo>>(emptyList())
 

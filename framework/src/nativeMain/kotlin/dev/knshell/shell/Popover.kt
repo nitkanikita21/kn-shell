@@ -128,7 +128,7 @@ class PopoverController {
  * so the content root owns background/padding/radius.
  *
  * ```kotlin
- * Popover(openOnClick = true, content = { NotificationList() }) { BellIcon() }
+ * Popover(openOnClick = true, content = { NotificationList() }) { Icon(Lucide.Bell) }
  * ```
  */
 @Composable

@@ -17,7 +17,10 @@ import kotlinx.cinterop.ExperimentalForeignApi
  * opinions — only the minimum needed to write UI without repeating boilerplate.
  *
  *  - spacing: [Space], [HSpace], [VSpace], [Spacer]
- *  - text:    [Icon], [Text]
+ *  - text:    [Text]
+ *
+ * Icons are not here: vector icons live in `:icons:core`
+ * (`dev.knshell.compose.Icon` taking an `IconRef` such as `Lucide.Home`).
  *
  * Layout comes from `dev.knshell.compose` (`Row`, `Column`, `Box`, `CenterBox`), styling
  * from the Modifier DSL, and data from `Shell.services` (see docs/shell-api.md).
@@ -42,20 +45,6 @@ fun HSpace(width: Int) = Space(width = width, height = 0)
 /** Vertical space: `VSpace(6)`. */
 @Composable
 fun VSpace(height: Int) = Space(width = 0, height = height)
-
-/** A Nerd Font glyph at [size] pixels; optionally coloured and colour-animated. */
-@Composable
-fun Icon(
-    glyph: String,
-    modifier: Modifier = Modifier,
-    size: Int = 13,
-    color: Color? = null,
-    transitionMs: Int = 0,
-) {
-    var modifier = modifier.fontSize(size)
-    if (color != null) modifier = modifier.textColor(color, transitionMs)
-    Label(glyph, modifier)
-}
 
 /** A label at [size] pixels; optionally coloured and colour-animated. */
 @Composable

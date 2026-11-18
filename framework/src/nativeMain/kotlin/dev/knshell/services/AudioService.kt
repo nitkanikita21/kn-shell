@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Default sink volume in percent (0-150). */
-class AudioService internal constructor() : ShellService {
+class AudioService() : ShellService {
 
     private val mutable = MutableStateFlow(0)
 

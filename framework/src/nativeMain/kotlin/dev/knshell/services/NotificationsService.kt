@@ -17,7 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * The shell does not replace the user's notification daemon: it only watches `Notify`
  * calls through the Rust service.
  */
-class NotificationsService internal constructor() : ShellService {
+class NotificationsService() : ShellService {
 
     private val mutable = MutableStateFlow<List<NotificationInfo>>(emptyList())
 

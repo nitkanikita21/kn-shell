@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Active MPRIS player state and transport controls. */
-class MediaService internal constructor() : ShellService {
+class MediaService() : ShellService {
 
     private val mutable = MutableStateFlow(MediaState("", "", false, "", false))
 

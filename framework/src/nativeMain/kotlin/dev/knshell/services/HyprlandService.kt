@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Hyprland focus events: active window and current submap. */
-class HyprlandService internal constructor() : ShellService {
+class HyprlandService() : ShellService {
 
     private val window = MutableStateFlow<ActiveWindow?>(null)
     private val submap = MutableStateFlow("")

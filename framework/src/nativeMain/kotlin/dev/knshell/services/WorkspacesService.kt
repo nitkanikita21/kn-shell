@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Hyprland workspaces (event-driven socket, initial refresh on start). */
-class WorkspacesService internal constructor() : ShellService {
+class WorkspacesService() : ShellService {
 
     private val mutable = MutableStateFlow<List<WorkspaceInfo>>(emptyList())
 

@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** CPU / RAM statistics. */
-class SystemService internal constructor() : ShellService {
+class SystemService() : ShellService {
 
     private val mutable = MutableStateFlow(SystemStats(0, 0))
 

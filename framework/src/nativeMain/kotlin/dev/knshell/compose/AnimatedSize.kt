@@ -68,7 +68,7 @@ internal data class AnimatedSizeElement(
  *
  * ```kotlin
  * Row(spacing = 10) {
- *     Icon("\uF43A")
+ *     Icon(Lucide.Clock) // dev.knshell.compose.Icon + an IconRef, see docs/icons.md
  *     Label(now.format(format))
  * }.animatedWidth(spec = Tween(200, Easing.OutCubic))
  * ```

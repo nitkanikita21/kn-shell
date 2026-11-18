@@ -75,7 +75,14 @@ enum class Easing {
     InOutCubic,
 }
 
-internal fun Easing.eased(t: Float): Float = when (this) {
+/**
+ * Eased progress for [t] in 0..1 on this curve.
+ *
+ * Public so satellite widget modules (`:icons:core`'s color tween) can drive
+ * frame loops with the exact same curve as [animateFloatAsState] instead of
+ * re-implementing it.
+ */
+fun Easing.eased(t: Float): Float = when (this) {
     Easing.Linear -> t
     Easing.OutCubic -> {
         val p = 1f - t

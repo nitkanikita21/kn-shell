@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Live network throughput (RX/TX bytes per second, all non-loopback interfaces). */
-class NetworkService internal constructor() : ShellService {
+class NetworkService() : ShellService {
 
     private val mutable = MutableStateFlow(
         NetworkState(

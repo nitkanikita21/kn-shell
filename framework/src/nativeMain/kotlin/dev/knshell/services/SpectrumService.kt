@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** CAVA audio spectrum: 16 bins, each 0..100, updated at ~30 fps. */
-class SpectrumService internal constructor() : ShellService {
+class SpectrumService() : ShellService {
 
     private val mutable = MutableStateFlow(List(16) { 0 })
 

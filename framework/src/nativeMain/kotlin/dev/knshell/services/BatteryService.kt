@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Battery charge/status from `/sys/class/power_supply` (Rust poll, 2 s). */
-class BatteryService internal constructor() : ShellService {
+class BatteryService() : ShellService {
 
     private val mutable = MutableStateFlow(BatteryState(false, 0, false, "Unknown"))
 
