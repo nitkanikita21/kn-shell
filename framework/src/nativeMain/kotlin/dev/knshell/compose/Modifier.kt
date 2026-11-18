@@ -26,6 +26,7 @@ import kn.gtk.gtk_widget_set_vexpand
 import kn.gtk.GObject
 import kn.gtk.GtkOverflow
 import kn.gtk.GTK_ALIGN_FILL
+import kn.gtk.GTK_ALIGN_START
 import kn.gtk.g_object_get_data
 import kn.gtk.g_object_set_data
 import dev.knshell.animation.applyAnimatedSizeModifier
@@ -137,6 +138,19 @@ internal data class FontSizeElement(val px: Int) : ModifierElement
 internal data class FontFamilyElement(val family: String) : ModifierElement
 internal data object BoldElement : ModifierElement
 internal data class SizeElement(val width: Int?, val height: Int?) : ModifierElement
+
+/**
+ * `size()` semantics plus "do not let the parent stretch me": the request is a floor *and* a
+ * ceiling, because the axes it names get a non-`FILL` alignment (plan L13).
+ */
+internal data class RequiredSizeElement(val width: Int?, val height: Int?) : ModifierElement
+
+/**
+ * Keeps a child's shape: its MAIN axis (the one its container packs along) becomes
+ * `cross * ratio` instead of the content's own size, so `aspectRatio(1f)` in a `Row` fills the
+ * row's height and lets the width follow — a chip that is always square.
+ */
+internal data class AspectRatioElement(val ratio: Float) : ModifierElement
 internal data class ExpandElement(val horizontal: Boolean, val vertical: Boolean) : ModifierElement
 internal data class AlignElement(val horizontal: UInt?, val vertical: UInt?) : ModifierElement
 
@@ -206,6 +220,14 @@ internal data class MaxSizeElement(val width: Int?, val height: Int?) : Modifier
  * for an axis it does not cap. A chain is rebuilt from scratch every recomposition, so an absent
  * cap has to be pushed as `-1` — it clears the previous one (L9).
  */
+/**
+ * The `Modifier.aspectRatio()` a chain asks for, `0f` when it asks for none. Like `weight`, a
+ * ratio is a property of the CONTAINER's layout manager (`KnBoxLayout`), not of the widget, so
+ * `GtkApplier` pushes it to the parent and nothing is written here.
+ */
+internal fun Modifier.aspectRatioValue(): Float =
+    elements.filterIsInstance<AspectRatioElement>().lastOrNull()?.ratio ?: 0f
+
 internal fun Modifier.maxSizeCaps(): Pair<Int, Int> {
     var width = -1
     var height = -1
@@ -399,6 +421,38 @@ fun Modifier.width(width: Int): Modifier = with(SizeElement(width, null))
 
 fun Modifier.height(height: Int): Modifier = with(SizeElement(null, height))
 
+/**
+ * An **exact** size: compose's `requiredSize`. `size()` is a GTK size request, which is only a
+ * minimum — a `GtkBox` stretching its children on the cross axis happily gives a `size(44)` chip
+ * 44×80. This pins the axes it names (request + `Align.Start`, so the parent cannot grow it) and
+ * leaves the rest to the chain: a later `align()`/`fillWidth()` still wins.
+ */
+fun Modifier.requiredSize(width: Int? = null, height: Int? = null): Modifier =
+    with(RequiredSizeElement(width, height))
+
+fun Modifier.requiredSize(size: Int? = null): Modifier = with(RequiredSizeElement(size, size))
+
+/**
+ * Locks the child's shape: `ratio` = main / cross, where the main axis is the one the container
+ * lays children out on. In a `Row`, `aspectRatio(1f)` means "as tall as the row, and exactly that
+ * wide" — the mirror image of `requiredSize`, which pins both axes to numbers.
+ *
+ * The cross axis keeps deciding (a `FILL` child takes the container's whole cross size, an
+ * aligned one its own), and the main axis follows from it. A `weight` or `hExpand()` on the same
+ * child is ignored, because both would claim the pixels the ratio already owns.
+ *
+ * Like `weight` it lives in `KnBoxLayout`, so it works inside `Row`/`Column`/`Box`; in a `Stack`,
+ * `Overlay` or `CenterBox` region every child gets the same cell and there is no main axis to
+ * resize along.
+ */
+fun Modifier.aspectRatio(ratio: Float): Modifier = with(AspectRatioElement(ratio))
+
+/** Exact width, height left to the parent (see [requiredSize]). */
+fun Modifier.requiredWidth(width: Int): Modifier = with(RequiredSizeElement(width, null))
+
+/** Exact height, width left to the parent (see [requiredSize]). */
+fun Modifier.requiredHeight(height: Int): Modifier = with(RequiredSizeElement(null, height))
+
 
 
 fun Modifier.opacity(value: Float): Modifier = with(OpacityElement(value))
@@ -565,6 +619,8 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var height: Int? = null
     var maxWidth: Int? = null
     var maxHeight: Int? = null
+    var requiredWidth = false
+    var requiredHeight = false
     var opacity: Float? = null
     var hexpand: Boolean? = null
     var vexpand: Boolean? = null
@@ -624,6 +680,13 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
                 height = element.height
             }
 
+            is RequiredSizeElement -> {
+                width = element.width
+                height = element.height
+                requiredWidth = element.width != null
+                requiredHeight = element.height != null
+            }
+
             is ExpandElement -> {
                 hexpand = element.horizontal
                 vexpand = element.vertical
@@ -637,7 +700,14 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             // Weight is a property of the CONTAINER's layout manager, not of the widget: it is
             // pushed by `GtkBoxNode.pushChildLayout()` when this node is attached or recomposed.
             // Nothing to write here — but reading it from `modifier` is exactly what that does.
+            //
+            // `AspectRatioElement` is the same story: `pushChildLayout()` hands it to the
+            // container's manager, and there is no GTK field to write.
             is WeightElement -> Unit
+
+            // Container-owned like `weight`: `pushChildLayout()` (GtkApplier) sends it to
+            // `KnBoxLayout`, so the widget itself has nothing to write.
+            is AspectRatioElement -> Unit
 
             is OpacityElement -> opacity = element.value
 
@@ -789,6 +859,13 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
         gtk_widget_set_vexpand(widget, 0)
         setFieldWritten(widget, VEXPAND_KEY, false)
     }
+
+    // `requiredSize()` turns its request into a ceiling too: GTK honours a size request only as a
+    // floor, so "exactly this" means "do not let the container's stretch reach me", and a non-FILL
+    // alignment is the only way to say that. A chain that also aligns the axis keeps its own value
+    // (written below), which is what compose does with `requiredSize().align()`.
+    if (requiredWidth && halign == null) halign = GTK_ALIGN_START
+    if (requiredHeight && valign == null) valign = GTK_ALIGN_START
 
     // GTK 4 leaves a fresh widget at GTK_ALIGN_FILL on *both* axes (measured on a bare GtkLabel
     // under gtk 4.24), so that is what a dropped `align()` restores.

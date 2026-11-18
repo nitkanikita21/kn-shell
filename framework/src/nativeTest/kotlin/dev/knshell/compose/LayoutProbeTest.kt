@@ -661,6 +661,120 @@ class LayoutProbeTest {
         assertEquals(120 to 40, sizeRequest(canvas.widget), "a dropped size() goes back to the canvas size")
     }
 
+    // ------------------------------------------- 3f. aspect ratio (plan L14)
+    //
+    // `aspectRatio` is the mirror image of `requiredSize`: instead of pinning both axes to
+    // numbers it lets the CROSS axis decide (a FILL child takes the container's whole cross size,
+    // which is "fill the row's height") and derives the main axis from the ratio.
+
+    @Test
+    fun `an aspect ratio fills the cross axis and derives the main one`() {
+        val chip = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!)
+        val row = managedBox(children = listOf(chip.widget))
+        chip.applyModifier(Modifier.aspectRatio(1f))
+
+        allocate(row, 200, 80)
+
+        assertEquals(Rect(0, 0, 80, 80), allocRect(chip.widget), "aspectRatio(1f) in an 80px row is 80x80")
+    }
+
+    @Test
+    fun `the ratio scales the derived axis`() {
+        val chip = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!)
+        val row = managedBox(children = listOf(chip.widget))
+        chip.applyModifier(Modifier.aspectRatio(2f))
+
+        allocate(row, 400, 60)
+
+        assertEquals(Rect(0, 0, 120, 60), allocRect(chip.widget), "aspectRatio(2f) is twice as wide as tall")
+    }
+
+    @Test
+    fun `an aspect ratio works on a column too where the cross axis is the width`() {
+        val chip = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!)
+        val column = managedBox(vertical = true, children = listOf(chip.widget))
+        chip.applyModifier(Modifier.aspectRatio(1f))
+
+        allocate(column, 100, 400)
+
+        assertEquals(Rect(0, 0, 100, 100), allocRect(chip.widget), "in a 100px column the height follows the width")
+    }
+
+    @Test
+    fun `a ratio child is left out of the weight and surplus passes`() {
+        // The ratio already owns this child's main-axis pixels: a `weight` (or an expanding
+        // sibling's surplus) must not add a second claim on top of it.
+        val chip = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!)
+        val grower = label("grower").also { gtk_widget_set_hexpand(it, 1) }
+        val row = managedBox(children = listOf(chip.widget, grower))
+        chip.applyModifier(Modifier.aspectRatio(1f).weight(1.0))
+
+        allocate(row, 300, 50)
+
+        assertEquals(Rect(0, 0, 50, 50), allocRect(chip.widget), "the weight does not stretch the ratio child")
+        assertEquals(250, allocRect(grower).width, "the expanding sibling takes all of the rest")
+    }
+
+    @Test
+    fun `a chain that drops the ratio goes back to content packing`() {
+        val chip = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!)
+        val row = managedBox(children = listOf(chip.widget))
+
+        chip.applyModifier(Modifier.aspectRatio(1f))
+        allocate(row, 200, 80)
+        assertEquals(Rect(0, 0, 80, 80), allocRect(chip.widget), "the ratio applies while it is there")
+
+        chip.applyModifier(Modifier)
+        allocate(row, 200, 80)
+        assertEquals(0, allocRect(chip.widget).width, "an empty chain clears the record, so the box packs its empty content")
+    }
+
+    // ------------------------------------------- 3e. exact sizes (plan L13)
+    //
+    // `size()` is a GtkRequisition floor: a `GtkBox` that stretches on the cross axis gives a
+    // `size(44)` chip 44x80. `requiredSize()` says "exactly this" by pinning the named axes to a
+    // non-FILL alignment, so the container has nothing left to stretch.
+
+    @Test
+    fun `requiredSize is exact in a row that stretches its children`() {
+        val chip = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!)
+        chip.applyModifier(Modifier.requiredSize(44))
+
+        val tallRow = box(children = listOf(chip.widget), root = false)
+        allocate(tallRow, 200, 80)
+
+        assertEquals(Rect(0, 0, 44, 44), allocRect(chip.widget), "requiredSize(44) stays 44x44 inside an 80px row")
+        assertEquals(GTK_ALIGN_START, gtk_widget_get_valign(chip.widget), "…because the axis is no longer FILL")
+    }
+
+    @Test
+    fun `a plain size still stretches inside a row and that is what requiredSize is for`() {
+        val chip = GtkBoxNode(gtk_box_new(HORIZONTAL, 0)!!)
+        chip.applyModifier(Modifier.size(44))
+
+        val tallRow = box(children = listOf(chip.widget), root = false)
+        allocate(tallRow, 200, 80)
+
+        assertEquals(Rect(0, 0, 44, 80), allocRect(chip.widget), "size() is a floor: the row stretched it to 80")
+    }
+
+    @Test
+    fun `requiredSize leaves the axes it did not name to the parent`() {
+        val widget = label("a")
+        applyModifier(widget, Modifier.requiredHeight(30))
+        assertEquals(GTK_ALIGN_START, gtk_widget_get_valign(widget), "the named axis is pinned")
+        assertEquals(GTK_ALIGN_FILL, gtk_widget_get_halign(widget), "the other axis keeps GTK's default")
+        assertEquals(-1 to 30, sizeRequest(widget))
+    }
+
+    @Test
+    fun `a chain that aligns on top of requiredSize still wins`() {
+        val widget = label("a")
+        applyModifier(widget, Modifier.requiredSize(44).align(v = Align.Center))
+        assertEquals(GTK_ALIGN_CENTER, gtk_widget_get_valign(widget), "the caller's alignment overrides the pin")
+        assertEquals(44 to 44, sizeRequest(widget), "and the size request is still there")
+    }
+
     // --------------------------------------------------------- 2. DSL contract
 
     @Test

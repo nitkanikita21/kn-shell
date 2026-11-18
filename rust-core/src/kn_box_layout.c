@@ -54,6 +54,10 @@
  * (`Modifier.maxWidth(0)`), so "absent" cannot be 0 — same reason `weight` uses `<= 0`. */
 #define KN_NO_MAX (-1)
 
+/* `aspectRatio` value meaning "this child asks for no ratio". Any ratio is > 0, so 0 is the
+ * "absent" value — and, like `weight`, it survives `Modifier` chains being rebuilt (plan L9). */
+#define KN_NO_RATIO 0.0f
+
 typedef struct _KnBoxLayout KnBoxLayout;
 typedef struct _KnBoxLayoutClass KnBoxLayoutClass;
 
@@ -92,6 +96,8 @@ typedef struct {
      * this clamp is the emulation the plan asks for (docs/layout-model.md, plan L6). */
     int max_width;
     int max_height;
+ /* `Modifier.aspectRatio()`: main = cross * ratio, 0 = no ratio (see KN_NO_RATIO). */
+ float ratio;
 } KnChildLayout;
 
 G_DEFINE_TYPE(KnBoxLayout, kn_box_layout, GTK_TYPE_LAYOUT_MANAGER)
@@ -114,6 +120,7 @@ static KnChildLayout *kn_child_layout_get(KnBoxLayout *self, GtkWidget *child) {
         data->weight = KN_NO_WEIGHT;
         data->max_width = KN_NO_MAX;
         data->max_height = KN_NO_MAX;
+ data->ratio = KN_NO_RATIO;
         g_hash_table_insert(self->child_layouts, child, data);
     }
     return data;
@@ -121,6 +128,12 @@ static KnChildLayout *kn_child_layout_get(KnBoxLayout *self, GtkWidget *child) {
 
 static void kn_forget_child(KnBoxLayout *self, GtkWidget *child) {
     if (self->child_layouts != NULL) g_hash_table_remove(self->child_layouts, child);
+}
+
+/* The `Modifier.aspectRatio()` of one child, KN_NO_RATIO when it asks for none. */
+static float kn_child_ratio(KnBoxLayout *self, GtkWidget *child) {
+ KnChildLayout *data = kn_child_layout_peek(self, child);
+ return data == NULL ? KN_NO_RATIO : data->ratio;
 }
 
 static float kn_child_weight(KnBoxLayout *self, GtkWidget *child) {
@@ -202,6 +215,16 @@ static void kn_content_main_size(KnBoxLayout *self, GtkWidget *widget, int for_s
          child = gtk_widget_get_next_sibling(child)) {
         int mn = 0, nat = 0;
         kn_measure_child(self, child, main, for_size, &mn, &nat);
+ /* `Modifier.aspectRatio()`: once the caller tells us the cross size, that child's main
+  * size is not its own content any more — it is `cross * ratio`. Below the cross size is
+  * still unknown (`for_size < 0`), so the child's natural size is the best answer. */
+ float ratio = kn_child_ratio(self, child);
+ if (ratio > KN_NO_RATIO && for_size >= 0) {
+  int wanted = (int) lround((double) for_size * (double) ratio);
+  if (wanted < 0) wanted = 0;
+  mn = wanted;
+  nat = wanted;
+ }
         if (mn > max_min) max_min = mn;
         if (nat > max_nat) max_nat = nat;
         total_min += mn;
@@ -370,13 +393,40 @@ static void kn_box_layout_allocate(GtkLayoutManager *manager,
         child_cross_cap[i] = kn_child_max(self, c, vertical ? GTK_ORIENTATION_HORIZONTAL
                                                             : GTK_ORIENTATION_VERTICAL);
         child_weight[i] = kn_child_weight(self, c);
+ /* `Modifier.aspectRatio()` owns this child's main axis: the cross size it is about to be given
+  * decides the main size (`cross * ratio`) and the content's own natural size is beside the
+  * point — a 22px icon must still be 80px wide in an 80px row. A `weight` on the same child
+  * claims the same pixels twice, so the ratio wins and the weight is dropped (the way Android's
+  * `aspectRatio` beats a `weight`). */
+ float ratio = kn_child_ratio(self, c);
+ if (ratio > KN_NO_RATIO) {
+  GtkAlign cross_align = vertical ? gtk_widget_get_halign(c) : gtk_widget_get_valign(c);
+  int cross_own = cross_size;
+  if (cross_align != GTK_ALIGN_FILL) {
+   /* Not filling the cross axis: the child keeps its own cross size and the ratio follows it. */
+   int own_min = 0, own_nat = 0;
+   kn_measure_child(self, c, vertical ? GTK_ORIENTATION_HORIZONTAL : GTK_ORIENTATION_VERTICAL,
+                    -1, &own_min, &own_nat);
+   cross_own = own_nat > cross_size ? cross_size : own_nat;
+  }
+  int wanted = (int) lround((double) cross_own * (double) ratio);
+  if (wanted < 0) wanted = 0;
+  /* A ratio asks for a share of the container's main axis, never more of it than there is. */
+  if (main_size > 0 && wanted > main_size) wanted = main_size;
+  /* The record, not the local: `child_min[i]`/`child_nat[i]` were filled in above. */
+  child_min[i] = wanted;
+  child_nat[i] = wanted;
+  child_weight[i] = KN_NO_WEIGHT;
+ }
         /* Main-axis expansion is decided by the expand flag OF THE MAIN AXIS: counting hexpand
          * for a vertical container handed leftover height to `fillWidth()` children (plan L2).
          * `gtk_widget_compute_expand()` also follows a child's own expand properties, which a
          * bare getter does not. */
         child_expand[i] = child_weight[i] > KN_NO_WEIGHT
             ? FALSE /* the weight already owns this child's share of the leftover */
-            : gtk_widget_compute_expand(c, main) != FALSE;
+            : kn_child_ratio(self, c) > KN_NO_RATIO
+                ? FALSE /* a ratio owns the main axis too: surplus would break it */
+                : gtk_widget_compute_expand(c, main) != FALSE;
         if (child_expand[i]) n_expand++;
         if (child_weight[i] > KN_NO_WEIGHT) n_weighted++;
         /* Only a FILL child is allocated its whole cell; a CENTER/END child is allocated its
@@ -724,6 +774,45 @@ double kn_box_get_weight(GtkWidget *widget, GtkWidget *child) {
     return (double) kn_child_weight(self, child);
 }
 
+/* Sets the `Modifier.aspectRatio()` of one child: on the MAIN axis the child asks for
+ * `cross * ratio` while the cross axis keeps deciding (typically the container's whole cross
+ * size, which is what "fill the height, width follows" means). KN_NO_RATIO / a non-finite or
+ * non-positive value clears it, so a rebuilt chain without the modifier restores plain packing
+ * (plan L9) and an unmanaged-looking box stays allocation-free.
+ *
+ * The ratio OWNS the main axis of that child: a `weight` on the same child would be a second,
+ * contradictory claim on the same pixels, so a ratio child is excluded from the weight and
+ * surplus passes in `kn_box_layout_allocate()` (Android's `aspectRatio` does the same).
+ */
+void kn_box_set_child_ratio(GtkWidget *widget, GtkWidget *child, double ratio) {
+ KnBoxLayout *self = kn_layout_get(widget);
+ if (self == NULL || child == NULL || !GTK_IS_WIDGET(child)) return;
+ if (!isfinite(ratio) || ratio <= 0.0) {
+  KnChildLayout *existing = kn_child_layout_peek(self, child);
+  if (existing == NULL || existing->ratio == KN_NO_RATIO) return;
+  existing->ratio = KN_NO_RATIO;
+  if (existing->weight <= KN_NO_WEIGHT && existing->max_width == KN_NO_MAX &&
+      existing->max_height == KN_NO_MAX) {
+   kn_forget_child(self, child);
+  }
+  self->have_probe = FALSE;
+  kn_queue_resize(widget);
+  return;
+ }
+ KnChildLayout *data = kn_child_layout_get(self, child);
+ if ((double) data->ratio == ratio) return;
+ data->ratio = (float) ratio;
+ self->have_probe = FALSE;
+ kn_queue_resize(widget);
+}
+
+/* Current ratio of `child` (0 when it asks for none). Diagnostics and tests. */
+double kn_box_get_child_ratio(GtkWidget *widget, GtkWidget *child) {
+ KnBoxLayout *self = kn_layout_get(widget);
+ if (self == NULL || child == NULL) return 0.0;
+ return (double) kn_child_ratio(self, child);
+}
+
 /* Sets the `Modifier.maxWidth()`/`maxHeight()` ceiling of one child (KN_NO_MAX = "no ceiling on
  * this axis\). Like `weight`, this is a per-child property of THIS container, which is the only
  * place a ceiling can be enforced: GTK would otherwise hand the child its natural size.
@@ -744,7 +833,8 @@ void kn_box_set_child_max(GtkWidget *widget, GtkWidget *child, int max_width, in
     if (data->max_width == want_w && data->max_height == want_h) return;
     data->max_width = want_w;
     data->max_height = want_h;
-    if (data->weight <= KN_NO_WEIGHT && want_w == KN_NO_MAX && want_h == KN_NO_MAX) {
+    if (data->weight <= KN_NO_WEIGHT && data->ratio == KN_NO_RATIO && want_w == KN_NO_MAX &&
+     want_h == KN_NO_MAX) {
         kn_forget_child(self, child);
     }
     self->have_probe = FALSE;

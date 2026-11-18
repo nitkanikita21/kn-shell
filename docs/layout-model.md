@@ -27,6 +27,8 @@ alignment cell.
 | Modifier | GTK field | Semantics |
 | --- | --- | --- |
 | `size(w, h)` / `width` / `height` | `gtk_widget_set_size_request` | a **minimum**, not a size: the widget never gets smaller, but a parent may give it more |
+| `requiredSize(w, h)` / `requiredWidth` / `requiredHeight` | size request **+** `Align.Start` on the named axes | an **exact** size (compose's `requiredSize`): the parent cannot stretch those axes, so `requiredSize(44)` stays 44×44 in a taller `Row` and a chip keeps its 1:1 |
+| `aspectRatio(r)` | per-child `ratio` in `KnBoxLayout` | keeps a shape instead of a number: the **cross** axis decides (a `Fill` child takes the container's whole cross size) and the **main** axis becomes `cross * r`. So `aspectRatio(1f)` in a `Row` is "as tall as the row, and exactly that wide". A `weight`/`hExpand()` on the same child is ignored — the ratio already owns those pixels |
 | `minWidth` / `minHeight` / `minSize` | CSS `min-width` / `min-height` | also a minimum, applied by the theme layer after the plain reset removed the theme's own |
 | `maxWidth` / `maxHeight` / `maxSize` | *no GTK equivalent* | a **ceiling**, emulated: it clamps an explicit `size()` request and, inside a `KnBoxLayout` container, the width the manager hands out. Clamped to the child's own minimum (`min` beats `max`, as in CSS) |
 | `align(h, v)` | `gtk_widget_set_halign` / `valign` | picks a position inside the cell the parent hands out. `Fill` = take the cell. `Center`/`End` = natural size, aligned |
@@ -62,13 +64,25 @@ resets the request to the natural size (`kn-modifier-size`), exactly like the ot
 | a badge, counter or icon that must **not** size its container | `Overlay` (children never contribute; combine with `size()` + `clipOverflow()`) |
 | cairo / GL drawing | `Canvas` / `ShaderCanvas` |
 
+**`align` needs a cell to move inside.** On the cross axis of a `Row`/`Column`/`Box` the
+manager hands the child the full cross extent, so `align(v = Center)` works. On the *main*
+axis children are packed — a non-expanding child owns exactly its natural size — so aligning it
+has nothing to move in. Centring a 22px icon inside a 44px chip therefore wants `Stack`
+(every child gets the whole cell), not `Box`:
+
+```kotlin
+Stack(Modifier.size(44).radius(12).background(c.accent)) {
+    Icon(Lucide.Home, size = 22, color = c.bg, modifier = Modifier.align(h = Align.Center, v = Align.Center))
+}
+```
+
 `Overlay` deliberately sets no expand flag and `Stack` sets none either: `GtkBox` aggregates the
 expand flags of its children, so an expanding spacer would stretch its whole row. Ask for
 expansion explicitly with `Modifier.align(h = Align.Fill)` / `fillWidth()`.
 
 ## What is emulated, and what cannot work
 
-* **`weight` is not native.** It lives in `KnBoxLayout`, so it only works inside `Row`, `Column`,
+* **`weight` and `aspectRatio` are not native.** They live in `KnBoxLayout`, so they only work inside `Row`, `Column`,
   `Box` and a `CenterBox` region. A `Stack`/`Overlay` child cannot take a weight — those
   containers hand each child the same cell.
 * **`maxWidth`/`maxHeight` are not native.** The interpreter is the layout manager; outside one,

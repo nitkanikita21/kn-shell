@@ -32,6 +32,9 @@ extern "C" {
     );
     fn kn_box_get_child_max_width(widget: *mut c_void, child: *mut c_void) -> c_int;
     fn kn_box_get_child_max_height(widget: *mut c_void, child: *mut c_void) -> c_int;
+
+    fn kn_box_set_child_ratio(widget: *mut c_void, child: *mut c_void, ratio: c_double);
+    fn kn_box_get_child_ratio(widget: *mut c_void, child: *mut c_void) -> c_double;
     fn kn_box_forget_child(widget: *mut c_void, child: *mut c_void);
     fn kn_box_content(widget: *mut c_void) -> f64;
     fn kn_box_set_current(widget: *mut c_void, current: f64);
@@ -190,6 +193,28 @@ pub fn get_box_child_weight(widget: u64, child: u64) -> f64 {
     }
     check_main_thread("get_box_child_weight");
     unsafe { kn_box_get_weight(handle(widget), handle(child)) as f64 }
+}
+
+/// `Modifier.aspectRatio()` of `child` inside `widget`: the main axis becomes `cross * ratio`
+/// instead of the child's content size, which is how "fill the row's height, let the width
+/// follow" is expressed (0.0 = no ratio, see `set_box_child_ratio` in `kn_box_layout.c`).
+#[uniffi::export]
+pub fn set_box_child_ratio(widget: u64, child: u64, ratio: f64) {
+    if widget == 0 || child == 0 {
+        return;
+    }
+    check_main_thread("set_box_child_ratio");
+    unsafe { kn_box_set_child_ratio(handle(widget), handle(child), ratio) }
+}
+
+/// Current ratio of `child` (0.0 = none). Diagnostics and tests.
+#[uniffi::export]
+pub fn get_box_child_ratio(widget: u64, child: u64) -> f64 {
+    if widget == 0 || child == 0 {
+        return 0.0;
+    }
+    check_main_thread("get_box_child_ratio");
+    unsafe { kn_box_get_child_ratio(handle(widget), handle(child)) }
 }
 
 /// Caps of `child` inside `widget`, in px, in the CHILD's own axes: `max_width` is what

@@ -37,6 +37,8 @@
 | L9 | `compose/Modifier.kt` `applyModifiers` | `hexpand/vexpand/halign/valign/margins` пишуться лише `if != null` → рекомпозиція **без** `fillWidth()` залишає попереднє значення (sticky state); те саме успадкує майбутній `weight` | у Android-семиці `Modifier`-ланцюг переобчислюється кожний прохід — властивість, якої немає в новому ланцюзі, мусить скинутись |
 | L10 | `shell-app/.../ui/test.ui.kt:92` | `Box(Modifier.padding(16).radius(12).background(...).padding(16))` — один CSS-правил `padding`, другий переписує перший | зламаний приклад, який тиражують docs; фікс прикладу, не framework |
 | L11 | `compose/Widgets.kt:123-141` `GtkOverlayNode` | невидимий 0×0 `GtkBox` як головна дитина, щоб оверлей-діти не входжали у measure | у GtkOverlay є рідний `gtk_overlay_set_measure_overlay()` / `clip-overlay` (4.0) — хач замінюється API |
+| L13 | `compose/Modifier.kt` size-блок, `requiredSize` | `gtk_widget_set_size_request` — це лише **мінімум**, тож `size(44)` у вищому `Row` стає 44×N і плашка втрачає 1:1 (сам `docs/layout-model.md` це й документував) | додано `requiredSize(w, h)` / `requiredWidth` / `requiredHeight`: size request **+** `Align.Start` на названих осях, тобто exact size (compose `requiredSize`); тести 3e, разом 86/86 |
+| L14 | `rust-core/src/kn_box_layout.c`, `kn_content_main_size`/`allocate` | у GTK немає нічого схожого на `aspectRatio`: щоб плашка залишалась 1:1, треба було або фіксувати обидві осі числом (`requiredSize(44)`), або писати CSS | додано `Modifier.aspectRatio(r)` як per-child `ratio` у `KnBoxLayout`: cross-вісь вирішує (FILL → вся cross-вісь контейнера), main = `cross * r`; `weight`/`hExpand` на тій же дитині ігноруються. Практично — те, що просив користувач: «height заповнювало, по ширині авто і при цьому 1:1»; тести 3f, разом 91/91 |
 
 ## 3. Архітектура пропозиції
 
@@ -330,3 +332,17 @@ _Suite_: **79 тестів, 79 green**. Хак L11 закрито — і не т
   незалежно від властивості `hexpand` (тому пін `ExpandElement(false, false)` нічого не змінив —
   його прибрано), або ж справа в `for_size` при першому вимірі без текстури. Кандидат у L12 для
   окремого кроку K11.
+
+## 6.8 L13/L14 — `requiredSize` і `aspectRatio` (2026-11-18, ноут)
+
+Спадок K1–K10 зіткнувся з реальним демо: плашка-іконка в `shell-app/.../ui/test.ui.kt` мала бути 1:1 і «заповнювати висоту ряду, ширину — авто». З'ясувалось, що framework не має для цього жодного засобу: `size(44)` — це лише мінімум GTK (`gtk_widget_set_size_request`), тому `Row` розтягує дитину по cross-осі і плашка стає 44×N.
+
+- **L13 — `requiredSize(w, h)` / `requiredWidth` / `requiredHeight`.** Size request **+** `Align.Start` на названих осях, тобто exact size (compose `requiredSize`). Реалізовано в `compose/Modifier.kt` елементом `RequiredSizeElement`: після `when (element)` у `applyModifiers` — `if (requiredWidth && halign == null) halign = GTK_ALIGN_START` (і так само для valign), тож явний `align()`/`fillWidth()` далі в ланцюзі перемагає. Тести — група `3e. exact sizes`, 86/86.
+- **L14 — `aspectRatio(r)`.** `GTK` не має нічого схожого, тому це per-child `ratio` у `KnBoxLayout` (як `weight`):
+  - `rust-core/src/kn_box_layout.c`: `#define KN_NO_RATIO 0.0f`, поле `float ratio` у `KnChildLayout`, `kn_child_ratio()`, `kn_box_set_child_ratio()` / `kn_box_get_child_ratio()`. `ratio <= 0` очищає запис (L9-правило: ланцюг без модифієра повертає звичайну упаковку) і знімає запис, якщо в ньому більше нічого немає.
+  - Вимір: `kn_content_main_size()` підміняє main-розмір дитини на `cross * ratio`, коли `for_size >= 0` (cross уже відомий).
+  - Розкладка: у `allocate()` cross-вісь вирішує — `FILL`-дитина бере всю cross-вісь контейнера, інакше свій natural; `child_min[i] = child_nat[i] = lround(cross_own * ratio)`, і дитина виключається з weight- і expand-проходів (інакше сума претензій на ті самі пікселі).
+  - `rust-core/src/box_layout.rs`: UniFFI `set_box_child_ratio` / `get_box_child_ratio`; `compose/GtkApplier.kt` передає `modifier.aspectRatioValue()` у `pushChildLayout()` поруч із `setBoxChildMax`.
+- **Тести (група `3f. aspect ratio`)**: fill-cross-and-derive-main; ratio 2f масштабує; у `Column` cross — це ширина; дитина з `weight(1.0)` не розтягується і поступається сусідом-експандером; ланцюг без ratio повертає content-упаковку. Разом **91/91**.
+- **Демо**: `TestUi()` — `Stack(Modifier.aspectRatio(1f).radius(12).background(c.accent))` у хедер-`Row`; плашка стала ~46×46 логічних px (замір по скріншоту), тобто справді 1:1 від висоти ряду.
+- `docs/layout-model.md`: рядок `aspectRatio(r)` у таблиці «The four size knobs» і примітка, що `weight` та `aspectRatio` живуть лише в `KnBoxLayout` (`Row`/`Column`/`Box`/`CenterBox`-регіон).

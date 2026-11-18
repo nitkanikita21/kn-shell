@@ -6,6 +6,7 @@ import androidx.compose.runtime.AbstractApplier
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import dev.knshell.core.setBoxChildMax
+import dev.knshell.core.setBoxChildRatio
 import dev.knshell.core.setBoxChildWeight
 import kn.gtk.GtkWidget
 import kn.gtk.gtk_widget_get_layout_manager
@@ -67,6 +68,10 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
         setBoxChildWeight(parent, child, modifier.mainAxisWeight())
         val (maxWidth, maxHeight) = modifier.maxSizeCaps()
         setBoxChildMax(parent, child, maxWidth, maxHeight)
+        // Same channel for the shape: `Modifier.aspectRatio()` is a per-child record of the
+        // container's manager (`main = cross * ratio`), and 0 means "no ratio" — so a chain that
+        // dropped the modifier clears it instead of pinning the child to an old shape (L9).
+        setBoxChildRatio(parent, child, modifier.aspectRatioValue().toDouble())
     }
 
     /** This widget's own handle if it is a container a layout manager sizes, otherwise null. */
