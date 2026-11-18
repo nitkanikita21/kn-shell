@@ -102,7 +102,7 @@ fun TestUi() {
                     Modifier.weight(1.0).aspectRatio(1f).radius(8)
                         .background(color, borderWidth = 1, borderColor = c.border),
                 ) {
-                    Overlay(Modifier.fillAll()) {
+                    Stack {
                         Label(
                             name,
                             modifier = Modifier.padding(5)
