@@ -5,8 +5,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import dev.knshell.app.theme.ThemeMode
 import dev.knshell.app.theme.ThemeTokens
 import dev.knshell.app.ui.helpers.collectTheme
+import dev.knshell.app.ui.helpers.collectThemeMode
+import dev.knshell.app.ui.helpers.injectDi
+import dev.knshell.app.theme.ThemeService
 import dev.knshell.compose.Align
 import dev.knshell.compose.Box
 import dev.knshell.compose.Color
@@ -54,6 +58,8 @@ import dev.knshell.ui.primitives.Text
 @Composable
 fun TestUi() {
     val theme by collectTheme()
+    val mode by collectThemeMode()
+    val service by injectDi<ThemeService>()
     val c = theme.colors
     var tab by remember { mutableStateOf(0) }
     val tabs = listOf("Overview" to Lucide.LayoutGrid, "List" to Lucide.List, "Settings" to Lucide.SlidersHorizontal)
@@ -62,7 +68,7 @@ fun TestUi() {
         spacing = 16,
         modifier = Modifier.width(440).background(c.bg).padding(20),
     ) {
-        Header(c)
+        Header(c, mode)
 
         // Tab bar. `onClick` is a gesture on the plain Box, so the tab is not a GTK Button and
         // keeps the exact pill shape: no button chrome to fight with `kn-plain`.
@@ -76,7 +82,7 @@ fun TestUi() {
         when (tab) {
             0 -> OverviewTab(c)
             1 -> ListTab(c)
-            else -> SettingsTab(c)
+            else -> SettingsTab(c, mode, service::setMode)
         }
 
         // Every entry in ThemeTokens, so a bad palette is visible at a glance.
@@ -113,7 +119,7 @@ fun TestUi() {
 // ------------------------------------------------------------------ header
 
 @Composable
-private fun Header(c: ThemeTokens) {
+private fun Header(c: ThemeTokens, mode: ThemeMode) {
     Row(spacing = 12, modifier = Modifier.fillWidth()) {
         // `Stack`, not `Box`: a block-flow `Box` packs its children along the main axis, so
         // `align(v = Center)` would have no claimed cell to centre into.
@@ -132,7 +138,7 @@ private fun Header(c: ThemeTokens) {
         Column(spacing = 4, modifier = Modifier.weight(1.0).align(v = Align.Center)) {
             Text("KN Shell", size = 22, color = c.fg, modifier = Modifier.bold())
             Text(
-                "theme demo · ${if (c.isDark) "dark" else "light"} · ${c.accent.hex()}",
+                "theme demo · ${if (c.isDark) "dark" else "light"} (${mode.name.lowercase()}) · ${c.accent.hex()}",
                 size = 12,
                 color = c.mutedFg,
             )
@@ -263,13 +269,25 @@ private fun ListRow(c: ThemeTokens, entry: ListEntry) {
 // ------------------------------------------------------------------ tab 2: settings
 
 @Composable
-private fun SettingsTab(c: ThemeTokens) {
+private fun SettingsTab(c: ThemeTokens, mode: ThemeMode, onMode: (ThemeMode) -> Unit) {
     var wifi by remember { mutableStateOf(true) }
     var bluetooth by remember { mutableStateOf(false) }
     var focus by remember { mutableStateOf(true) }
     var scale by remember { mutableStateOf(1.25f) }
 
     Column(spacing = 14, modifier = Modifier.fillWidth()) {
+        // The palette's dark/light guess is only a guess — a dark UI can sit on a bright
+        // wallpaper. This is the override; `Auto` hands the decision back to the palette.
+        Column(spacing = 8, modifier = Modifier.fillWidth()) {
+            Text("Appearance", size = 13, color = c.mutedFg)
+            Row(spacing = 6, modifier = Modifier.fillWidth()) {
+                for (candidate in ThemeMode.entries) {
+                    ModePill(c, candidate, active = mode == candidate) { onMode(candidate) }
+                }
+            }
+        }
+        Box(Modifier.fillWidth().height(1).background(c.border))
+
         SwitchRow(c, "Wi-Fi", "Join kn-shell-5G automatically", wifi) { wifi = it }
         SwitchRow(c, "Bluetooth", "Discoverable for 2 minutes", bluetooth) { bluetooth = it }
         SwitchRow(c, "Do not disturb", "Silence notifications for 1 hour", focus) { focus = it }
@@ -341,6 +359,33 @@ private fun Pill(c: ThemeTokens, text: String, filled: Boolean) {
             .background(if (filled) c.accent else c.surface2),
     ) {
         Text(text, size = 14, color = if (filled) c.bg else c.fg, modifier = if (filled) Modifier.bold() else Modifier.medium())
+    }
+}
+
+/** Segmented-control cell for [ThemeMode] — same pill shape as the tab bar, evenly shared. */
+@Composable
+private fun ModePill(c: ThemeTokens, mode: ThemeMode, active: Boolean, onClick: () -> Unit) {
+    val label = when (mode) {
+        ThemeMode.Auto -> "Auto"
+        ThemeMode.Dark -> "Dark"
+        ThemeMode.Light -> "Light"
+    }
+    Row(
+        spacing = 6,
+        modifier = Modifier.weight(1.0)
+            .onClick(onClick)
+            .pointerCursor()
+            .padding(vertical = 9)
+            .radius(9)
+            .background(if (active) c.accent else c.surface2),
+    ) {
+        Overlay(Modifier.fillWidth()) {
+            Label(
+                label,
+                modifier = Modifier.fontFamily("sans").align(h = Align.Center)
+                    .textColor(if (active) c.bg else c.fg),
+            )
+        }
     }
 }
 
