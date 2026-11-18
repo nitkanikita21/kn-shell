@@ -377,6 +377,8 @@ K1–K10 **закомічені й запушені** на `gtk4-layout-semantic
 `feat(overlay): drop the invisible main child GtkOverlay never needed` (K8),
 `docs(layout): write down the layout model GTK actually implements` (K9),
 `feat(image): pin intrinsic sizes through the modifier chain, not size_request` (K10).
+Після K10 (L13/L14, розділ 6.8 плану): `feat(layout): add aspectRatio and exact sizes to the box layout` — `acc654d`,
+теж запушено. `:framework:linuxX64Test` — 91/91.
 Робоче дерево чисте; ваш рефакторинг (shell-app DI/theme, `:icons:core`, `services/*.kt`) у
 цьому клоні відсутній, тому `git commit -- <paths>` без ризику захопити чуже.
 
