@@ -57,17 +57,59 @@ pub fn decode(bytes: &[u8], max_input_dim: u32) -> Result<RgbImage, PaletteError
         let scale = max_input_dim as f64 / w.max(h) as f64;
         let nw = (w as f64 * scale).round().max(1.0) as u32;
         let nh = (h as f64 * scale).round().max(1.0) as u32;
-        DynamicImage::ImageRgb8(image::imageops::resize(
-            &oriented.into_rgb8(),
-            nw,
-            nh,
-            image::imageops::FilterType::Triangle,
-        ))
+        // Box filter: each destination pixel is the area-average of the source
+        // pixels it covers. This is the downsample the palette engine wants
+        // (cheap, no sharpening artifacts) rather than a triangular resample.
+        box_downsample(&oriented.into_rgb8(), nw, nh)
     } else {
         oriented
     };
 
     Ok(resized.into_rgb8())
+}
+
+/// Area-average (box) downsample: every output pixel covers a contiguous
+/// `(w/nw) x (h/nh)` block of source pixels and takes their mean.
+fn box_downsample(src: &RgbImage, nw: u32, nh: u32) -> DynamicImage {
+    let (w, h) = src.dimensions();
+    if w == 0 || h == 0 || nw == 0 || nh == 0 {
+        return DynamicImage::ImageRgb8(src.clone());
+    }
+    let mut out = RgbImage::new(nw, nh);
+    let sx = w as f64 / nw as f64;
+    let sy = h as f64 / nh as f64;
+    for oy in 0..nh {
+        let y0 = (oy as f64 * sy) as u32;
+        let y1 = (((oy + 1) as f64 * sy).ceil() as u32).min(h).max(y0 + 1);
+        for ox in 0..nw {
+            let x0 = (ox as f64 * sx) as u32;
+            let x1 = (((ox + 1) as f64 * sx).ceil() as u32).min(w).max(x0 + 1);
+            let mut r = 0u64;
+            let mut g = 0u64;
+            let mut b = 0u64;
+            let mut count = 0u64;
+            for yy in y0..y1 {
+                for xx in x0..x1 {
+                    let p = src.get_pixel(xx, yy);
+                    r += p[0] as u64;
+                    g += p[1] as u64;
+                    b += p[2] as u64;
+                    count += 1;
+                }
+            }
+            let inv = 1.0 / count as f64;
+            out.put_pixel(
+                ox,
+                oy,
+                image::Rgb([
+                    (r as f64 * inv).round() as u8,
+                    (g as f64 * inv).round() as u8,
+                    (b as f64 * inv).round() as u8,
+                ]),
+            );
+        }
+    }
+    DynamicImage::ImageRgb8(out)
 }
 
 /// Read the EXIF `Orientation` tag (1-8) from JPEG bytes, if present.

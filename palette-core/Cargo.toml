@@ -9,9 +9,7 @@ readme = "README.md"
 
 [lib]
 name = "palette_core"
-# `lib` -> rlib (consumed by rust-core under the `custom-host` feature); `staticlib`
-# -> native archive linked into the Kotlin/Native executable, mirroring rust-core.
-crate-type = ["lib", "staticlib"]
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 # Decode JPEG/PNG/WebP. `image` 0.25 uses a pure-Rust WebP decoder (image-webp),
@@ -25,13 +23,8 @@ kamadak-exif = "0.6"     # EXIF orientation for JPEG
 directories = "5"        # XDG cache dir
 thiserror = "2"
 
-# Optional bridge into the rust-core `custom` extension host. Off by default so the
-# core engine has no rust-core dependency and builds without it.
-kn_shell_core = { path = "../rust-core", optional = true }
-
 [features]
 default = []
-custom-host = ["dep:kn_shell_core"]
 
 [dev-dependencies]
 criterion = "0.5"

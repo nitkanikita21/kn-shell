@@ -46,9 +46,17 @@
  * ---------------------------------------------------------------------------
  * Result JSON shape (the `result` string)
  * ---------------------------------------------------------------------------
- * A JSON object: `{ "colors": [ { "l": f64, "c": f64, "h": f64|null,
- * "weight": f64 }, ... ] }`, sorted by `weight` descending. `h` is NULL when
- * the colour is achromatic (hue is undefined).
+ * A JSON object:
+ *   {
+ *     "colors": [ { "l": f64, "c": f64, "h": f64|null, "weight": f64 }, ... ],
+ *     "suggested_hue": f64|null,   // circular-mean hue (deg), null if achromatic
+ *     "suggested_chroma": f64,     // weighted-mean chroma
+ *     "suggested_mode": "dark"|"light",
+ *     "is_fallback": bool,         // true when the neutral fallback was used
+ *     "source_hash": "<hex sha256>"
+ *   }
+ *
+ * sorted by `weight` descending; `h` is NULL when a colour is achromatic.
  */
 
 #ifndef PALETTE_CORE_H

@@ -20,7 +20,7 @@ use std::ptr;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use crate::{extract_from_path, extract_with_cancel, Palette, PaletteError, PaletteOptions};
+use crate::{extract_from_path, extract_with_cancel, PaletteResult, PaletteError, PaletteOptions};
 
 type CancelMap = Mutex<HashMap<u64, Arc<AtomicBool>>>;
 static CANCELS: OnceLock<CancelMap> = OnceLock::new();
@@ -55,8 +55,10 @@ fn parse_opts(json: *const c_char) -> Result<PaletteOptions, String> {
     }
 }
 
-fn palette_to_json(p: &Palette) -> String {
-    serde_json::to_string(p).unwrap_or_else(|_| "{\"colors\":[]}".to_string())
+fn palette_to_json(p: &PaletteResult) -> String {
+    serde_json::to_string(p).unwrap_or_else(|_| {
+        "{\"colors\":[],\"suggested_hue\":null,\"suggested_chroma\":0,\"suggested_mode\":\"light\",\"is_fallback\":true,\"source_hash\":\"\"}".to_string()
+    })
 }
 
 fn error_code(e: &PaletteError) -> i32 {

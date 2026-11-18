@@ -109,7 +109,7 @@ pub fn kmeans_oklab(
     let mut centers = kmeans_plus_plus(points, k, &mut rng);
     let mut assignments = vec![0usize; n];
 
-    const MAX_ITERS: usize = 24;
+    const MAX_ITERS: usize = 20;
     const SHIFT_EPS: f64 = 1e-4;
 
     for _ in 0..MAX_ITERS {

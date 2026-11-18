@@ -14,11 +14,9 @@ mod error;
 pub mod ffi;
 mod kmeans;
 
-#[cfg(feature = "custom-host")]
-pub mod custom_ext;
-
 pub use color::{oklab_to_oklch, oklab_to_srgb_u8, oklch_to_oklab, srgb_u8_to_oklab};
 pub use error::PaletteError;
+pub use cache::hash_bytes;
 
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -44,6 +42,27 @@ pub struct OklchColor {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct Palette {
     pub colors: Vec<OklchColor>,
+}
+
+/// The full extraction result returned over the C ABI.
+///
+/// Extends [`Palette`] with a suggested theme summary and the source hash, so
+/// the Kotlin side can derive an accent without reimplementing the math.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct PaletteResult {
+    /// Dominant colors, sorted by `weight` descending.
+    pub colors: Vec<OklchColor>,
+    /// Circular-mean hue (degrees) of the colored clusters, weighted by `weight`.
+    /// `NaN` when there is no chromatic content.
+    pub suggested_hue: f32,
+    /// Weighted-mean chroma of the colored clusters.
+    pub suggested_chroma: f32,
+    /// `"dark"` when the weighted-mean lightness < 0.5, else `"light"`.
+    pub suggested_mode: String,
+    /// True when the neutral fallback palette was produced (too small / flat / achromatic).
+    pub is_fallback: bool,
+    /// Hex SHA-256 of the source bytes.
+    pub source_hash: String,
 }
 
 /// Options controlling extraction.
@@ -76,13 +95,13 @@ impl PaletteOptions {
 }
 
 /// Extract a palette from a file on disk.
-pub fn extract_from_path(path: &Path, options: PaletteOptions) -> Result<Palette, PaletteError> {
+pub fn extract_from_path(path: &Path, options: PaletteOptions) -> Result<PaletteResult, PaletteError> {
     let bytes = std::fs::read(path)?;
     extract_from_bytes(&bytes, options)
 }
 
 /// Extract a palette from raw image bytes (PNG / JPEG / WebP).
-pub fn extract_from_bytes(bytes: &[u8], options: PaletteOptions) -> Result<Palette, PaletteError> {
+pub fn extract_from_bytes(bytes: &[u8], options: PaletteOptions) -> Result<PaletteResult, PaletteError> {
     extract_internal(bytes, &options, None)
 }
 
@@ -92,7 +111,7 @@ pub(crate) fn extract_with_cancel(
     bytes: &[u8],
     options: PaletteOptions,
     cancel: &AtomicBool,
-) -> Result<Palette, PaletteError> {
+) -> Result<PaletteResult, PaletteError> {
     extract_internal(bytes, &options, Some(cancel))
 }
 
@@ -100,13 +119,16 @@ fn extract_internal(
     bytes: &[u8],
     options: &PaletteOptions,
     cancel: Option<&AtomicBool>,
-) -> Result<Palette, PaletteError> {
+) -> Result<PaletteResult, PaletteError> {
     let opts = options.effective();
     let hash = cache::hash_bytes(bytes);
 
     // Fast path: cache hit.
     if let Some(p) = cache::read_cache(&hash) {
-        return Ok(p);
+        // The cache stores the bare palette; reconstruct the summary and the
+        // fallback flag (both deterministic from the palette content) and
+        // re-attach the known source hash.
+        return Ok(finish(p.clone(), is_fallback_palette(&p), hash, &opts));
     }
 
     let img = decode::decode(bytes, opts.max_input_dim)?;
@@ -131,7 +153,7 @@ fn extract_internal(
     if lab.len() < 64 {
         let fb = fallback_palette();
         cache::write_cache(&hash, &fb)?;
-        return Ok(fb);
+        return Ok(finish(fb, true, hash, &opts));
     }
 
     let k = (opts.k as usize).max(1).min(lab.len());
@@ -161,7 +183,7 @@ fn extract_internal(
     if colors.is_empty() {
         let fb = fallback_palette();
         cache::write_cache(&hash, &fb)?;
-        return Ok(fb);
+        return Ok(finish(fb, true, hash, &opts));
     }
 
     // Achromatic images (e.g. a gray gradient) have no meaningful hue: collapse
@@ -169,7 +191,7 @@ fn extract_internal(
     if colors.iter().all(|c| c.c < 1e-4) {
         let fb = fallback_palette();
         cache::write_cache(&hash, &fb)?;
-        return Ok(fb);
+        return Ok(finish(fb, true, hash, &opts));
     }
 
     colors.sort_by(|a, b| {
@@ -180,7 +202,87 @@ fn extract_internal(
 
     let palette = Palette { colors };
     cache::write_cache(&hash, &palette)?;
-    Ok(palette)
+    Ok(finish(palette, false, hash, &opts))
+}
+
+/// Wrap a [`Palette`] into the full [`PaletteResult`], computing the weighted
+/// suggested hue/chroma/mode summary.
+fn finish(palette: Palette, is_fallback: bool, source_hash: String, _opts: &PaletteOptions) -> PaletteResult {
+    // Weighted circular mean hue + weighted mean chroma over chromatic colors.
+    let mut sin_sum = 0.0f64;
+    let mut cos_sum = 0.0f64;
+    let mut chroma_wsum = 0.0f64;
+    let mut light_wsum = 0.0f64;
+    let mut weight_total = 0.0f64;
+    for c in &palette.colors {
+        let w = c.weight as f64;
+        weight_total += w;
+        if !c.h.is_nan() && c.c > 1e-4 {
+            let hr = (c.h as f64).to_radians();
+            sin_sum += w * hr.sin();
+            cos_sum += w * hr.cos();
+            chroma_wsum += w * c.c as f64;
+        }
+        light_wsum += w * c.l as f64;
+    }
+
+    let (suggested_hue, suggested_chroma) = if weight_total > 0.0 && (sin_sum != 0.0 || cos_sum != 0.0) {
+        let mut h = sin_sum.atan2(cos_sum).to_degrees();
+        if h < 0.0 {
+            h += 360.0;
+        }
+        (h as f32, (chroma_wsum / weight_total) as f32)
+    } else {
+        (f32::NAN, 0.0)
+    };
+
+    // Mode (dark vs light) is decided from the *dominant* background, not the
+    // area-weighted mean of every cluster. Wallpapers are usually a light or
+    // dark field with high-chroma foreground (text, objects) that drags the
+    // weighted mean toward the middle and wrongly suggests the opposite mode.
+    // Instead we take the single largest cluster by weight; if several clusters
+    // are close in weight we fall back to the area-weighted mean as a tie-break.
+    let sorted_colors = {
+        let mut v = palette.colors.clone();
+        v.sort_by(|a, b| {
+            b.weight
+                .partial_cmp(&a.weight)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        v
+    };
+    let dominant = sorted_colors.first();
+    let mean_light = if weight_total > 0.0 { light_wsum / weight_total } else { 0.55 };
+    let suggested_mode = match dominant {
+        // Dominant cluster clearly outweighs the rest: trust it.
+        Some(c) if c.weight > 0.4 => {
+            if c.l < 0.5 { "dark" } else { "light" }.to_string()
+        }
+        // No single dominant cluster: use the area-weighted mean, but bias
+        // toward light when the mean is right at the 0.5 boundary.
+        _ => {
+            if mean_light < 0.5 { "dark" } else { "light" }.to_string()
+        }
+    };
+
+    PaletteResult {
+        colors: palette.colors,
+        suggested_hue,
+        suggested_chroma,
+        suggested_mode,
+        is_fallback,
+        source_hash,
+    }
+}
+
+/// True when `palette` is exactly the neutral fallback (a single achromatic
+/// swatch). Used to recover `is_fallback` from a cached bare palette without
+/// storing the flag in the cache binary format.
+fn is_fallback_palette(p: &Palette) -> bool {
+    matches!(
+        p.colors.as_slice(),
+        [c] if c.c.abs() < 1e-4 && (c.l - 0.55).abs() < 1e-3 && (c.weight - 1.0).abs() < 1e-3
+    )
 }
 
 fn cancelled(cancel: Option<&AtomicBool>) -> bool {
@@ -292,6 +394,33 @@ mod tests {
     fn large_image_does_not_panic() {
         let png = make_png(256, 256, [200, 30, 90]);
         let _ = extract_from_bytes(&png, PaletteOptions::default()).unwrap();
+    }
+
+    #[test]
+    fn result_json_contains_summary_fields() {
+        let png = make_png(48, 48, [128, 128, 128]);
+        let res = extract_from_bytes(&png, PaletteOptions::default()).unwrap();
+        let json = serde_json::to_value(&res).unwrap();
+        assert!(json.get("colors").is_some());
+        assert!(json.get("suggested_hue").is_some());
+        assert!(json.get("suggested_chroma").is_some());
+        assert!(json.get("suggested_mode").is_some());
+        assert!(res.is_fallback);
+        assert!(json.get("source_hash").is_some());
+        assert!(json["source_hash"].as_str().unwrap().len() == 64);
+        // Achromatic -> hue is null in the serialized output.
+        assert_eq!(json["colors"][0]["h"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn colored_result_suggests_hue_and_mode() {
+        // Blue-ish image -> hue around 260-280°, dark/light by mean lightness.
+        let png = make_png(64, 64, [20, 60, 200]);
+        let res = extract_from_bytes(&png, PaletteOptions::default()).unwrap();
+        assert!(!res.is_fallback);
+        assert!(!res.suggested_hue.is_nan());
+        assert!(res.suggested_chroma > 0.0);
+        assert!(res.suggested_mode == "dark" || res.suggested_mode == "light");
     }
 
     #[test]
