@@ -1,14 +1,14 @@
-# Handoff: GTK4 layout semantics (K10 — останній крок, продовження на ноуті)
+# Handoff: GTK4 layout semantics (K1–K10 виконано, план закритий)
 
 Цей файл — точка входу після перерви. План-чекліст: `plans/gtk4-layout-semantics.md`
-(виконується, 9/10 кроків: K1…K9 позначені `[x]`).
+(виконано, 10/10 кроків: K1…K10 позначені `[x]`).
 
 ## 0. Стан на момент зупинки
-- **K1–K9 зроблено**; лишився K10 (приклади + `size_request`-пін в `Image`/`ShaderCanvas`).
+- **K1–K10 зроблено**. K10 = пін `Image`/`ShaderCanvas` переїхав у канал модифієрів, `size_request` став полем із власником.
   K4 = видалено `reconcileMainAxisAlign` + чесний скид полів; K5 = max-size як стеля в
   `KnBoxLayout`; K6 = `CenterBox` з іменованими регіонами; K7 = `Stack` (а `Box` лишився
   block flow); K8 = `Overlay` без невидимої головної дитини; K9 = `docs/layout-model.md`.
-- _suite_: `79 tests, 0 failed`. Навмисно червоних цілей більше немає: від тепер кожен крок
+- _suite_: `82 tests, 0 failed`. Навмисно червоних цілей більше немає: від тепер кожен крок
   починається з тесту, а green тримається весь час.
 - K5 лишив після себе **єдиний канал per-child властивостей лейауту**: `KnChildLayout
   { weight; max_width; max_height; }` у `kn_box_layout.c` + `setBoxChildWeight` /
@@ -265,25 +265,35 @@ size its container». Таблиця модифікаторів уже мала 
 
 Тести після K9: 79/79 (змін у коді не було).
 
-## 2'. K10 — останній крок (наступний)
+## 2''''. K10 — ВИКОНАНО (план закритий)
 
-Мета: прибрати застарілі приклади й перевірити два місця, де розмір досі піниться через
-`size_request`, хоча тепер є чесніші шляхи.
+Пункт 1 (L10, подвійний `padding` у `test.ui.kt`) **не зроблено**: файл живе лише у вашій WIP-гілці,
+у цьому клоні його немає — правку треба зробити там, де він є (`Box`/`Row` уже з `padding(...)`, а
+дитина ще з власним).
 
-1. **L10 — подвійний `padding` у `test.ui.kt`.** Файл живе у вашій WIP-гілці (`shell-app` демо),
-   у цьому клоні його немає — правку робити там, де він є: `Box`/`Row` уже з `padding(...)`, а
-   дитина ще з власним `padding(...)`, що дає подвійний відступ.
-2. **`ui/primitives/Image.kt:86`** — `pinSize()` ставить `gtk_widget_set_size_request(w, h)` +
-   `halign/valign = START`. Тепер `size(w, h)` + `align(h = Start, v = Start)` дають те саме
-   через модифікатор, який K4 коректно скидає; перевірити, чи `pinSize()` ще потрібен, чи
-   `Image` може віддавати ці поля в `applyModifiers` (увага: `pinSize()` викликається ПОЗА
-   пайплайном, тому ownership-механізм його зараз захищає — якщо перенести в модифікатор,
-   поведінка стане «скидається разом з рештою», тобто `Image` без модифікатора втратить пін).
-3. **`compose/ShaderCanvas.kt:145`** — те саме питання для `size_request`-піна.
-4. Прогнати `:framework:linuxX64Test` (79/79) і візуально перевірити демо після прибирання.
+Пункти 2 і 3 зроблено:
 
-Після K10 — оновити §6.7 у `plans/gtk4-layout-semantics.md`, відмітити K10 `[x]`, і план
-закритий (K1–K10 усі `[x]`).
+- **`ui/primitives/Image.kt`**: `pinSize()` видалено; вузол тримає `userModifier: Modifier` (явний тип
+  обов'язковий — інакше виводиться `Modifier.Companion` і присвоєння не компілюється) і на кожен
+  `applyModifier` передає `pinned().then(modifier)`, де
+  `pinned() = Modifier.size(requestedWidth, requestedHeight).align(h = Align.Start, v = Align.Start)`.
+  `resize(w, h)` спершу переприкладає ланцюг, потім `load(...)`. Тобто виклик ПОЗА пайплайном зник —
+  і `Image` без модифікатора пін не втрачає (він у пайплайні першим).
+- **`compose/ShaderCanvas.kt`**: `Modifier.size(canvasWidth, canvasHeight).then(userModifier)`,
+  `gtk_widget_set_size_request` з `init` прибрано.
+- **`compose/Modifier.kt`**: `size_request` отримав таку саму ownership-логіку, як `halign/…` —
+  ключ `kn-modifier-size`; ланцюг без `size()` повертає `-1 × -1` (натуральний розмір) і знімає ключ.
+  Це і є та «чесна» половина: автор прибирає `size()` — пін теж зникає.
+- Тести (група `3d. intrinsic pins`, 3): `a size request does not survive a chain that dropped it`,
+  `an image keeps its pin when a chain drops an override`, `a shader canvas keeps its own size when a
+  chain drops a size`. Разом **82/82**. Мутація (вимкнути скидання `size_request`) валить рівно один.
+
+⚠️ **Нова знахідка, не пов'язана з K10** (перевірено: відтворюється і на `9817588`, тобто до K10):
+`Image` у `Row` з'їдає весь залишок ряду — наступні діти притискаються до правого краю, а сама
+картинка малюється 28×28 біля лівого. Заміна `Image` на `Box(Modifier.size(28, 28))` пакує ряд
+правильно. Пін `ExpandElement(false, false)` у `pinned()` нічого не змінив (його прибрано), отже
+`GtkPicture` віддає `compute_expand` незалежно від властивості `hexpand`, або справа в `for_size`
+першого виміру без текстури. Кандидат у L12 / крок K11 — описано в §6.7 плану.
 
 ## 3. Рішення, які вже ухвалено (не переписувати)
 
@@ -358,14 +368,15 @@ size its container». Таблиця модифікаторів уже мала 
   **не** чіпали. Тому правки наших файлів комітити лише з явним переліком шляхів
   (`git commit -- <paths>`) — `git add -A` схопив би їхній staged-рефакторинг.
 
-## 7. Стан git (на 2026-11-18 01:50)
+## 7. Стан git (на 2026-11-18 02:15)
 
-K1–K8 **закомічені й запушені** на `gtk4-layout-semantics`: `af82a6d` (K1–K3 код),
+K1–K10 **закомічені й запушені** на `gtk4-layout-semantics`: `af82a6d` (K1–K3 код),
 `896b552`/`4519329`/`f4e894d` (plans), `fd20e54` (K4), `30a30ae` (K5),
 `feat(centerbox): name the regions instead of counting attach calls` (K6),
 `feat(stack): add the z-stacking container Compose calls Box` (K7),
 `feat(overlay): drop the invisible main child GtkOverlay never needed` (K8),
-`docs(layout): write down the layout model GTK actually implements` (K9).
+`docs(layout): write down the layout model GTK actually implements` (K9),
+`feat(image): pin intrinsic sizes through the modifier chain, not size_request` (K10).
 Робоче дерево чисте; ваш рефакторинг (shell-app DI/theme, `:icons:core`, `services/*.kt`) у
 цьому клоні відсутній, тому `git commit -- <paths>` без ризику захопити чуже.
 

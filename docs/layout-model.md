@@ -41,10 +41,15 @@ alignment cell.
 
 `applyModifiers` runs on every recomposition and resets only what a modifier chain *previously
 wrote*: the widget itself remembers (`g_object_set_data`, keys `kn-modifier-*`) which of
-`hexpand`, `vexpand`, `halign`, `valign`, `opacity` a chain touched. A field that no chain ever
-wrote is never touched, so a writer outside the pipeline keeps its value — `Image` pins itself to
-`halign/valign = START`, `GtkOverlayNode` centres its children, `GtkCenterRegionNode` positions
-slots. This is why `Modifier.padding(all = 4)` on an icon does not move it back to `Fill`.
+`hexpand`, `vexpand`, `halign`, `valign`, `opacity`, `size_request` a chain touched. A field that no chain ever
+wrote is never touched, so a writer outside the pipeline keeps its value — `GtkOverlayBaseNode`
+centres its `Overlay` children, `GtkCenterRegionNode` positions slots. This is why
+`Modifier.padding(all = 4)` on an icon does not move it back to `Fill`.
+
+A widget that has an intrinsic size of its own (`Image`, `ShaderCanvas`) pins it the same way, from
+inside the pipeline: the node prepends `Modifier.size(w, h).align(…)` to the caller's chain, so the
+pin is the first writer and the caller's own modifier still wins. Dropping `size()` from a chain
+resets the request to the natural size (`kn-modifier-size`), exactly like the other fields.
 
 ## Choosing a container
 

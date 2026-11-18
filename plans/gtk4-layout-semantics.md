@@ -71,7 +71,7 @@ Kotlin-шар (API лишається Android-подібний):
 - [x] **K7. `Box` vs `Stack`** (L8): збереження block flow + новий `Stack`, чи перепис на стекінг. Вибір з урахуванням, що `docs/bar-api.md`/`docs/shell-api.md` уже описують `Box` як «div».
 - [x] **K8. Overlay без хаку**: рідні `measure_overlay`/`clip_overlay` (L11).
 - [x] **K9. Docs**: `docs/framework-api.md` (модифієр→GTK таблиця), `docs/shell-api.md:256-303`, `docs/bar-api.md:117-172`, новий `docs/layout-model.md` — що GTK гарантує, що емулюємо, чого не може бути (max-size, % of parent).
-- [ ] **K10. Прибирання прикладів**: L10 у `test.ui.kt`; перевірка `ui/primitives/Image.kt:86` і `compose/ShaderCanvas.kt:145` (pin через `size_request` — тепер є чесний шлях).
+- [x] **K10. Прибирання прикладів**: L10 у `test.ui.kt`; перевірка `ui/primitives/Image.kt:86` і `compose/ShaderCanvas.kt:145` (pin через `size_request` — тепер є чесний шлях).
 
 ## 5. Ризики
 
@@ -302,3 +302,31 @@ _Suite_: **79 тестів, 79 green**. Хак L11 закрито — і не т
 - `docs/shell-api.md` виправлено: застаріле «`GtkOverlay` measures only its main child» (неправда після K8) → «діти малюються поверх і не впливають на вимір»; відновлено зіпсоване виділення «where the text *should* size its container».
 - Таблиця модифієрів у `docs/shell-api.md` уже містила K5-рядок `maxWidth/maxHeight/maxSize` (емуляція, підлога по `min`) — не дублювали.
 - Тести після правок: `:framework:linuxX64Test` BUILD SUCCESSFUL, 79/79 (код не змінювався, лише docs).
+
+## 6.7 K10 — результати (2026-11-18, ноут)
+
+- **Pin переїхав у канал модифієрів.** `ui/primitives/Image.kt` більше не пише GTK-поля напряму:
+  `pinSize()` видалено, натомість вузол тримає `userModifier` і на кожен `applyModifier` передає
+  `pinned().then(modifier)`, де `pinned() = Modifier.size(w, h).align(h = Align.Start, v = Align.Start)`.
+  `resize()` переapplicовує ланцюг перед `load()`, тому пін переживає зміну розміру.
+  `compose/ShaderCanvas.kt` — так само (`size(canvasWidth, canvasHeight).then(userModifier)`).
+  Пастка: поле треба оголошувати як `private var userModifier: Modifier = Modifier` — без явного
+  типу компілятор виводить `Modifier.Companion` і присвоєння падає.
+- **`size_request` став таким самим полем із власником**, як `hexpand/halign/…`: ланцюг із
+  `size()` ставить `kn-modifier-size`, ланцюг без нього повертає `-1 × -1` і знімає ключ. Це те, що
+  робить пін чесним: якщо автор прибрав `size()` — картинка повертається до натурального розміру,
+  а якщо автор не чіпав розмір — пін лишається.
+- Тести (група `3d. intrinsic pins`): `a size request does not survive a chain that dropped it`,
+  `an image keeps its pin when a chain drops an override`, `a shader canvas keeps its own size when
+  a chain drops a size`. Разом **82/82**.
+- Мутаційна перевірка: вимкнене скидання `size_request` валить рівно один тест
+  (`Expected <(-1, -1)>, actual <(120, 40)>`) — тобто нові тести справді тримають цю гілку.
+- **L10 (`test.ui.kt`) на цьому клоні недосяжний**: файл живе у WIP-гілці користувача, у цьому
+  дереві його немає. Крок лишається відкритим для того дерева.
+- **Нова знахідка (поза K10, перевірено на `9817588` — тобто не регресія K10)**: `Image` у
+  `Row` з'їдає весь залишок ряду — наступні діти притискаються до правого краю, а сама картинка
+  малюється 28×28 біля лівого. Відтворюється і без K10-змін; з `Box(Modifier.size(28, 28))` замість
+  `Image` ряд пакується правильно. Гіпотези (не підтверджені): `GtkPicture` віддає `compute_expand`
+  незалежно від властивості `hexpand` (тому пін `ExpandElement(false, false)` нічого не змінив —
+  його прибрано), або ж справа в `for_size` при першому вимірі без текстури. Кандидат у L12 для
+  окремого кроку K11.
