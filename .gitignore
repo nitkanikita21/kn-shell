@@ -37,3 +37,6 @@ Cargo.lock.bak
 
 # Icon pipeline cache (lucide-static tarball unpacked by the generator plugin).
 .cache/
+
+# machine-local toolchain pin (konan.data.dir) — never commit an absolute path
+local.properties

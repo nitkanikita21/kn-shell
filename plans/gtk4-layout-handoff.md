@@ -74,6 +74,57 @@ KN_SHELL_MODE=windowed shell-app/build/bin/linuxX64/debugExecutable/shell-app.ke
 Симптом без фіксу: `Execution failed for task ':rust-core:cargoBuildLinuxX64Debug'` +
 `FileNotFoundException: …/build/quote/<hash>/output`.
 
+## 1.2 Єдиний Kotlin/Native тулчейн (IDE ↔ термінал) — чому синк міг падати
+
+Симптом, який ловили двічі:
+
+```
+E: KLIB loader: The same 'unique_name=org.jetbrains.kotlin.native.platform.builtin'
+found in more than one library: /home/<user>/.konan/…/klib/platform/linux_x64/…,
+/home/<user>/CODING/KN-shell/.konan/…/klib/platform/linux_x64/…
+Execution failed for task ':icons:core:compileKotlinLinuxX64' > Compilation finished with errors
+```
+
+Механіка: тулчейн K/N можна вказати двома способами — змінною оточення `KONAN_DATA_DIR`
+(її експортує `.tools/env.sh` у workspace) і властивістю `konan.data.dir`. Обидва корені
+на цій машині — **повні копії по 3.1 GB** (`dependencies`, `kotlin-native-prebuilt-linux-x86_64-2.1.0`,
+`-2.4.20`), тож кожен вхід «працює», доки не почне змішувати виходи:
+
+- термінал після `source .tools/env.sh` → `<repo>/.konan`;
+- IDEA запускає Gradle **без** цього env (вона стартує з desktop-сесії) → `~/.konan`;
+- `<module>/build` спільні, тож `build/konan.txt` і `build/kotlin/commonizedNativeDistributionLocation.txt`
+  перезаписуються з іншого кореня — і наступний білд кладе на library path **обидва** набори платформенніх klib.
+
+Лікування — не symlink і не поля в Settings. KGP 2.4.20 шукає властивості у порядку
+(`PropertiesBuildService.kt:27-34`): extra properties → Gradle properties (`-P`,
+`<root>/gradle.properties`, `~/.gradle/gradle.properties`) → **`local.properties` у корені
+проєкту** (shared across subprojects), а `konan.data.dir` documents переважає `KONAN_DATA_DIR`
+(`NativeProperties.kt` kdoc: «takes precedence over the 'KONAN_DATA_DIR' environment variable»).
+Тобто властивість у `local.properties` бачать обидва входи, незалежно від їхнього env:
+
+```bash
+# кожна машина пише свій шлях; файл у .gitignore
+echo "konan.data.dir=$(pwd)/.konan" > local.properties
+```
+
+Після цього `build/konan.txt` усюди показує `<repo>/.konan` — перевірено в режимі, який
+імітує IDE (`env -i HOME=… PATH=/usr/local/bin:/usr/bin:/bin ./gradlew …`, тобто без
+`.tools/env.sh` і з JVM 17 з `~/.gradle/gradle.properties`): `:framework:compileKotlinLinuxX64
+--rerun-tasks`, `:shell-app:linkDebugExecutableLinuxX64`, `:framework:linuxX64Test` — усе
+BUILD SUCCESSFUL, `unique_name` не з'являється. IDE достатньо зробити Reload Project; поля
+`Settings → Build Tools → Gradle → Environment variables` лишити порожніми.
+
+Два хвости, які ця зміна не ліквідує (свідомо):
+
+1. `org.gradle.java.home=/usr/lib/jvm/java-17-openjdk` у `~/.gradle/gradle.properties` (для
+   Android/RN) означає, що IDE-шний daemon — Java 17, а терміналський —
+   `.tools/jdk/jdk-21.0.13+9`. Це два пули демонів (RAM + перший прогін), на коректність
+   виходу не впливає. `org.gradle.java.home` через `local.properties` не читається, тому
+   виправлення вимагало б правки user-level або tracked `gradle.properties` — не робимо.
+2. `~/.konan` лишається окремою копією на 3.1 GB. Якщо місце потрібне — `mv ~/.konan
+   ~/.konan.pre-symlink && ln -s <repo>/.konan ~/.konan` після зеленого білда; на результат
+   верхнього пункту це не впливає.
+
 ## 2. K4 — ВИКОНАНО (лишається як опис механіки, на якій будувати K5+)
 
 Файл: `framework/src/nativeMain/kotlin/dev/knshell/compose/Modifier.kt`
