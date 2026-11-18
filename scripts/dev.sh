@@ -20,7 +20,18 @@ fi
 
 BIN=shell-app/build/bin/linuxX64/debugExecutable/shell-app.kexe
 LOG=shell-app/build/dev.log
-MARK=$(mktemp -t kn-shell-dev.XXXXXX)
+MARK=shell-app/build/.dev-mark
+mkdir -p shell-app/build
+
+# The Kotlin/Native compiler writes its temporary files into $TMPDIR, and on this machine
+# /tmp is a small tmpfs: when it fills up the build dies with "Disk quota exceeded" from
+# deep inside the compiler, which reads like a project error. Keep the temp dir inside the
+# repository unless the caller explicitly chose one.
+if [[ -z "${TMPDIR:-}" ]]; then
+    export TMPDIR="$PWD/build/tmp"
+    mkdir -p "$TMPDIR"
+    export GRADLE_OPTS="${GRADLE_OPTS:-} -Djava.io.tmpdir=$TMPDIR"
+fi
 CHILD_PID=""
 WATCH=0
 LOGS=0
@@ -93,11 +104,15 @@ if [[ $WATCH -eq 0 ]]; then
     exit $?
 fi
 
-echo "[dev] watching framework/src, shell-app/src, rust-core/src (Ctrl+C to stop)"
+echo "[dev] watching framework/src, shell-app/src, rust-core/src, palette-core/src (Ctrl+C to stop)"
 while true; do
     sleep 1
     CHANGED=0
-    if find framework/src shell-app/src rust-core/src \( -name '*.kt' -o -name '*.rs' \) -newer "$MARK" | grep -q .; then
+    # `*.c` matters: the box layout manager is C and it is the file edited most often while
+    # working on layout semantics. Gradle already tracks it as an input (rust-core/build.gradle.kts);
+    # without it here the watcher simply never notices.
+    if find framework/src shell-app/src rust-core/src palette-core/src \
+        \( -name '*.kt' -o -name '*.rs' -o -name '*.c' -o -name '*.h' \) -newer "$MARK" | grep -q .; then
         CHANGED=1
     fi
     if ! kill -0 "$CHILD_PID" 2>/dev/null; then CHANGED=1; fi
