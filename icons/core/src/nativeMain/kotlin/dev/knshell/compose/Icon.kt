@@ -23,11 +23,11 @@ import kotlinx.cinterop.ExperimentalForeignApi
  *
  * ```kotlin
  * // static, themed tint
- * Icon(Lucide.Home, size = 22, color = c.bg)
+ * Icon(Lucide.Home, size = 22, color = c.primaryForeground)
  *
  * // animated tint on hover — zero recompositions during the tween
  * var hover by remember { mutableStateOf(false) }
- * Icon(Lucide.Power, size = 16, color = if (hover) c.fg else c.accent, transitionMs = 180)
+ * Icon(Lucide.Power, size = 16, color = if (hover) c.foreground else c.primary, transitionMs = 180)
  * ```
  *
  * @param icon pack-qualified reference; unknown ids warn once and paint an empty slot.

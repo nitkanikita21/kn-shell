@@ -31,6 +31,7 @@ import dev.knshell.compose.fillAll
 import dev.knshell.compose.fillHeight
 import dev.knshell.compose.fillWidth
 import dev.knshell.compose.fontFamily
+import dev.knshell.compose.fontSize
 import dev.knshell.compose.height
 import dev.knshell.compose.hoverBackground
 import dev.knshell.compose.medium
@@ -66,7 +67,7 @@ fun TestUi() {
 
     Column(
         spacing = 16,
-        modifier = Modifier.width(440).background(c.bg).padding(20),
+        modifier = Modifier.width(440).background(c.background).padding(20),
     ) {
         Header(c, mode)
 
@@ -85,30 +86,27 @@ fun TestUi() {
             else -> SettingsTab(c, mode, service::setMode)
         }
 
-        // Every entry in ThemeTokens, so a bad palette is visible at a glance.
-        val swatches = listOf(
-            "bg" to c.bg,
-            "surface" to c.surface,
-            "surface2" to c.surface2,
-            "border" to c.border,
-            "mutedFg" to c.mutedFg,
-            "fg" to c.fg,
-            "accent" to c.accent,
-        )
-        Row(spacing = 8, modifier = Modifier.fillWidth()) {
-            for ((name, color) in swatches) {
-                // `weight`, not a fixed width: the seven swatches share the column evenly.
-                Box(
-                    Modifier.weight(1.0).aspectRatio(1f).radius(8)
-                        .background(color, borderWidth = 1, borderColor = c.border),
-                ) {
-                    Stack {
-                        Label(
-                            name,
-                            modifier = Modifier.padding(5)
-                                .fontFamily("JetBrainsMono Nerd Font")
-                                .textColor(textOn(color, c)),
-                        )
+        // `entries()` is the theme's own list, so a token added to the theme cannot be
+        // silently missing from the specimen. Nineteen swatches do not fit one row: two rows,
+        // each sharing its width by `weight`.
+        val swatches = c.entries()
+        for (row in swatches.chunked((swatches.size + 1) / 2)) {
+            Row(spacing = 6, modifier = Modifier.fillWidth()) {
+                for ((name, color) in row) {
+                    // `weight`, not a fixed width: the swatches share the column evenly.
+                    Box(
+                        Modifier.weight(1.0).aspectRatio(1f).radius(8)
+                            .background(color, borderWidth = 1, borderColor = c.border),
+                    ) {
+                        Stack {
+                            Label(
+                                name,
+                                modifier = Modifier.padding(3)
+                                    .fontFamily("JetBrainsMono Nerd Font")
+                                    .fontSize(8)
+                                    .textColor(textOn(color, c)),
+                            )
+                        }
                     }
                 }
             }
@@ -126,24 +124,24 @@ private fun Header(c: ThemeTokens, mode: ThemeMode) {
         // `aspectRatio(1f)`, not `size(44)`: a size *request* is only a GTK floor, so the row
         // would stretch the chip to its own height and it would stop being 1:1.
         Stack(
-            Modifier.aspectRatio(1f).radius(12).background(c.accent),
+            Modifier.aspectRatio(1f).radius(12).background(c.primary),
         ) {
             Icon(
                 Lucide.Home,
                 size = 22,
-                color = c.bg,
+                color = c.background,
                 modifier = Modifier.align(v = Align.Center, h = Align.Center),
             )
         }
         Column(spacing = 4, modifier = Modifier.weight(1.0).align(v = Align.Center)) {
-            Text("KN Shell", size = 22, color = c.fg, modifier = Modifier.bold())
+            Text("KN Shell", size = 22, color = c.foreground, modifier = Modifier.bold())
             Text(
-                "theme demo · ${if (c.isDark) "dark" else "light"} (${mode.name.lowercase()}) · ${c.accent.hex()}",
+                "theme demo · ${if (c.isDark) "dark" else "light"} (${mode.name.lowercase()}) · ${c.primary.hex()}",
                 size = 12,
-                color = c.mutedFg,
+                color = c.mutedForeground,
             )
         }
-        Icon(Lucide.Bell, size = 18, color = c.mutedFg, modifier = Modifier.align(v = Align.Center))
+        Icon(Lucide.Bell, size = 18, color = c.mutedForeground, modifier = Modifier.align(v = Align.Center))
     }
 }
 
@@ -158,10 +156,10 @@ private fun TabPill(c: ThemeTokens, name: String, icon: dev.knshell.icons.IconRe
             .pointerCursor()
             .padding(horizontal = 12, vertical = 8)
             .radius(999, 999)
-            .background(if (active) c.accent else c.surface2),
+            .background(if (active) c.primary else c.secondary),
     ) {
-        Icon(icon, size = 14, color = if (active) c.bg else c.mutedFg)
-        Text(name, size = 13, color = if (active) c.bg else c.fg, modifier = Modifier.medium())
+        Icon(icon, size = 14, color = if (active) c.background else c.mutedForeground)
+        Text(name, size = 13, color = if (active) c.background else c.foreground, modifier = Modifier.medium())
     }
 }
 
@@ -181,8 +179,8 @@ private fun OverviewTab(c: ThemeTokens) {
             ) {
                 // Vector icon with an animated tint: the tween runs on the frame clock, so
                 // hovering does not recompose this subtree per frame.
-                Icon(Lucide.Power, size = 16, color = if (powerHover) c.fg else c.accent, transitionMs = 180)
-                Text("Hover the icon — the tint animates", size = 13, color = c.fg)
+                Icon(Lucide.Power, size = 16, color = if (powerHover) c.foreground else c.primary, transitionMs = 180)
+                Text("Hover the icon — the tint animates", size = 13, color = c.foreground)
             }
         }
 
@@ -193,23 +191,23 @@ private fun OverviewTab(c: ThemeTokens) {
 
         Column(spacing = 8, modifier = Modifier.fillWidth()) {
             Row(spacing = 8, modifier = Modifier.fillWidth()) {
-                Text("Session progress", size = 13, color = c.fg, modifier = Modifier.weight(1.0))
-                Text("68%", size = 13, color = c.mutedFg)
+                Text("Session progress", size = 13, color = c.foreground, modifier = Modifier.weight(1.0))
+                Text("68%", size = 13, color = c.mutedForeground)
             }
             // Two boxes in a Row instead of a Stack: the fill is a share of the width, which is
             // exactly what `weight` means here.
             Row(spacing = 0, modifier = Modifier.fillWidth().height(6).radius(999, 999).clipOverflow()) {
-                Box(Modifier.width(190).fillHeight().background(c.accent))
-                Box(Modifier.weight(1.0).fillHeight().background(c.surface2))
+                Box(Modifier.width(190).fillHeight().background(c.primary))
+                Box(Modifier.weight(1.0).fillHeight().background(c.secondary))
             }
         }
 
         var volume by remember { mutableStateOf(62f) }
         Column(spacing = 6, modifier = Modifier.fillWidth()) {
             Row(spacing = 8, modifier = Modifier.fillWidth()) {
-                Icon(Lucide.Volume2, size = 16, color = c.mutedFg)
-                Text("Volume", size = 13, color = c.fg, modifier = Modifier.weight(1.0))
-                Text("${volume.toInt()}%", size = 13, color = c.mutedFg)
+                Icon(Lucide.Volume2, size = 16, color = c.mutedForeground)
+                Text("Volume", size = 13, color = c.foreground, modifier = Modifier.weight(1.0))
+                Text("${volume.toInt()}%", size = 13, color = c.mutedForeground)
             }
             Slider(value = volume, min = 0f, max = 100f, onValueChange = { volume = it })
         }
@@ -244,25 +242,25 @@ private fun ListRow(c: ThemeTokens, entry: ListEntry) {
             .onHover(onEnter = { hover = true }, onExit = { hover = false })
             .padding(horizontal = 10, vertical = 9)
             .radius(9)
-            .hoverBackground(c.surface),
+            .hoverBackground(c.accent),
     ) {
         // A tinted tile keeps the rows aligned even though the icons have different aspect.
         Stack(
-            Modifier.requiredTile().radius(8).background(if (hover) c.accent else c.surface2),
+            Modifier.requiredTile().radius(8).background(if (hover) c.primary else c.secondary),
         ) {
             Icon(
                 entry.icon,
                 size = 16,
-                color = if (hover) c.bg else c.fg,
+                color = if (hover) c.background else c.foreground,
                 modifier = Modifier.align(v = Align.Center, h = Align.Center),
             )
         }
         Column(spacing = 2, modifier = Modifier.weight(1.0)) {
-            Text(entry.title, size = 14, color = c.fg, modifier = Modifier.medium())
-            Text(entry.subtitle, size = 12, color = c.mutedFg, ellipsize = true)
+            Text(entry.title, size = 14, color = c.foreground, modifier = Modifier.medium())
+            Text(entry.subtitle, size = 12, color = c.mutedForeground, ellipsize = true)
         }
-        Text(entry.value, size = 13, color = c.mutedFg, modifier = Modifier.align(v = Align.Center))
-        Icon(Lucide.ChevronRight, size = 16, color = if (hover) c.fg else c.mutedFg, modifier = Modifier.align(v = Align.Center))
+        Text(entry.value, size = 13, color = c.mutedForeground, modifier = Modifier.align(v = Align.Center))
+        Icon(Lucide.ChevronRight, size = 16, color = if (hover) c.foreground else c.mutedForeground, modifier = Modifier.align(v = Align.Center))
     }
 }
 
@@ -279,7 +277,7 @@ private fun SettingsTab(c: ThemeTokens, mode: ThemeMode, onMode: (ThemeMode) -> 
         // The palette's dark/light guess is only a guess — a dark UI can sit on a bright
         // wallpaper. This is the override; `Auto` hands the decision back to the palette.
         Column(spacing = 8, modifier = Modifier.fillWidth()) {
-            Text("Appearance", size = 13, color = c.mutedFg)
+            Text("Appearance", size = 13, color = c.mutedForeground)
             Row(spacing = 6, modifier = Modifier.fillWidth()) {
                 for (candidate in ThemeMode.entries) {
                     ModePill(c, candidate, active = mode == candidate) { onMode(candidate) }
@@ -296,9 +294,9 @@ private fun SettingsTab(c: ThemeTokens, mode: ThemeMode, onMode: (ThemeMode) -> 
 
         Column(spacing = 6, modifier = Modifier.fillWidth()) {
             Row(spacing = 8, modifier = Modifier.fillWidth()) {
-                Icon(Lucide.SlidersHorizontal, size = 16, color = c.mutedFg)
-                Text("Interface scale", size = 13, color = c.fg, modifier = Modifier.weight(1.0))
-                Text(twoDecimals(scale ?: 1.0f) + "×", size = 13, color = c.mutedFg)
+                Icon(Lucide.SlidersHorizontal, size = 16, color = c.mutedForeground)
+                Text("Interface scale", size = 13, color = c.foreground, modifier = Modifier.weight(1.0))
+                Text(twoDecimals(scale ?: 1.0f) + "×", size = 13, color = c.mutedForeground)
             }
             Slider(value = scale ?: 1.0f, min = 0.75f, max = 2f, step = 0.05f, onValueChange = { scale = it })
         }
@@ -320,18 +318,18 @@ private fun SwitchRow(c: ThemeTokens, title: String, subtitle: String, checked: 
             .padding(vertical = 2),
     ) {
         Column(spacing = 2, modifier = Modifier.weight(1.0)) {
-            Text(title, size = 14, color = c.fg, modifier = Modifier.medium())
-            Text(subtitle, size = 12, color = c.mutedFg, ellipsize = true)
+            Text(title, size = 14, color = c.foreground, modifier = Modifier.medium())
+            Text(subtitle, size = 12, color = c.mutedForeground, ellipsize = true)
         }
         // Hand-rolled switch: a rounded track with a knob on the left or the right. `Stack`
         // gives the knob the whole cell, `align` puts it at one end of it.
         Stack(
             Modifier.width(44).height(24).radius(999, 999)
-                .background(if (checked) c.accent else c.surface2)
+                .background(if (checked) c.primary else c.secondary)
                 .padding(3),
         ) {
             Box(
-                Modifier.width(18).height(18).radius(999, 999).background(c.bg)
+                Modifier.width(18).height(18).radius(999, 999).background(c.background)
                     .align(h = if (checked) Align.End else Align.Start, v = Align.Center),
             )
         }
@@ -342,10 +340,10 @@ private fun SwitchRow(c: ThemeTokens, title: String, subtitle: String, checked: 
 
 @Composable
 private fun Card(c: ThemeTokens, title: String, body: String, content: @Composable () -> Unit) {
-    Box(Modifier.fillWidth().radius(12).background(c.surface).padding(16)) {
+    Box(Modifier.fillWidth().radius(12).background(c.card).padding(16)) {
         Column(spacing = 8) {
-            Text(title, size = 16, color = c.fg, modifier = Modifier.bold())
-            Text(body, size = 13, color = c.mutedFg)
+            Text(title, size = 16, color = c.foreground, modifier = Modifier.bold())
+            Text(body, size = 13, color = c.mutedForeground)
             content()
         }
     }
@@ -356,9 +354,9 @@ private fun Pill(c: ThemeTokens, text: String, filled: Boolean) {
     Row(
         spacing = 6,
         modifier = Modifier.padding(horizontal = 16, vertical = 10).radius(999, 999)
-            .background(if (filled) c.accent else c.surface2),
+            .background(if (filled) c.primary else c.secondary),
     ) {
-        Text(text, size = 14, color = if (filled) c.bg else c.fg, modifier = if (filled) Modifier.bold() else Modifier.medium())
+        Text(text, size = 14, color = if (filled) c.background else c.foreground, modifier = if (filled) Modifier.bold() else Modifier.medium())
     }
 }
 
@@ -377,13 +375,13 @@ private fun ModePill(c: ThemeTokens, mode: ThemeMode, active: Boolean, onClick: 
             .pointerCursor()
             .padding(vertical = 9)
             .radius(9)
-            .background(if (active) c.accent else c.surface2),
+            .background(if (active) c.primary else c.secondary),
     ) {
         Overlay(Modifier.fillWidth()) {
             Label(
                 label,
                 modifier = Modifier.fontFamily("sans").align(h = Align.Center)
-                    .textColor(if (active) c.bg else c.fg),
+                    .textColor(if (active) c.background else c.foreground),
             )
         }
     }
@@ -395,7 +393,7 @@ private fun Modifier.requiredTile(): Modifier = requiredSize(30)
 /** Pick a readable label color: light text on dark swatches, dark on light. */
 private fun textOn(swatch: Color, theme: ThemeTokens): Color {
     // Luminance-ish heuristic using the green channel as proxy.
-    return if (swatch.g + swatch.r + swatch.b > 384) theme.bg else theme.fg
+    return if (swatch.g + swatch.r + swatch.b > 384) theme.background else theme.foreground
 }
 
 /** Kotlin/Native has no `String.format`, and a slider would otherwise print 1.2500001. */

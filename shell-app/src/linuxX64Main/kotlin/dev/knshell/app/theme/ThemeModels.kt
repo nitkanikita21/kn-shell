@@ -35,16 +35,84 @@ data class DesignTokens(
     }
 }
 
+/**
+ * The semantic surface of the UI — the shadcn token set, not a bag of colours.
+ *
+ * palette-core's only job is to read the wallpaper and answer *what hue and how saturated*;
+ * everything that decides how the UI looks lives here, in Kotlin. Naming follows shadcn
+ * (`background`/`foreground` pairs, `card`, `popover`, `primary`, `secondary`, `muted`,
+ * `accent`, `destructive`, `border`, `input`, `ring`) so a component can be reasoned about the
+ * same way it would be on the web, and so "what is the hover background" has one answer
+ * (`accent`) instead of a per-widget invention.
+ *
+ * Every `*-foreground` is the colour that is legible **on** its partner, which is why they are
+ * separate tokens rather than a computed contrast: the pairing is a design decision.
+ *
+ * Not included on purpose: `chart-*` and `sidebar-*` from shadcn — the shell has neither
+ * charts nor a sidebar, and an unused token is a token nobody keeps correct.
+ */
 data class ThemeTokens(
-    val bg: Color,
-    val surface: Color,
-    val surface2: Color,
-    val border: Color,
-    val mutedFg: Color,
-    val fg: Color,
+    /** The window itself. */
+    val background: Color,
+    /** Default text on [background]. */
+    val foreground: Color,
+    /** Raised surface: cards, panels, the popover body. */
+    val card: Color,
+    val cardForeground: Color,
+    /** Floating surface (menus, tooltips) — same tone as [card] unless a design says otherwise. */
+    val popover: Color,
+    val popoverForeground: Color,
+    /** The brand colour derived from the wallpaper: selected tabs, filled buttons, focus. */
+    val primary: Color,
+    /** Text/icon on [primary]. */
+    val primaryForeground: Color,
+    /** The second surface step: inactive tabs, wells, progress tracks. */
+    val secondary: Color,
+    val secondaryForeground: Color,
+    /** Recessed/quiet area — same tone as [secondary]. */
+    val muted: Color,
+    /** Secondary text: helper lines, captions, timestamps. */
+    val mutedForeground: Color,
+    /** Hover/pressed wash, **not** the brand colour (that is [primary]). */
     val accent: Color,
+    val accentForeground: Color,
+    /** Errors and destructive actions. Independent of the wallpaper hue on purpose. */
+    val destructive: Color,
+    val destructiveForeground: Color,
+    /** Hairlines between surfaces. */
+    val border: Color,
+    /** Form-control outlines (slightly stronger than [border]). */
+    val input: Color,
+    /** Focus ring. */
+    val ring: Color,
     val isDark: Boolean,
-)
+) {
+    /**
+     * Every token in shadcn order. The demo swatches iterate this, so a new token cannot be
+     * added to the theme and silently left out of the specimen.
+     */
+    fun entries(): List<Pair<String, Color>> = listOf(
+        "background" to background,
+        "foreground" to foreground,
+        "card" to card,
+        "cardForeground" to cardForeground,
+        "popover" to popover,
+        "popoverForeground" to popoverForeground,
+        "primary" to primary,
+        "primaryForeground" to primaryForeground,
+        "secondary" to secondary,
+        "secondaryForeground" to secondaryForeground,
+        "muted" to muted,
+        "mutedForeground" to mutedForeground,
+        "accent" to accent,
+        "accentForeground" to accentForeground,
+        "destructive" to destructive,
+        "destructiveForeground" to destructiveForeground,
+        "border" to border,
+        "input" to input,
+        "ring" to ring,
+    )
+}
 
 data class RadiusScale(
     val sm: Int = 4,

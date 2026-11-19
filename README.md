@@ -217,7 +217,8 @@ fun main() = Shell.run {
 The complete reference — window/bar specs, layers, anchors, margins, exclusive zone,
 keyboard mode, service latency, actions, the kit, the modifier table and extension points —
 is in [`docs/shell-api.md`](docs/shell-api.md). A focused bar-module tutorial (custom bar,
-kit overview) is in [`docs/bar-api.md`](docs/bar-api.md).
+kit overview) is in [`docs/bar-api.md`](docs/bar-api.md). How a wallpaper becomes a theme —
+which numbers Rust produces and which tokens Kotlin owns — is in [`docs/theme.md`](docs/theme.md).
 
 ### The bar
 
@@ -386,5 +387,5 @@ committed.
 │           └── Palette.kt       # Grayscale palette
 ├── scripts/dev.sh, scripts/run.sh, scripts/gobley-rustup.sh
 ├── scripts/test-notification.sh   # sends a rich test notification (icon+actions)
-└── docs/shell-api.md, docs/bar-api.md
+└── docs/shell-api.md, docs/bar-api.md, docs/theme.md
 ```
