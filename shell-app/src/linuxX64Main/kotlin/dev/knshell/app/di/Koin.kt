@@ -24,8 +24,9 @@ import org.koin.dsl.module
  * One singleton per long-lived service (same lifecycle the old `object Services`
  * locator gave). [ThemeService] is bound to its [ThemeServiceImpl] so the UI can
  * depend on the interface. Everything is a plain `single { }` — no constructor
- * injection is used because most framework services take no parameters; the
- * container is handed to the compose tree via [ProvideKoin].
+ * injection is used because most framework services take no parameters. The container is
+ * process-wide (`KoinPlatform.getKoin`), so the UI reaches it from *any* composition — one
+ * window, the bar, a popover — without a CompositionLocal wrapper.
  *
  * NOTE: platform-specific glue (Kotlin/Native has no `expect`/Android context
  * here) is unnecessary for a single linuxX64 target, so the whole module lives
@@ -40,8 +41,8 @@ val appModule = module {
 }
 
 /**
- * Starts Koin exactly once. Call this from [main] before the composition is
- * entered, so the container can be provided through [ProvideKoin].
+ * Starts Koin exactly once. Call this from [main] before any composition is entered:
+ * `injectDi()` resolves services from the global container and throws without it.
  */
 fun initKoin() {
     startKoin {

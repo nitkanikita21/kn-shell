@@ -6,11 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import dev.knshell.app.theme.ThemeMode
+import dev.knshell.app.theme.ThemeService
 import dev.knshell.app.theme.ThemeTokens
 import dev.knshell.app.ui.helpers.collectTheme
 import dev.knshell.app.ui.helpers.collectThemeMode
 import dev.knshell.app.ui.helpers.injectDi
-import dev.knshell.app.theme.ThemeService
 import dev.knshell.compose.Align
 import dev.knshell.compose.Box
 import dev.knshell.compose.Color
@@ -44,6 +44,7 @@ import dev.knshell.compose.requiredSize
 import dev.knshell.compose.textColor
 import dev.knshell.compose.weight
 import dev.knshell.compose.width
+import dev.knshell.icons.IconRef
 import dev.knshell.icons.lucide.Lucide
 import dev.knshell.ui.primitives.Text
 
@@ -148,7 +149,13 @@ private fun Header(c: ThemeTokens, mode: ThemeMode) {
 // ------------------------------------------------------------------ tabs
 
 @Composable
-private fun TabPill(c: ThemeTokens, name: String, icon: dev.knshell.icons.IconRef, active: Boolean, onClick: () -> Unit) {
+private fun TabPill(
+    c: ThemeTokens,
+    name: String,
+    icon: IconRef,
+    active: Boolean,
+    onClick: () -> Unit,
+) {
     Row(
         spacing = 6,
         modifier = Modifier
@@ -168,7 +175,12 @@ private fun TabPill(c: ThemeTokens, name: String, icon: dev.knshell.icons.IconRe
 @Composable
 private fun OverviewTab(c: ThemeTokens) {
     Column(spacing = 16, modifier = Modifier.fillWidth()) {
-        Card(c, "Card title", "Muted helper text that sits on the surface token to check foreground legibility against the derived palette.") {
+        Card(
+            c,
+            "Card title",
+            "Muted helper text that sits on the surface token to check foreground " +
+                "legibility against the derived palette.",
+        ) {
             var powerHover by remember { mutableStateOf(false) }
             Row(
                 spacing = 8,
@@ -216,7 +228,12 @@ private fun OverviewTab(c: ThemeTokens) {
 
 // ------------------------------------------------------------------ tab 1: list
 
-private data class ListEntry(val icon: dev.knshell.icons.IconRef, val title: String, val subtitle: String, val value: String)
+private data class ListEntry(
+    val icon: IconRef,
+    val title: String,
+    val subtitle: String,
+    val value: String,
+)
 
 @Composable
 private fun ListTab(c: ThemeTokens) {
@@ -260,7 +277,12 @@ private fun ListRow(c: ThemeTokens, entry: ListEntry) {
             Text(entry.subtitle, size = 12, color = c.mutedForeground, ellipsize = true)
         }
         Text(entry.value, size = 13, color = c.mutedForeground, modifier = Modifier.align(v = Align.Center))
-        Icon(Lucide.ChevronRight, size = 16, color = if (hover) c.foreground else c.mutedForeground, modifier = Modifier.align(v = Align.Center))
+        Icon(
+            Lucide.ChevronRight,
+            size = 16,
+            color = if (hover) c.foreground else c.mutedForeground,
+            modifier = Modifier.align(v = Align.Center),
+        )
     }
 }
 
@@ -296,9 +318,9 @@ private fun SettingsTab(c: ThemeTokens, mode: ThemeMode, onMode: (ThemeMode) -> 
             Row(spacing = 8, modifier = Modifier.fillWidth()) {
                 Icon(Lucide.SlidersHorizontal, size = 16, color = c.mutedForeground)
                 Text("Interface scale", size = 13, color = c.foreground, modifier = Modifier.weight(1.0))
-                Text(twoDecimals(scale ?: 1.0f) + "×", size = 13, color = c.mutedForeground)
+                Text(twoDecimals(scale) + "×", size = 13, color = c.mutedForeground)
             }
-            Slider(value = scale ?: 1.0f, min = 0.75f, max = 2f, step = 0.05f, onValueChange = { scale = it })
+            Slider(value = scale, min = 0.75f, max = 2f, step = 0.05f, onValueChange = { scale = it })
         }
 
         Row(spacing = 10, modifier = Modifier.fillWidth()) {
@@ -356,7 +378,12 @@ private fun Pill(c: ThemeTokens, text: String, filled: Boolean) {
         modifier = Modifier.padding(horizontal = 16, vertical = 10).radius(999, 999)
             .background(if (filled) c.primary else c.secondary),
     ) {
-        Text(text, size = 14, color = if (filled) c.background else c.foreground, modifier = if (filled) Modifier.bold() else Modifier.medium())
+        Text(
+            text,
+            size = 14,
+            color = if (filled) c.background else c.foreground,
+            modifier = if (filled) Modifier.bold() else Modifier.medium(),
+        )
     }
 }
 
@@ -391,10 +418,9 @@ private fun ModePill(c: ThemeTokens, mode: ThemeMode, active: Boolean, onClick: 
 private fun Modifier.requiredTile(): Modifier = requiredSize(30)
 
 /** Pick a readable label color: light text on dark swatches, dark on light. */
-private fun textOn(swatch: Color, theme: ThemeTokens): Color {
-    // Luminance-ish heuristic using the green channel as proxy.
-    return if (swatch.g + swatch.r + swatch.b > 384) theme.background else theme.foreground
-}
+private fun textOn(swatch: Color, theme: ThemeTokens): Color =
+    // Cheap luminance proxy: the sum of the channels against 3 × mid-grey.
+    if (swatch.r + swatch.g + swatch.b > 384) theme.background else theme.foreground
 
 /** Kotlin/Native has no `String.format`, and a slider would otherwise print 1.2500001. */
 private fun twoDecimals(value: Float): String {

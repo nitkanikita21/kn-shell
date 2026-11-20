@@ -1,4 +1,3 @@
-import dev.knshell.app.di.ProvideKoin
 import dev.knshell.app.di.initKoin
 import dev.knshell.app.theme.ThemeService
 import dev.knshell.app.ui.helpers.injectDi
@@ -32,9 +31,7 @@ fun main() {
         width = 0,
         height = 0,
     ) {
-        ProvideKoin {
-            AppRoot()
-        }
+        AppRoot()
     }
 }
 
