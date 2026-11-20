@@ -58,15 +58,15 @@
 
 ## Steps
 
-- [ ] **0. Baseline.** Прогнати `cargo test` (rust-core, palette-core) і `./gradlew :framework:nativeTest :icons:core:nativeTest :shell-app:compileKotlinLinuxX64`. Зафіксувати, що обидва green ДО рефакторингу (якщо ні — зупинитись і доповісти, не лагодити чуже всерівно).
-- [ ] **1. Usage-scan публічного surface.** Агент (researcher, deepseek) будує мапу: кожен public символ `framework`/`icons:core`/`rust-core` → зовнішні споживачі (shell-app, інші модулі, тести). Результат — список «заморожений API» vs «можно internal».
-- [ ] **2. rust-core restructure.** Спліт `lib.rs` → `types.rs`/`listeners.rs`/`api.rs`; `notifications.rs` за concern; `pub(crate)` для механіки; rustdoc на кожен `pub` item; `README.md`. Gate: `cargo test` у `rust-core`.
-- [ ] **3. palette-core docs pass.** Rustdoc-покриття `pub` itemів, оновити `README.md` за потреби. Gate: `cargo test` у `palette-core`.
-- [ ] **4. framework compose/ спліт.** `Modifier.kt` → 5–6 файлів (той же package); `Widgets.kt` → nodes/layout/basic; `internal/` підпапка для `GtkFrameClock` internals, `Reset` хуків тощо (лише символи без зовнішніх споживачів за мапою з кроку 1). KDoc на public. Gate: `:framework:nativeTest` + `:shell-app:compileKotlinLinuxX64`.
-- [ ] **5. framework shell/ + services/ + ui/ + animation/.** Спліт `Popover.kt`, `ShellRuntime.kt`; KDoc на кожен `*Service`; впорядкування `ui/`; видимість `animation/`. Gate: те саме.
-- [ ] **6. icons:core + icons-plugin.** KDoc-pass; `internal` для `RsvgCache` internals (перевірити споживачів); README для `icons/core` і `icons-plugin`. Gate: `:icons:core:nativeTest` + `:icons-plugin:test` (JVM).
-- [ ] **7. MODULE.md для всіх модулів + синхронізація docs/*.md.** Кожен модуль: призначення, публічний API-таблиця, правила залежностей, карта файлів. `docs/*.md` — нові шляхи. Gate: ручна перевірка посилань (`rg` за старими шляхами = 0 hit).
-- [ ] **8. Final verification.** `./gradlew build` (повний, включаючи shell-app) + `cargo test` в обох кратках; reviewer-агент (deepseek, read-only) перевіряє: жодного дифу в `shell-app/**`, кожен public символ документований, файли ≤ ~300 рядків.
+- [x] **0. Baseline.** Прогнати `cargo test` (rust-core, palette-core) і `./gradlew :framework:nativeTest :icons:core:nativeTest :shell-app:compileKotlinLinuxX64`. Зафіксувати, що обидва green ДО рефакторингу (якщо ні — зупинитись і доповісти, не лагодити чуже всерівно).
+- [x] **1. Usage-scan публічного surface.** Агент (researcher, deepseek) будує мапу: кожен public символ `framework`/`icons:core`/`rust-core` → зовнішні споживачі (shell-app, інші модулі, тести). Результат — список «заморожений API» vs «можно internal».
+- [x] **2. rust-core restructure.** Спліт `lib.rs` → `types.rs`/`listeners.rs`/`api.rs`; `notifications.rs` за concern; `pub(crate)` для механіки; rustdoc на кожен `pub` item; `README.md`. Gate: `cargo test` у `rust-core`.
+- [x] **3. palette-core docs pass.** Rustdoc-покриття `pub` itemів, оновити `README.md` за потреби. Gate: `cargo test` у `palette-core`.
+- [x] **4. framework compose/ спліт.** `Modifier.kt` → 5–6 файлів (той же package); `Widgets.kt` → nodes/layout/basic; `internal/` підпапка для `GtkFrameClock` internals, `Reset` хуків тощо (лише символи без зовнішніх споживачів за мапою з кроку 1). KDoc на public. Gate: `:framework:nativeTest` + `:shell-app:compileKotlinLinuxX64`.
+- [x] **5. framework shell/ + services/ + ui/ + animation/.** Спліт `Popover.kt`, `ShellRuntime.kt`; KDoc на кожен `*Service`; впорядкування `ui/`; видимість `animation/`. Gate: те саме.
+- [x] **6. icons:core + icons-plugin.** KDoc-pass; `internal` для `RsvgCache` internals (перевірити споживачів); README для `icons/core` і `icons-plugin`. Gate: `:icons:core:nativeTest` + `:icons-plugin:test` (JVM).
+- [x] **7. MODULE.md для всіх модулів + синхронізація docs/*.md.** Кожен модуль: призначення, публічний API-таблиця, правила залежностей, карта файлів. `docs/*.md` — нові шляхи. Gate: ручна перевірка посилань (`rg` за старими шляхами = 0 hit).
+- [x] **8. Final verification.** `./gradlew build` (повний, включаючи shell-app) + `cargo test` в обох кратках; reviewer-агент (deepseek, read-only) перевіряє: жодного дифу в `shell-app/**`, кожен public символ документований, файли ≤ ~300 рядків.
 
 ## Verification
 
