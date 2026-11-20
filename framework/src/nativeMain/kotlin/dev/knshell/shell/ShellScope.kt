@@ -1,3 +1,6 @@
+// The declarative window list handed to `Shell.run` and the public window specs: `WindowSpec`,
+// `BarWindowSpec`, `BarAnchor`, `ExclusiveZone`, `Margins` and `WindowHandle`.
+
 @file:OptIn(ExperimentalForeignApi::class)
 
 package dev.knshell.shell

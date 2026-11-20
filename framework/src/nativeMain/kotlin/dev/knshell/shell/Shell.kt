@@ -1,3 +1,6 @@
+// Entry point of the public shell API: the `Shell` object, `Shell.run` and the `Shell.Hyprland`
+// compositor actions.
+
 package dev.knshell.shell
 
 import dev.knshell.core.hyprctlDispatch

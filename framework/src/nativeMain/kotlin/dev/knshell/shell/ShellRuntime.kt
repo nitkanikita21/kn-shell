@@ -1,3 +1,7 @@
+// The process-wide runtime: one GTK initialisation, one GLib loop, one dispatcher, one frame
+// clock, one `Recomposer` and the window registry. Layer-shell interop is in LayerShell.kt,
+// the per-window record in RuntimeWindow.kt.
+
 @file:OptIn(ExperimentalForeignApi::class)
 
 package dev.knshell.shell
@@ -24,26 +28,13 @@ import kotlinx.cinterop.staticCFunction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.cinterop.IntVar
-import kotlinx.cinterop.alloc
-import kotlinx.cinterop.memScoped
-import kotlinx.cinterop.ptr
 import kn.gtk.gtk_widget_queue_resize
-import kn.gtk.gtk_widget_get_native
-import kn.gtk.gtk_native_get_surface
-import kn.gtk.gdk_surface_set_input_region
-import kn.gtk.cairo_region_union_rectangle
-import kn.gtk.cairo_region_destroy
-import kn.gtk.cairo_region_create
-import kn.gtk.GdkRectangle
 import kn.gtk.GMainLoop
 import kn.gtk.GdkDisplay
 import kn.gtk.GtkOrientation
 import kn.gtk.GtkWidget
 import kn.gtk.GtkWindow
-import kn.gtk.GTK_LAYER_SHELL_EDGE_BOTTOM
 import kn.gtk.GTK_LAYER_SHELL_EDGE_LEFT
-import kn.gtk.GTK_LAYER_SHELL_EDGE_RIGHT
 import kn.gtk.GTK_LAYER_SHELL_EDGE_TOP
 import kn.gtk.g_main_loop_new
 import kn.gtk.g_main_loop_quit
@@ -54,22 +45,13 @@ import kn.gtk.gtk_box_new
 import kn.gtk.gtk_css_provider_load_from_string
 import kn.gtk.gtk_css_provider_new
 import kn.gtk.gtk_init
-import kn.gtk.gtk_layer_auto_exclusive_zone_enable
-import kn.gtk.gtk_layer_init_for_window
-import kn.gtk.gtk_layer_is_supported
-import kn.gtk.gtk_layer_set_anchor
-import kn.gtk.gtk_layer_set_exclusive_zone
-import kn.gtk.gtk_layer_set_keyboard_mode
-import kn.gtk.gtk_layer_set_layer
 import kn.gtk.gtk_layer_set_margin
-import kn.gtk.gtk_layer_set_namespace
 import kn.gtk.gtk_style_context_add_provider
 import kn.gtk.gtk_style_context_add_provider_for_display
 import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_get_style_context
 import kn.gtk.gtk_widget_set_margin_bottom
 import kn.gtk.gtk_widget_set_margin_end
-import kn.gtk.gtk_widget_set_size_request
 import kn.gtk.gtk_widget_set_margin_start
 import kn.gtk.gtk_widget_set_margin_top
 import kn.gtk.gtk_window_close
@@ -111,8 +93,10 @@ internal class ShellRuntime private constructor() {
         ensureGtk()
     }
 
+    /** True while at least one window is mounted. */
     val hasWindows: Boolean get() = windows.isNotEmpty()
 
+    /** Number of windows currently mounted. */
     val windowCount: Int get() = windows.size
 
     /** Initialises GTK, the frame clock and the recomposition loop (once per process). */
@@ -347,74 +331,3 @@ internal class ShellRuntime private constructor() {
         return composition
     }
 }
-
-/** A window mounted on the runtime; tracked until its close-request fires. */
-private class RuntimeWindow(
-    val runtime: ShellRuntime,
-    val id: Int,
-    val window: CPointer<GtkWindow>,
-    val title: String,
-    val composition: Composition,
-) {
-    var selfRef: StableRef<RuntimeWindow>? = null
-    var closed: Boolean = false
-}
-
-/**
- * Turns [window] into a wlr-layer-shell surface according to [spec].
- *
- * Requires a wlroots-based compositor (Hyprland / Sway / Niri). On GNOME/Mutter the
- * protocol is not implemented and `gtk_layer_is_supported()` returns false.
- */
-private fun configureLayerShell(window: CPointer<GtkWindow>, spec: BarWindowSpec) {
-    if (gtk_layer_is_supported() == 0) {
-        println("[shell-ui] gtk4-layer-shell not supported by this compositor; using a normal window")
-        return
-    }
-    gtk_layer_init_for_window(window)
-    gtk_layer_set_namespace(window, spec.namespace)
-    gtk_layer_set_layer(window, spec.layer)
-
-    if (BarAnchor.Top in spec.anchors) {
-        gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_TOP, 1)
-        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_TOP, spec.margins.top)
-    }
-    if (BarAnchor.Bottom in spec.anchors) {
-        gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_BOTTOM, 1)
-        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_BOTTOM, spec.margins.bottom)
-    }
-    if (BarAnchor.Left in spec.anchors) {
-        gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_LEFT, 1)
-        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_LEFT, spec.margins.left)
-    }
-    if (BarAnchor.Right in spec.anchors) {
-        gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_RIGHT, 1)
-        gtk_layer_set_margin(window, GTK_LAYER_SHELL_EDGE_RIGHT, spec.margins.right)
-    }
-
-    val zone = spec.exclusiveZone
-    when (zone) {
-        ExclusiveZone.Auto -> gtk_layer_auto_exclusive_zone_enable(window)
-        ExclusiveZone.None -> gtk_layer_set_exclusive_zone(window, 0)
-        is ExclusiveZone.Fixed -> gtk_layer_set_exclusive_zone(window, zone.pixels)
-    }
-    gtk_layer_set_keyboard_mode(window, spec.keyboardMode)
-
-    println(
-        "[shell-ui] layer-shell surface initialised (namespace=${spec.namespace}, " +
-            "layer=${spec.layer}, anchors=${spec.anchors}, exclusive=${spec.exclusiveZone})"
-    )
-}
-
-/**
- * Default rules for windows created through [ShellScope]: the shell's window background
- * and fully transparent layer-shell bars.
- */
-private const val RUNTIME_CSS: String = """
-window.kn-window {
-    background-color: rgba(18, 18, 24, 0.85);
-}
-window.kn-window.kn-bar {
-    background-color: transparent;
-}
-"""
