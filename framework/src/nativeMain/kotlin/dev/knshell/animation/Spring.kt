@@ -1,3 +1,6 @@
+// Float animation on Compose Runtime alone (`animation-core` is not published for linuxX64):
+// `animateFloatAsState`, `spring`, `Easing`/`eased` and `Animate`.
+
 package dev.knshell.animation
 
 import androidx.compose.runtime.Composable

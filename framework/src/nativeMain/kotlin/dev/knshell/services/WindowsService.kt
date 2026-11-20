@@ -1,3 +1,5 @@
+// Toplevel window service (`ext-foreign-toplevel-list-v1`).
+
 package dev.knshell.services
 
 import dev.knshell.core.WindowInfo

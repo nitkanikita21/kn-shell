@@ -1,3 +1,5 @@
+// Network service: throughput, interface, SSID, signal strength and connection type.
+
 package dev.knshell.services
 
 import dev.knshell.core.NetworkListener
@@ -24,6 +26,7 @@ class NetworkService() : ShellService {
         ),
     )
 
+    /** Latest throughput and connection state. */
     val state: StateFlow<NetworkState> = mutable.asStateFlow()
 
     private val retained = mutableListOf<Any>()

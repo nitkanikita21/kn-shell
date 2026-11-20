@@ -1,3 +1,6 @@
+// Locale-independent number formatting — Kotlin/Native has no `String.format`: decimals,
+// percentages, byte counts and throughput.
+
 package dev.knshell.ui
 
 import kotlin.math.abs

@@ -1,3 +1,5 @@
+// Hyprland focus service: the active window and the current keybind submap.
+
 package dev.knshell.services
 
 import dev.knshell.core.ActiveWindow

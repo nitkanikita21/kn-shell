@@ -1,3 +1,5 @@
+// Hyprland workspace service: event-driven socket with an initial refresh.
+
 package dev.knshell.services
 
 import dev.knshell.core.WorkspaceInfo
@@ -12,6 +14,7 @@ class WorkspacesService() : ShellService {
 
     private val mutable = MutableStateFlow<List<WorkspaceInfo>>(emptyList())
 
+    /** All workspaces known to the compositor, in compositor order. */
     val state: StateFlow<List<WorkspaceInfo>> = mutable.asStateFlow()
 
     private val retained = mutableListOf<Any>()

@@ -1,3 +1,5 @@
+// `Image` — a file-backed `GtkPicture` node scaled to an exact pixel size at load time.
+
 @file:OptIn(ExperimentalForeignApi::class)
 
 package dev.knshell.ui.primitives

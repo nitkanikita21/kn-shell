@@ -1,3 +1,6 @@
+// Default-sink volume service: subscribes to the Rust `VolumeListener`, exposes `state` and
+// `setVolume`.
+
 package dev.knshell.services
 
 import dev.knshell.core.VolumeListener
@@ -11,6 +14,7 @@ class AudioService() : ShellService {
 
     private val mutable = MutableStateFlow(0)
 
+    /** Current default-sink volume, in percent (0-150). */
     val state: StateFlow<Int> = mutable.asStateFlow()
 
     private val retained = mutableListOf<Any>()

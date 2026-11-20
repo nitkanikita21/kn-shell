@@ -1,3 +1,5 @@
+// The `ShellService` supertype implemented by every service object.
+
 package dev.knshell.services
 
 /**
@@ -7,5 +9,6 @@ package dev.knshell.services
  * keeps the UniFFI callback object alive for the lifetime of the process.
  */
 interface ShellService {
+    /** Starts the service and its Rust subscription; idempotent. */
     fun start()
 }

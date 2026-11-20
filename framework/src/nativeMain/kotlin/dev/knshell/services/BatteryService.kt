@@ -1,3 +1,5 @@
+// Battery service: charge/status polled from `/sys/class/power_supply` by the Rust core.
+
 package dev.knshell.services
 
 import dev.knshell.core.BatteryListener
@@ -12,6 +14,7 @@ class BatteryService() : ShellService {
 
     private val mutable = MutableStateFlow(BatteryState(false, 0, false, "Unknown"))
 
+    /** Latest battery state, pushed by the Rust poll. */
     val state: StateFlow<BatteryState> = mutable.asStateFlow()
 
     private val retained = mutableListOf<Any>()

@@ -1,3 +1,6 @@
+// Per-frame tick of every mounted size animator: probe the natural size, advance the tween,
+// push the value to the native layout manager.
+
 package dev.knshell.animation
 
 /**

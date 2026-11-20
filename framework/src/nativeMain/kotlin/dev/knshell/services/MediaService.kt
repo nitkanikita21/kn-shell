@@ -1,3 +1,5 @@
+// MPRIS service: active player state plus play/pause control.
+
 package dev.knshell.services
 
 import dev.knshell.core.MediaListener

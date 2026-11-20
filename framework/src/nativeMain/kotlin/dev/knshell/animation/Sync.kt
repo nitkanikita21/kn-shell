@@ -1,3 +1,5 @@
+// Shared eased progress for a subtree (`Animate`) plus the `lerp` / `lerpColor` helpers.
+
 package dev.knshell.animation
 
 import androidx.compose.runtime.Composable

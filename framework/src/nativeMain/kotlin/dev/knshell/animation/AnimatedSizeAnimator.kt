@@ -1,3 +1,6 @@
+// Per-widget animator for a container's main-axis size: registry membership, GTK `"destroy"`
+// cleanup and the entry point the `animatedWidth`/`animatedHeight` modifiers call.
+
 @file:OptIn(ExperimentalForeignApi::class)
 
 package dev.knshell.animation

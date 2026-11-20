@@ -1,3 +1,5 @@
+// CAVA spectrum service: 16 bins, each 0..100, ~30 fps.
+
 package dev.knshell.services
 
 import dev.knshell.core.SpectrumListener
@@ -11,6 +13,7 @@ class SpectrumService() : ShellService {
 
     private val mutable = MutableStateFlow(List(16) { 0 })
 
+    /** Current bars, each 0..100. */
     val state: StateFlow<List<Int>> = mutable.asStateFlow()
 
     private val retained = mutableListOf<Any>()

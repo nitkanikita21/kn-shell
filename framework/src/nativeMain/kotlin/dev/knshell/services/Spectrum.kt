@@ -1,3 +1,5 @@
+// `bucketLevels` — reduces a CAVA spectrum to N averaged bars.
+
 package dev.knshell.services
 
 /**

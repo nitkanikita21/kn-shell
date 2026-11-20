@@ -1,3 +1,6 @@
+// Animation specs (`Tween`, `Spring`, `Snap`) and their short constructor aliases — the
+// Kotlin-owned half of content-driven size animation.
+
 package dev.knshell.animation
 
 import androidx.compose.runtime.Immutable

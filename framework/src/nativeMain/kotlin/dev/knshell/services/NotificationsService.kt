@@ -1,3 +1,6 @@
+// Notification service: bounded history (newest first), do-not-disturb and server-mode
+// close/action calls.
+
 package dev.knshell.services
 
 import dev.knshell.core.NotificationInfo

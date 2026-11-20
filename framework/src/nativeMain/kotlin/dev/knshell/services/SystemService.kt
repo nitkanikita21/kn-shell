@@ -1,3 +1,5 @@
+// CPU / RAM statistics service.
+
 package dev.knshell.services
 
 import dev.knshell.core.SystemListener
@@ -12,6 +14,7 @@ class SystemService() : ShellService {
 
     private val mutable = MutableStateFlow(SystemStats(0, 0))
 
+    /** Latest CPU / RAM statistics. */
     val state: StateFlow<SystemStats> = mutable.asStateFlow()
 
     private val retained = mutableListOf<Any>()

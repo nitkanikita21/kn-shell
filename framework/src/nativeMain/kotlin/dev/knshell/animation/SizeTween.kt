@@ -1,3 +1,6 @@
+// The tween/spring integrator for one content-driven size value: no Compose state, one
+// `queue_resize` per changed frame.
+
 package dev.knshell.animation
 
 import kotlin.math.abs
