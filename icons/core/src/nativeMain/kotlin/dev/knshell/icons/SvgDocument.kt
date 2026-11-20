@@ -10,7 +10,10 @@ import dev.knshell.compose.Color
  * assert on the exact markup without a GTK connection.
  */
 
-/** framework [Color] (0..255 ints) → `#RRGGBB`, uppercase, alpha ignored. */
+/**
+ * Framework [Color] (0..255 ints) → `#RRGGBB`, uppercase. Alpha is ignored and
+ * out-of-range components are clamped to `0..255`, so this never throws.
+ */
 fun colorToHex(color: Color): String {
     fun ch(v: Int) = v.coerceIn(0, 255).toString(16).padStart(2, '0').uppercase()
     return "#" + ch(color.r) + ch(color.g) + ch(color.b)
@@ -54,6 +57,16 @@ private fun normalizeStrokeWidth(markup: String, width: Double): String =
  * `fill="currentColor"` staying in the markup, so nothing is touched there).
  *
  * Returns `null` only for a `null` [inner]; callers map that to an empty slot.
+ *
+ * Sizes and the `viewBox` are in the pack's user units (see [IconStyle.viewBoxSize]);
+ * `strokeWidth` is in those same units, so it scales with [IconStyle.viewBoxSize].
+ * Never throws: malformed markup is wrapped as-is and fails later in librsvg, which
+ * [RsvgCache] maps to an empty slot.
+ *
+ * @param inner raw SVG body, or `null` when the pack lacks the id.
+ * @param style tinting convention and canvas of the pack.
+ * @param colorHex tint `#RRGGBB`; `null` keeps the pack's own colours.
+ * @param strokeWidth override in user units; `null` = [IconStyle.strokeWidth].
  */
 fun buildTintedDocument(
     inner: String?,

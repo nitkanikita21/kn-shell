@@ -31,6 +31,8 @@ import kotlinx.cinterop.ExperimentalForeignApi
  * ```
  *
  * @param icon pack-qualified reference; unknown ids warn once and paint an empty slot.
+ * @param modifier normal DSL modifiers (`onClick`, `pointerCursor`, margins …), applied to the
+ *   node through the same `applyModifierFromModule` pipeline as every framework widget.
  * @param size icon box in logical px; the widget requests exactly size×size
  * (like `Image`), and the artwork is always centered inside whatever cell the
  * parent allocates — flex containers may stretch the cell, never the icon.

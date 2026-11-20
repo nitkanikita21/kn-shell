@@ -27,7 +27,11 @@ import kn.rsvg.rsvg_handle_render_document
  */
 internal object RsvgCache {
 
-    /** Entries kept per level; one icon costs ~2 KB of string + one parsed handle. */
+    /**
+     * Cap per level (documents and handles), 256 by default; one icon costs ~2 KB of
+     * string + one parsed handle. Read on every insert, so lowering it evicts on the next
+     * insert rather than immediately — evicted handles are unref'd, never leaked.
+     */
     var maxEntries: Int = 256
 
     private val documents = Lru<String>()

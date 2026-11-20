@@ -33,18 +33,29 @@ import kn.gtk.gtk_widget_queue_draw
  * parent Row/Column can never stretch the icon box. Containers still grow the
  * widget along their main axis, so the artwork is centered inside whatever
  * allocation arrives — see [RsvgCache.render].
+ *
+ * Node class, not a composable: `:icons:core` owns it because the renderer
+ * lives here, but only `dev.knshell.compose.Icon` (same module) constructs it.
+ *
+ * @param ref icon painted on the next draw; the `Icon` composable swaps it and
+ *   calls [requestRedraw].
+ * @param size initial box edge in logical px, used until [resize].
  */
-class IconNode(var ref: IconRef, size: Int) : GtkNode(gtk_drawing_area_new()!!) {
+internal class IconNode(var ref: IconRef, size: Int) : GtkNode(gtk_drawing_area_new()!!) {
 
-    /** `#RRGGBB`, or null = keep the pack's native colors. */
+    /** Tint `#RRGGBB` written into the pack's `tintAttribute`; null = keep the pack's native colors. */
     var colorHex: String? = null
 
-    /** stroke-width override; null = the pack's default. */
+    /** `stroke-width` override in the document's user units; null = the pack's default. */
     var strokeWidth: Double? = null
 
-    /** Transition bookkeeping; [transitionStartNs] == 0 means "no transition running". */
+    /** Target tint of the running tween as `#RRGGBB`; null = no tween requested. */
     var transitionTargetHex: String? = null
+
+    /** Frame-clock timestamp in nanoseconds when the tween started; `0` = not running. */
     var transitionStartNs: Long = 0L
+
+    /** Tween length in nanoseconds (`transitionMs * 1_000_000`); `0` paints immediately. */
     var transitionDurationNs: Long = 0L
 
     private var sizePx: Int = size
@@ -65,7 +76,11 @@ class IconNode(var ref: IconRef, size: Int) : GtkNode(gtk_drawing_area_new()!!) 
         gtk_drawing_area_set_draw_func(area, draw.reinterpret(), self.asCPointer(), null)
     }
 
-    /** Resize the widget slot (content request, same mechanism as Image). */
+    /**
+     * Resize the widget slot to [newSize]×[newSize] logical px (content request, same
+     * mechanism as `Image`). No-op when the edge is already [newSize]; otherwise the
+     * widget is repinned and redrawn on the next frame.
+     */
     fun resize(newSize: Int) {
         if (newSize == sizePx) return
         sizePx = newSize
@@ -83,6 +98,10 @@ class IconNode(var ref: IconRef, size: Int) : GtkNode(gtk_drawing_area_new()!!) 
         applyModifierFromModule(modifier)
     }
 
+    /**
+     * Queues one redraw of the drawing area (GTK main thread). Safe to call per frame —
+     * a queued draw is coalesced by GTK, so a tint tween costs no recomposition.
+     */
     fun requestRedraw() {
         gtk_widget_queue_draw(widget)
     }
@@ -92,7 +111,10 @@ class IconNode(var ref: IconRef, size: Int) : GtkNode(gtk_drawing_area_new()!!) 
     }
 }
 
-/** `#RRGGBB` → [Color]; malformed input yields opaque black rather than throwing. */
+/**
+ * `#RRGGBB` → opaque [Color]. Anything that is not exactly `#` + 6 hex digits yields
+ * opaque black; invalid digits read as `0`, so this never throws.
+ */
 internal fun hexToColor(hex: String): Color {
     if (hex.length != 7 || hex[0] != '#') return Color(0, 0, 0)
     fun nibble(c: Char): Int = c.digitToIntOrNull(16) ?: 0
