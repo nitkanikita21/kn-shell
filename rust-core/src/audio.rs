@@ -13,7 +13,7 @@ use crate::publish_volume;
 
 static STARTED: OnceLock<()> = OnceLock::new();
 
-pub fn ensure_started() {
+pub(crate) fn ensure_started() {
     STARTED.get_or_init(|| {
         std::thread::Builder::new()
             .name("kn-audio-listener".into())
@@ -59,7 +59,7 @@ fn query_volume() -> Option<i32> {
     digits.parse().ok()
 }
 
-pub fn set_volume(volume: i32) {
+pub(crate) fn set_volume(volume: i32) {
     let _ = std::process::Command::new("pactl")
         .args(["set-sink-volume", "@DEFAULT_SINK@", &format!("{volume}%")])
         .status();

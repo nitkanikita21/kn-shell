@@ -29,7 +29,7 @@ const FALLBACK_POLL: Duration = Duration::from_millis(400);
 /// Safety poll while listening on the event socket (missed events, compositor reloads).
 const SAFETY_POLL: Duration = Duration::from_secs(2);
 
-pub fn ensure_started() {
+pub(crate) fn ensure_started() {
     STARTED.get_or_init(|| {
         std::thread::Builder::new()
             .name("kn-workspace-listener".into())

@@ -82,7 +82,7 @@ impl ForeignToplevelListHandler for WindowWatcher {
 delegate_registry!(WindowWatcher);
 smithay_client_toolkit::delegate_dispatch2!(WindowWatcher);
 
-pub fn ensure_started() {
+pub(crate) fn ensure_started() {
     STARTED.get_or_init(|| {
         std::thread::Builder::new()
             .name("kn-window-listener".into())

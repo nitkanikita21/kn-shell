@@ -19,7 +19,7 @@ static STARTED: OnceLock<()> = OnceLock::new();
 const SEP: char = '\u{1f}';
 const FORMAT: &str = "{{status}}\u{1f}{{artist}}\u{1f}{{title}}\u{1f}{{playerName}}";
 
-pub fn ensure_started() {
+pub(crate) fn ensure_started() {
     STARTED.get_or_init(|| {
         std::thread::Builder::new()
             .name("kn-media-listener".into())
@@ -95,7 +95,7 @@ fn read_lines(child: &mut Child, last: &mut Option<MediaState>) {
 }
 
 /// Toggles playback through playerctl (also the fallback used by the shell action).
-pub fn toggle_play_pause() {
+pub(crate) fn toggle_play_pause() {
     let _ = Command::new("playerctl")
         .arg("play-pause")
         .stdout(Stdio::null())

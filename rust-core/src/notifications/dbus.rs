@@ -1,96 +1,49 @@
-//! Desktop notifications: the shell optionally **is** the notification server.
-//!
-//! Mode 1 (preferred): take over `org.freedesktop.Notifications` with a full
-//! `dbus-crossroads` server and serve the freedesktop spec:
-//!   methods   Notify, CloseNotification, GetCapabilities, GetServerInformation
-//!             (+ non-standard KnInvokeAction used by the bar UI)
-//!   signals   NotificationClosed, ActionInvoked
-//! If another daemon owns the name and refuses replacement, mode 2 runs a passive
-//! `dbus-monitor` watcher that only observes `Notify` calls (history without control).
-//!
-//! Expiry timeouts are not implemented yet: notifications stay until closed/dismissed.
+//! D-Bus side of the notification service: the `dbus-crossroads` server that owns
+//! `org.freedesktop.Notifications`, plus the control calls the bar UI makes over the
+//! same bus (`CloseNotification`, `KnInvokeAction`, DND toggles).
 
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader};
-use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
 
 use dbus::arg::PropMap;
 use dbus::blocking::stdintf::org_freedesktop_dbus::RequestNameReply;
 use dbus::blocking::Connection;
 use dbus::Message;
-use dbus_crossroads::{Context, Crossroads};
+use dbus_crossroads::Crossroads;
 
-use crate::{publish_notification, publish_notification_closed, NotificationInfo};
-
-static STARTED: OnceLock<()> = OnceLock::new();
-static SERVER_ACTIVE: AtomicBool = AtomicBool::new(false);
-static DND: AtomicBool = AtomicBool::new(false);
-
-const DEFAULT_EXPIRE_MS: i32 = 5000;
+use super::store::{close_notification, now_ms, pairs, ServerState};
+use super::{is_server, DND, SERVER_ACTIVE};
+use crate::{publish_notification, NotificationInfo};
 
 const BUS_NAME: &str = "org.freedesktop.Notifications";
+
+const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
+
+const INTERFACE: &str = "org.freedesktop.Notifications";
+
+/// Expiry used when a client passes `-1` ("server default") as `expire_timeout`.
+const DEFAULT_EXPIRE_MS: i32 = 5000;
 
 /// Bus name to serve; `KN_NOTIF_BUS_NAME` overrides it for tests with a scratch name.
 fn bus_name() -> String {
     std::env::var("KN_NOTIF_BUS_NAME").unwrap_or_else(|_| BUS_NAME.to_string())
 }
-const OBJECT_PATH: &str = "/org/freedesktop/Notifications";
-const INTERFACE: &str = "org.freedesktop.Notifications";
-const WATCH_MATCH: &str =
-    "type='method_call',interface='org.freedesktop.Notifications',member='Notify'";
 
+/// Builds the `NotificationClosed` signal for the given notification id and reason.
 fn closed_signal(id: u32, reason: u32) -> Message {
     Message::new_signal(OBJECT_PATH, INTERFACE, "NotificationClosed")
         .expect("signal")
         .append2(id, reason)
 }
 
+/// Builds the `ActionInvoked` signal for one action key.
 fn action_signal(id: u32, action: &str) -> Message {
     Message::new_signal(OBJECT_PATH, INTERFACE, "ActionInvoked")
         .expect("signal")
         .append2(id, action.to_string())
 }
 
-/// True when the shell owns the notification bus name (control API is available).
-pub fn is_server() -> bool {
-    SERVER_ACTIVE.load(Ordering::Relaxed)
-}
-
-pub fn ensure_started() {
-    STARTED.get_or_init(|| {
-        std::thread::Builder::new()
-            .name("kn-notification-listener".into())
-            .spawn(run)
-            .expect("failed to spawn notification listener thread");
-    });
-}
-
-fn run() {
-    if run_server() {
-        return;
-    }
-    eprintln!("[rust/notifications] bus name busy — observing notifications only");
-    watch_loop();
-}
-
-#[derive(Default)]
-struct ServerState {
-    next_id: u32,
-    items: HashMap<u32, Item>,
-}
-
-struct Item {
-    app: String,
-    summary: String,
-    body: String,
-    urgency: u8,
-    actions: Vec<String>,
-    timestamp_ms: u64,
-}
-
+/// First string value found under any of `keys` in the hints map, or an empty string.
 fn hint_string(hints: &PropMap, keys: &[&str]) -> String {
     for key in keys {
         if let Some(value) = hints.get(*key) {
@@ -102,24 +55,10 @@ fn hint_string(hints: &PropMap, keys: &[&str]) -> String {
     String::new()
 }
 
-fn pairs(flat: Vec<String>) -> Vec<crate::NotificationAction> {
-    flat.chunks(2)
-        .filter_map(|chunk| {
-            let key = chunk.first()?.clone();
-            let label = chunk.get(1).cloned().unwrap_or_else(|| key.clone());
-            Some(crate::NotificationAction { key, label })
-        })
-        .collect()
-}
-
-fn now_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-fn run_server() -> bool {
+/// Tries to become the session notification server and serve it until the connection
+/// drops. Returns `true` when the server ran (or was stopped by the bus), `false` when
+/// the bus name could not be acquired — the caller then falls back to the watcher.
+pub(crate) fn run_server() -> bool {
     let Ok(connection) = Connection::new_session() else {
         return false;
     };
@@ -210,7 +149,7 @@ fn run_server() -> bool {
                 };
                 guard.items.insert(
                     id,
-                    Item {
+                    super::store::Item {
                         app: app_name.clone(),
                         summary: summary.clone(),
                         body: body.clone(),
@@ -252,7 +191,7 @@ fn run_server() -> bool {
                         expire_timeout
                     };
                     std::thread::spawn(move || {
-                        std::thread::sleep(Duration::from_millis(timeout as u64));
+                        std::thread::sleep(std::time::Duration::from_millis(timeout as u64));
                         proxy_call("KnExpireNotification", (id,));
                     });
                 }
@@ -337,29 +276,18 @@ fn run_server() -> bool {
     }
 }
 
-fn close_notification(state: &mut Arc<Mutex<ServerState>>, id: u32, reason: u32) -> bool {
-    let mut guard = state.lock().unwrap();
-    let Some(item) = guard.items.remove(&id) else {
-        return false;
-    };
-    drop(guard);
-    eprintln!(
-        "[rust/notifications] closed id={id} reason={reason} app=\"{}\"",
-        item.app
-    );
-    publish_notification_closed(id as u64, reason);
-    true
-}
-
 // ---------------------------------------------------------------------------
 // Control API (called from Kotlin through UniFFI)
 // ---------------------------------------------------------------------------
 
+/// Calls one method on our own server over the session bus.
+///
+/// Returns `false` when the session bus is unavailable or the call fails.
 fn proxy_call<A: dbus::arg::AppendAll>(method: &str, args: A) -> bool {
     let Ok(connection) = Connection::new_session() else {
         return false;
     };
-    let proxy = connection.with_proxy(bus_name(), OBJECT_PATH, Duration::from_millis(1000));
+    let proxy = connection.with_proxy(bus_name(), OBJECT_PATH, std::time::Duration::from_millis(1000));
     proxy
         .method_call::<(), A, _, _>(INTERFACE, method, args)
         .is_ok()
@@ -403,162 +331,4 @@ pub fn notifications_set_dnd(enabled: bool) {
 #[uniffi::export]
 pub fn notifications_is_dnd() -> bool {
     DND.load(Ordering::Relaxed)
-}
-
-// ---------------------------------------------------------------------------
-// Fallback: passive watcher (no bus name -> no control)
-// ---------------------------------------------------------------------------
-
-fn watch_loop() {
-    loop {
-        match spawn_monitor() {
-            Some(mut child) => {
-                read_events(&mut child);
-                let _ = child.kill();
-                let _ = child.wait();
-            }
-            None => {}
-        }
-        std::thread::sleep(Duration::from_secs(2));
-    }
-}
-
-fn spawn_monitor() -> Option<Child> {
-    Command::new("dbus-monitor")
-        .args(["--session", WATCH_MATCH])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()
-}
-
-#[derive(Default)]
-struct Capture {
-    active: bool,
-    /// app name, app icon, summary, body
-    strings: Vec<String>,
-    actions: Vec<String>,
-    after_body: bool,
-    in_hints: bool,
-    urgency: u8,
-    expecting_urgency_value: bool,
-}
-
-fn unescape(value: &str) -> String {
-    let mut out = String::with_capacity(value.len());
-    let mut chars = value.chars();
-    while let Some(c) = chars.next() {
-        if c != '\\' {
-            out.push(c);
-            continue;
-        }
-        match chars.next() {
-            Some('n') => out.push('\n'),
-            Some('t') => out.push('\t'),
-            Some(other) => out.push(other),
-            None => break,
-        }
-    }
-    out
-}
-
-fn quoted(line: &str) -> Option<String> {
-    let start = line.find("string \"")? + "string \"".len();
-    let rest = &line[start..];
-    let mut value = String::new();
-    let mut chars = rest.chars();
-    while let Some(c) = chars.next() {
-        match c {
-            '"' => return Some(unescape(&value)),
-            '\\' => {
-                if let Some(next) = chars.next() {
-                    value.push('\\');
-                    value.push(next);
-                }
-            }
-            other => value.push(other),
-        }
-    }
-    None
-}
-
-fn read_events(child: &mut Child) {
-    let Some(stdout) = child.stdout.take() else { return };
-    let mut capture = Capture::default();
-    static FALLBACK_ID: AtomicU32 = AtomicU32::new(0);
-
-    for line in BufReader::new(stdout).lines() {
-        let Ok(line) = line else { return };
-        if line.starts_with("method call") || line.starts_with("signal") || line.starts_with("method return") {
-            capture = Capture::default();
-            capture.active = line.contains("member=Notify");
-            continue;
-        }
-        if !capture.active {
-            continue;
-        }
-        let trimmed = line.trim_start();
-        if trimmed.is_empty() {
-            continue;
-        }
-
-        if trimmed.starts_with("array [") {
-            // First array after the four strings is `actions`, the second is `hints`.
-            if capture.strings.len() >= 4 {
-                capture.after_body = true;
-            }
-            continue;
-        }
-        if trimmed.starts_with("dict entry(") {
-            if capture.after_body {
-                capture.in_hints = true;
-            }
-            continue;
-        }
-
-        if let Some(value) = quoted(trimmed) {
-            if capture.in_hints {
-                if value == "urgency" {
-                    capture.expecting_urgency_value = true;
-                }
-                continue;
-            }
-            if capture.after_body {
-                capture.actions.push(value);
-            } else if capture.strings.len() < 4 {
-                capture.strings.push(value);
-            }
-            continue;
-        }
-
-        if capture.expecting_urgency_value && trimmed.contains("byte ") {
-            capture.urgency = trimmed
-                .rsplit("byte ")
-                .next()
-                .unwrap_or("1")
-                .trim()
-                .parse()
-                .unwrap_or(1);
-            capture.expecting_urgency_value = false;
-            continue;
-        }
-
-        if trimmed.starts_with("int32 ") && capture.strings.len() >= 4 {
-            let app = capture.strings.first().cloned().unwrap_or_default();
-            let icon = capture.strings.get(1).cloned().unwrap_or_default();
-            let summary = capture.strings.get(2).cloned().unwrap_or_default();
-            let body = capture.strings.get(3).cloned().unwrap_or_default();
-            publish_notification(NotificationInfo {
-                id: FALLBACK_ID.fetch_add(1, Ordering::Relaxed) as u64 + 1,
-                app,
-                summary,
-                body,
-                urgency: capture.urgency,
-                timestamp_ms: now_ms(),
-                icon,
-                actions: pairs(capture.actions.clone()),
-            });
-            capture = Capture::default();
-        }
-    }
 }

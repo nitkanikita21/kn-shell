@@ -56,7 +56,7 @@ fn mem_percent() -> Option<f32> {
     Some((((total - available) / total) * 100.0).clamp(0.0, 100.0) as f32)
 }
 
-pub fn ensure_started() {
+pub(crate) fn ensure_started() {
     STARTED.get_or_init(|| {
         std::thread::Builder::new()
             .name("kn-system-listener".into())

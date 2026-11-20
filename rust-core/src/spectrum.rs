@@ -18,7 +18,7 @@ static STARTED: OnceLock<()> = OnceLock::new();
 const BARS: usize = 16;
 const FRAMERATE: u32 = 30;
 
-pub fn ensure_started() {
+pub(crate) fn ensure_started() {
     STARTED.get_or_init(|| {
         std::thread::Builder::new()
             .name("kn-spectrum-listener".into())

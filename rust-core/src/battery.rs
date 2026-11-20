@@ -13,7 +13,7 @@ static STARTED: OnceLock<()> = OnceLock::new();
 
 const POLL: Duration = Duration::from_secs(2);
 
-pub fn ensure_started() {
+pub(crate) fn ensure_started() {
     STARTED.get_or_init(|| {
         std::thread::Builder::new()
             .name("kn-battery-listener".into())
