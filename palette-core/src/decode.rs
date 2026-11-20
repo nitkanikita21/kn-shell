@@ -6,6 +6,15 @@ use image::{DynamicImage, GenericImageView, ImageFormat, RgbImage};
 use std::io::Cursor;
 
 /// Detect the image format from the first bytes.
+///
+/// Recognizes JPEG (`FF D8 FF`), PNG (the 8-byte signature) and WebP
+/// (`RIFF....WEBP`); the buffer may be shorter than the full image. Detection is
+/// magic-byte only — no extension or MIME type is consulted.
+///
+/// # Errors
+///
+/// [`PaletteError::UnsupportedFormat`] when the prefix matches none of the
+/// supported formats; the message includes the first up-to-8 bytes in hex.
 pub fn detect_format(bytes: &[u8]) -> Result<ImageFormat, PaletteError> {
     if bytes.len() >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF {
         Ok(ImageFormat::Jpeg)
@@ -32,6 +41,16 @@ pub fn detect_format(bytes: &[u8]) -> Result<ImageFormat, PaletteError> {
 
 /// Decode `bytes` into an sRGB `RgbImage`, applying EXIF orientation for JPEG,
 /// then downsample so the longest side is at most `max_input_dim`.
+///
+/// Downsampling is an area-average (box) filter and never upscales: images already
+/// within `max_input_dim` keep their size. Alpha is dropped — the result is always
+/// 8-bit RGB.
+///
+/// # Errors
+///
+/// - [`PaletteError::UnsupportedFormat`] when the magic bytes are unknown.
+/// - [`PaletteError::Decode`] when the decoder rejects the payload.
+/// - [`PaletteError::EmptyImage`] when width or height is zero.
 pub fn decode(bytes: &[u8], max_input_dim: u32) -> Result<RgbImage, PaletteError> {
     let format = detect_format(bytes)?;
 
@@ -154,6 +173,9 @@ fn apply_orientation(img: DynamicImage, orientation: u8) -> DynamicImage {
 }
 
 /// Convert a decoded image into a flat list of `(r,g,b)` pixels.
+///
+/// Pixels are emitted in row-major order (left to right, top to bottom); the
+/// alpha channel, if any, is not represented because the input is an RGB image.
 pub fn to_pixels(img: &RgbImage) -> Vec<(u8, u8, u8)> {
     let mut out = Vec::with_capacity(img.width() as usize * img.height() as usize);
     for p in img.pixels() {

@@ -7,7 +7,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 /// A single cluster: OKLab center + fraction of all points it owns.
 #[derive(Clone, Debug)]
 pub struct Cluster {
+    /// Cluster centroid in OKLab `(L, a, b)`; `L` is `0..=1`, `a`/`b` are signed.
     pub center: (f64, f64, f64),
+    /// Share of the input points assigned to this cluster, in `0..=1` (sums to
+    /// ~1 across all clusters of one run).
     pub weight: f64,
 }
 
@@ -89,8 +92,19 @@ fn kmeans_plus_plus(
 
 /// Run k-means in OKLab until convergence or `max_iters`.
 ///
+/// `points` are OKLab triples; `k` is clamped to `1..=points.len()`. `seed`
+/// makes the k-means++ initialization (and therefore the result) reproducible.
+/// Up to 20 Lloyd iterations are run, stopping early once no point changes
+/// cluster and the largest centroid shift is below `1e-4`. Empty clusters are
+/// reseeded to the point farthest from all centers.
+///
 /// `cancel` (when `Some`) is checked between iterations; if set, clustering
 /// stops early and [`crate::error::cancelled`] is returned.
+///
+/// # Panics
+///
+/// Panics when `points` is empty (k-means++ needs at least one point). Every
+/// in-crate caller filters to at least 64 pixels first.
 pub fn kmeans_oklab(
     points: &[(f64, f64, f64)],
     k: usize,
@@ -214,6 +228,10 @@ pub fn kmeans_oklab(
 /// Merge clusters whose OKLab centers are within `eps` of each other, summing
 /// their weights. This collapses degenerate cases (e.g. a solid-color image
 /// produces many identical centers) and near-duplicate clusters.
+///
+/// `eps` is a Euclidean OKLab distance (not squared); the extraction pipeline
+/// uses `1e-3`. The first cluster of a duplicate group keeps its center and
+/// absorbs the weights of the later ones.
 pub fn merge_clusters(clusters: Vec<Cluster>, eps: f64) -> Vec<Cluster> {
     let mut merged: Vec<Cluster> = Vec::new();
     for c in clusters {

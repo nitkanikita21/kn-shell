@@ -26,6 +26,10 @@ fn linear_to_srgb_channel(c: f64) -> f64 {
 }
 
 /// Convert an sRGB byte triple to OKLab `(L, a, b)` in `f64`.
+///
+/// `r`, `g`, `b` are the usual `0..=255` sRGB bytes (sRGB transfer function
+/// applied, D65 white). The returned lightness is in `0..=1`; `a` (green/red)
+/// and `b` (blue/yellow) are signed and typically within `-0.4..=0.4`.
 pub fn srgb_u8_to_oklab(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
     let r = srgb_channel_to_linear(r as f64 / 255.0);
     let g = srgb_channel_to_linear(g as f64 / 255.0);
@@ -46,6 +50,10 @@ pub fn srgb_u8_to_oklab(r: u8, g: u8, b: u8) -> (f64, f64, f64) {
 }
 
 /// Convert OKLab `(L, a, b)` back to sRGB bytes (round-trip helper / test util).
+///
+/// Out-of-gamut values are clamped per channel, so the round trip is lossy only
+/// by rounding: `srgb -> oklab -> srgb` is within 1 unit per channel. Results are
+/// quantized with `round()` and clamped to `0..=255`.
 pub fn oklab_to_srgb_u8(l: f64, a: f64, b: f64) -> (u8, u8, u8) {
     let l_ = l + 0.3963377774 * a + 0.2158037573 * b;
     let m_ = l - 0.1055613458 * a - 0.0638541728 * b;
@@ -72,7 +80,9 @@ pub fn oklab_to_srgb_u8(l: f64, a: f64, b: f64) -> (u8, u8, u8) {
 
 /// Convert OKLab `(L, a, b)` to OKLCH `(L, C, H_deg)`.
 ///
-/// When the chroma is below [`EPSILON`] the hue is set to `f64::NAN` because the
+/// `C` is the Euclidean chroma `sqrt(a^2 + b^2)` and `H` is the hue angle in
+/// degrees, normalized to `0..360`. When the chroma is below the internal
+/// epsilon (`1e-4`) the hue is set to `f64::NAN` (with `C = 0.0`) because the
 /// hue is undefined for achromatic colors.
 pub fn oklab_to_oklch(l: f64, a: f64, b: f64) -> (f64, f64, f64) {
     let c = (a * a + b * b).sqrt();
@@ -89,7 +99,8 @@ pub fn oklab_to_oklch(l: f64, a: f64, b: f64) -> (f64, f64, f64) {
 
 /// Convert OKLCH `(L, C, H_deg)` to OKLab `(L, a, b)`.
 ///
-/// A `NaN` hue is treated as achromatic (a = b = 0).
+/// `H` is expected in degrees. A `NaN` hue is treated as achromatic
+/// (`a = b = 0`) rather than propagated.
 pub fn oklch_to_oklab(l: f64, c: f64, h: f64) -> (f64, f64, f64) {
     if h.is_nan() {
         (l, 0.0, 0.0)

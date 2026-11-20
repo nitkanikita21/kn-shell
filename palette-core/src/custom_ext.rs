@@ -22,6 +22,9 @@ pub struct PaletteExtension {
 }
 
 impl PaletteExtension {
+    /// Create an extension that extracts from `wallpaper` using
+    /// [`PaletteOptions::default`]. Nothing is registered yet; use [`Self::register`]
+    /// or register the instance yourself with the custom host.
     pub fn new(wallpaper: impl Into<PathBuf>) -> Self {
         Self {
             wallpaper: wallpaper.into(),

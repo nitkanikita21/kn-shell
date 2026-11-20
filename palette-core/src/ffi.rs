@@ -73,12 +73,33 @@ fn error_code(e: &PaletteError) -> i32 {
 
 /// Synchronous extraction.
 ///
-/// - `path`:      UTF-8 path to the image.
-/// - `opts_json`: JSON encoding of [`PaletteOptions`], or NULL for defaults.
-/// - `out_json`:  receives a newly allocated JSON string (free with [`palette_free_string`]).
-/// - `err_out`:   receives a newly allocated error string on failure (free with [`palette_free_string`]).
+/// Blocks the calling thread for the whole decode + cluster pipeline. Prefer
+/// [`palette_extract_async`] on a UI thread.
 ///
-/// Returns 0 on success, non-zero on error (the error text is in `err_out`).
+/// - `path`: NUL-terminated UTF-8 path to the image. NULL, an empty string, or
+///   non-UTF-8 bytes are treated alike and rejected with status `1`.
+/// - `opts_json`: NUL-terminated UTF-8 JSON encoding of [`PaletteOptions`]. NULL,
+///   an empty string, or non-UTF-8 bytes select the defaults; well-formed UTF-8
+///   that is not valid JSON of the expected shape yields status `2`.
+///   Missing fields take their documented defaults.
+/// - `out_json`: out-parameter for a newly allocated NUL-terminated JSON result
+///   (see [`PaletteResult`]). Written only on success; left untouched on error.
+///   May be NULL if the caller does not want the payload. A non-NULL value must
+///   be released exactly once with [`palette_free_string`] on the thread that
+///   called this function.
+/// - `err_out`: out-parameter for a newly allocated NUL-terminated human-readable
+///   error message. Written only on failure; left untouched on success. May be
+///   NULL. Must also be freed with [`palette_free_string`]. Callers should
+///   initialise both out-parameters to NULL before the call.
+///
+/// Returns `0` on success and a non-zero status on failure: `1` for a NULL/empty/
+/// non-UTF-8 `path`, `2` for malformed options JSON or an unsupported image
+/// format, `3` for a decode failure, `4` for an I/O failure, `5` for a
+/// zero-sized image, `6` for an internal failure (mirrors [`PaletteError`]).
+///
+/// The error text is in `*err_out` when that pointer is non-NULL. Invalid input
+/// is reported through the status code and `err_out`; the function does not
+/// panic on it.
 // These wrappers validate their pointers and are intended to be safe to call
 // from any caller (including Rust tests and the FFI boundary), so they are not
 // marked `unsafe fn`; clippy would otherwise require `unsafe`.
@@ -137,13 +158,34 @@ pub extern "C" fn palette_extract_sync(
 ///
 /// The work runs on a dedicated thread (k-means itself uses the rayon pool). The
 /// caller-supplied `callback` is invoked exactly once — with a result, an error,
-/// or `"cancelled"` — from that worker thread. The two string pointers passed to
-/// the callback are allocated on that worker thread and are only valid for the
-/// duration of the callback; the callback MUST free both of them with
-/// [`palette_free_string`] before returning (doing so on the worker thread is
-/// safe — freeing on any other thread is not).
+/// or `"cancelled"` — from that worker thread. Returns immediately with a
+/// non-zero handle (0 is reserved and never returned) that can be passed to
+/// [`palette_cancel`].
 ///
-/// Returns a handle that can be passed to [`palette_cancel`].
+/// - `path`: NUL-terminated UTF-8 path. Unlike the sync entry point a NULL, empty
+///   or non-UTF-8 path is not rejected up front: the worker's read fails and the
+///   callback receives an I/O error string.
+/// - `opts_json`: NULL, empty or non-UTF-8 selects defaults; malformed JSON also
+///   silently falls back to the defaults (the sync path reports status `2`
+///   instead).
+/// - `callback`: must be a non-NULL function pointer; passing NULL is undefined
+///   behaviour. It receives `(result, err, user_data)` where exactly one of
+///   `result` / `err` is non-NULL — `result` is NUL-terminated JSON (see
+///   [`PaletteResult`]) on success, `err` is a NUL-terminated message otherwise
+///   (the literal `"cancelled"` when [`palette_cancel`] won the race). Both
+///   pointers are allocated on the worker thread and are valid only for the
+///   duration of the callback: the callback MUST free BOTH with
+///   [`palette_free_string`] *before returning*, i.e. on that same worker thread.
+///   Freeing on any other thread is unsafe in the target glibc (a cross-thread
+///   free of a tcache chunk aborts the process). Copy anything you need out of
+///   them first.
+/// - `user_data`: opaque pointer echoed back to the callback unchanged. May be
+///   NULL. palette-core never dereferences it, so it may be any pointer the
+///   caller can legally hold across threads until the callback fires.
+///
+/// The callback is one-shot per handle: it fires even when cancellation was
+/// requested, and a second call for the same handle never happens. Cancelling
+/// after the callback returned is a no-op.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn palette_extract_async(
@@ -190,9 +232,15 @@ pub extern "C" fn palette_extract_async(
 
 /// Request cancellation of an in-flight async extraction.
 ///
-/// Safe to call with an unknown/stale handle (it is a no-op). Cancelling sets a
-/// flag that the extraction loop checks between steps; the callback still fires
-/// exactly once, with `"cancelled"` as the error string.
+/// Safe to call with an unknown/stale handle (it is a no-op), and safe to call
+/// more than once. Cancelling sets a flag that the extraction loop checks between
+/// steps (after decode and between k-means iterations), so the abort is
+/// cooperative: a run that has already finished still delivers its normal
+/// result. The callback still fires exactly once, with `"cancelled"` as the
+/// error string.
+///
+/// Cancellation is not retroactive: handles are forgotten as soon as their
+/// callback has run, so calling this afterwards does nothing.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn palette_cancel(handle: u64) {
@@ -202,6 +250,13 @@ pub extern "C" fn palette_cancel(handle: u64) {
 }
 
 /// Free a string previously returned by palette-core. Safe to call with NULL.
+///
+/// `s` must be a pointer returned by [`palette_extract_sync`] (written to
+/// `out_json` / `err_out`) or passed to a [`palette_extract_async`] callback, and
+/// it must be freed exactly once. Freeing any other pointer, freeing twice, or
+/// freeing it on a thread other than the one that allocated it is undefined
+/// behaviour — for the async path that means inside the callback, on the worker
+/// thread.
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[no_mangle]
 pub extern "C" fn palette_free_string(s: *mut c_char) {

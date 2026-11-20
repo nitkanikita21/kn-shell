@@ -15,6 +15,8 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+/// On-disk cache format version; bumped when the binary layout changes.
+/// A reader that sees any other version treats the entry as a miss.
 pub const CACHE_VERSION: u8 = 1;
 
 /// Resolve the cache directory, creating it if needed.
@@ -76,6 +78,10 @@ fn hex(d: &[u8]) -> String {
 }
 
 /// Read a cached palette, if present and well-formed.
+///
+/// Returns `None` (not an error) for a missing file, a wrong [`CACHE_VERSION`],
+/// or a truncated blob, so callers can treat every cache problem as a miss and
+/// fall through to a fresh extraction.
 pub fn read_cache(hash: &str) -> Option<Palette> {
     let path = cache_path(hash);
     let bytes = std::fs::read(&path).ok()?;
@@ -87,6 +93,11 @@ pub fn read_cache(hash: &str) -> Option<Palette> {
 /// The intermediate file has a per-call unique name so concurrent writes for the
 /// same hash (e.g. two callers extracting the same wallpaper) cannot clobber each
 /// other's temp file before the final atomic rename.
+///
+/// # Errors
+///
+/// [`PaletteError::Io`] when the temp file cannot be created/written/synced or
+/// the rename fails.
 pub fn write_cache(hash: &str, palette: &Palette) -> Result<(), PaletteError> {
     let path = cache_path(hash);
     let data = encode_cache(palette);

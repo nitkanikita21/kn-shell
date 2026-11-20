@@ -41,6 +41,9 @@ pub struct OklchColor {
 /// An ordered list of dominant colors (sorted by `weight` descending).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub struct Palette {
+    /// The palette swatches, sorted by `weight` descending. Empty only for a
+    /// caller-constructed value; extraction always yields at least one color
+    /// (the neutral fallback).
     pub colors: Vec<OklchColor>,
 }
 
@@ -66,18 +69,24 @@ pub struct PaletteResult {
 }
 
 /// Options controlling extraction.
+///
+/// All fields are optional in JSON (`#[serde(default)]`); missing fields take
+/// the documented defaults. A `k` or `max_input_dim` of `0` is also treated as
+/// "use the default" at run time, so `0` never means "zero clusters".
 #[derive(Clone, Debug, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct PaletteOptions {
-    /// Number of clusters. Defaults to 6.
+    /// Requested number of clusters (`0` = default). Defaults to 6; clamped to
+    /// `1..=number_of_surviving_pixels` during extraction.
     pub k: u8,
-    /// Longest side of the downsampled image, in pixels. Defaults to 64.
+    /// Longest side of the downsampled image, in pixels (`0` = default).
+    /// Defaults to 64. Only ever shrinks (never upscales) the image.
     pub max_input_dim: u32,
-    /// Drop clusters whose weight falls below this. Defaults to 0.03.
+    /// Drop clusters whose weight falls below this, in `0..=1`. Defaults to 0.03.
     pub min_weight: f32,
     /// Drop pixels whose OKLCH chroma is below this (0 = keep all). Defaults to 0.
     pub chroma_floor: f32,
-    /// Deterministic seed. `None` = non-deterministic.
+    /// Deterministic seed. `None` = non-deterministic (seeded from the clock).
     pub seed: Option<u64>,
 }
 
@@ -95,12 +104,40 @@ impl PaletteOptions {
 }
 
 /// Extract a palette from a file on disk.
+///
+/// Reads `path` completely into memory (via [`std::fs::read`]) and delegates to
+/// [`extract_from_bytes`]. The cache is keyed by the SHA-256 of those bytes, so
+/// the same file is only decoded and clustered once.
+///
+/// # Errors
+///
+/// - [`PaletteError::Io`] when the file cannot be read.
+/// - [`PaletteError::UnsupportedFormat`] when the magic bytes are not JPEG, PNG
+///   or WebP.
+/// - [`PaletteError::Decode`] when the decoder rejects otherwise-plausible bytes.
+/// - [`PaletteError::EmptyImage`] when the decoded image has zero width/height.
+/// - [`PaletteError::Internal`] when the cache file cannot be written or is corrupt.
 pub fn extract_from_path(path: &Path, options: PaletteOptions) -> Result<PaletteResult, PaletteError> {
     let bytes = std::fs::read(path)?;
     extract_from_bytes(&bytes, options)
 }
 
 /// Extract a palette from raw image bytes (PNG / JPEG / WebP).
+///
+/// Format is detected from the magic bytes, JPEG EXIF orientation is applied,
+/// the image is box-downsampled so its longest side is at most
+/// [`PaletteOptions::max_input_dim`], and the surviving pixels are clustered in
+/// OKLab. Achromatic, flat or very small images yield the single neutral
+/// fallback swatch with [`PaletteResult::is_fallback`] set.
+///
+/// # Errors
+///
+/// - [`PaletteError::UnsupportedFormat`] when the magic bytes are not JPEG, PNG
+///   or WebP.
+/// - [`PaletteError::Decode`] when the decoder rejects the payload.
+/// - [`PaletteError::EmptyImage`] when the decoded image has zero width/height.
+/// - [`PaletteError::Io`] / [`PaletteError::Internal`] when the cache cannot be
+///   read or written.
 pub fn extract_from_bytes(bytes: &[u8], options: PaletteOptions) -> Result<PaletteResult, PaletteError> {
     extract_internal(bytes, &options, None)
 }
