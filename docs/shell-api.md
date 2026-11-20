@@ -165,15 +165,16 @@ remove boilerplate:
 | Utility | What it is |
 | --- | --- |
 | `Space(width, height)`, `HSpace(w)`, `VSpace(h)`, `Spacer(modifier)` | empty boxes for spacing |
-| `Icon(glyph, size = 13, color = null)` | Nerd Font glyph |
-| `Text(text, size = 13, color = null)` | plain label |
+| `Text(text, modifier, size = 13, color = null, transitionMs = 0, ellipsize = false, maxWidthChars = -1)` | plain label |
 
 Layout: `Row`, `Column`, `Box`, `CenterBox`, `Stack`, `Overlay` from `dev.knshell.compose`.
 `Box` is the **block-flow** container (the "div": children one under another), not Compose's
 `Box`; put children on top of each other with `Stack` (container = largest child) or, when the
 overlay must not affect the measured size, with `Overlay`.
 Colours: the `Catppuccin` palette object (`dev.knshell.compose`); build any other palette
-with the Modifier DSL.
+with the Modifier DSL. Icons are not a font glyph: `Icon` lives in `:icons:core`
+(`dev.knshell.compose.Icon(icon: IconRef, modifier, size = 24, color = null, transitionMs = 0, strokeWidth = null)`)
+and renders the pack's SVG through librsvg — see [`icons.md`](icons.md).
 
 ```kotlin
 @Composable

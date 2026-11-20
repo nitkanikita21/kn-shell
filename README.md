@@ -360,21 +360,28 @@ committed.
 ```
 .
 ├── gradle/libs.versions.toml     # pinned versions (Kotlin 2.1, Gobley 0.3.7, Compose runtime 1.7.3)
-├── rust-core/                    # Rust crate + services
-│   ├── src/lib.rs                # UniFFI exports, listeners, records, actions
+├── rust-core/                    # Rust crate + services (map: rust-core/README.md)
+│   ├── src/lib.rs                # facade: mod tree, UniFFI scaffolding, re-exports
+│   ├── src/api.rs                # `#[uniffi::export]` subscribe_*/action functions
+│   ├── src/types.rs              # UniFFI records shared with Kotlin
+│   ├── src/listeners.rs          # callback interfaces + registries + publish_*
+│   ├── src/notifications/        # session-bus server, store, foreign watcher
 │   ├── src/windows.rs            # ext-foreign-toplevel-list-v1 (sctk)
 │   ├── src/workspaces.rs         # Hyprland IPC (event socket + polling fallback)
 │   ├── src/media.rs              # MPRIS
 │   ├── src/audio.rs              # default sink volume (pactl)
 │   └── src/system.rs             # CPU / memory from /proc
-├── framework/                    # reusable library (no bar, no theme)
+├── palette-core/                 # palette extraction bridge (map: palette-core/README.md)
+├── framework/                    # reusable library (map: framework/MODULE.md)
 │   ├── src/nativeInterop/cinterop/gtk4.def
 │   └── src/nativeMain/kotlin/dev/knshell/
 │       ├── compose/              # applier, Modifier DSL, widgets, frame clock
-│       ├── animation/            # spring / easing helpers
-│       ├── shell/                # Shell.run, ShellScope, ShellRuntime, popovers
-│       ├── ui/primitives/        # Space/HSpace/VSpace, Spacer, Icon, Text
-│       └── services/             # Services: windows/media/audio/workspaces/system/spectrum
+│       ├── animation/            # spring / easing / container size animation
+│       ├── shell/                # Shell.run, ShellRuntime, layer-shell, popovers
+│       ├── ui/                   # Format helpers + primitives (Text, Image, Spacer)
+│       └── services/             # Services: windows/media/audio/workspaces/system
+├── icons/core/                   # IconRef/IconPack/Icon + librsvg (map: icons/core/MODULE.md)
+├── icons-plugin/                 # included build: syncIcons + generateIcons (map: icons-plugin/MODULE.md)
 ├── shell-app/                    # main() + example bar
 │   └── src/nativeMain/kotlin/dev/knshell/
 │       ├── KnShell.kt           # modes: panel (layer-shell) / windowed
@@ -387,5 +394,6 @@ committed.
 │           └── Palette.kt       # Grayscale palette
 ├── scripts/dev.sh, scripts/run.sh, scripts/gobley-rustup.sh
 ├── scripts/test-notification.sh   # sends a rich test notification (icon+actions)
-└── docs/shell-api.md, docs/bar-api.md, docs/theme.md
+└── docs/shell-api.md, docs/framework-api.md, docs/bar-api.md, docs/icons.md,
+        docs/layout-model.md, docs/theme.md
 ```
