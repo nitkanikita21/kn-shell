@@ -156,6 +156,17 @@ fun GtkNode.applyModifierFromModule(modifier: Modifier) {
     applyModifier(modifier)
 }
 
+/**
+ * The Compose [AbstractApplier] for the GTK node tree.
+ *
+ * Maps the runtime's structural operations onto real GTK calls: create → [GtkNode]
+ * construction in the composable factory, insert/detach → `attachChildAt` / `detachChild`,
+ * remove → `dispose`, move → `gtk_box_insert_child_after` with the target index (GTK only
+ * appends, so a plain append would reverse conditional siblings).
+ *
+ * Public only because `:icons:core` builds its own node tree through it
+ * (`ComposeNode<GtkNode, GtkApplier>`); a shell author never names it.
+ */
 class GtkApplier(root: GtkNode) : AbstractApplier<GtkNode>(root) {
     override fun insertTopDown(index: Int, instance: GtkNode) {
         // Children are inserted in insertBottomUp.

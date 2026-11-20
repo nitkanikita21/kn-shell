@@ -1,28 +1,21 @@
+// The Compose frame clock: one monotonic GTK-driven timeline per process, lazy tick
+// callback installation, `withFrameNanos` broadcast, and the per-tick order
+// (apply notifications -> frame -> node animations). GTK interop lives in
+// GtkInterop.kt, waiter/notification bookkeeping in FrameCallbacks.kt.
 @file:OptIn(ExperimentalForeignApi::class)
 
 package dev.knshell.compose
 
 import androidx.compose.runtime.MonotonicFrameClock
-import androidx.compose.runtime.snapshots.ObserverHandle
 import androidx.compose.runtime.snapshots.Snapshot
 import dev.knshell.animation.SizeAnimationRegistry
-import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.StableRef
-import kotlinx.cinterop.asStableRef
-import kotlinx.cinterop.reinterpret
-import kotlinx.cinterop.staticCFunction
-import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlin.concurrent.AtomicInt
 import kotlin.time.TimeSource
 import kn.gtk.GdkFrameClock
 import kn.gtk.GtkWidget
-import kn.gtk.g_idle_add
 import kn.gtk.gdk_frame_clock_get_frame_time
-import kn.gtk.gtk_widget_add_tick_callback
-import kn.gtk.gtk_widget_remove_tick_callback
 
 /**
  * Compose [MonotonicFrameClock] driven by the GTK frame clock (`GdkFrameClock`).
@@ -48,44 +41,17 @@ import kn.gtk.gtk_widget_remove_tick_callback
  *    that state written from Rust worker threads wakes the UI) into **one** deduplicated
  *    `g_idle_add` that runs on the GLib main loop.
  *
- * Threading: everything except [scheduleNotify] must run on the GTK main thread (that is the
+ * Threading: everything except [SnapshotNotifier.scheduleNotify] must run on the GTK main thread (that is the
  * thread that owns `GLibDispatcher`, the `Recomposer` and every widget). `scheduleNotify` is
  * the only entry point reachable from a foreign thread: it only touches an atomic flag and
  * calls `g_idle_add()`, which GLib documents as thread-safe.
  *
  * @see MonotonicFrameClock
  */
-class GtkFrameClock : MonotonicFrameClock {
-
-    /**
-     * One installed tick callback, owned by the clock (the GTK callback gets a `StableRef`
-     * to this object as `user_data`).
-     *
-     * The `StableRef` lives until GTK invokes the destroy notify (explicit
-     * `gtk_widget_remove_tick_callback` or widget destruction) — see [install].
-     */
-    internal class TickBinding(
-        val clock: GtkFrameClock,
-        val widget: CPointer<GtkWidget>,
-    ) {
-        /** `guint` id returned by `gtk_widget_add_tick_callback`; `0u` when not installed. */
-        var tickId: UInt = 0u
-
-        /** Kept alive for as long as the GTK callback holds its raw pointer. */
-        var stableRef: StableRef<TickBinding>? = null
-
-        var installed: Boolean = false
-
-        /** Last raw `GdkFrameClock` frame time seen by this root (clock-local epoch). */
-        var lastRawNanos: Long = 0L
-    }
+internal class GtkFrameClock : MonotonicFrameClock {
 
     /** Host monotonic source: frame-time fallback and the coalescing clock. */
     private val monotonic = TimeSource.Monotonic.markNow()
-
-    // Every suspended `withFrameNanos` caller is registered here and resumed with the same
-    // frame time — the same broadcast semantics Compose's BroadcastFrameClock has.
-    private val waiters = mutableListOf<CancellableContinuation<Long>>()
 
     // Root widgets of this process (one per window), main thread only.
     private val bindings = mutableListOf<TickBinding>()
@@ -118,13 +84,11 @@ class GtkFrameClock : MonotonicFrameClock {
      */
     private var tickCount = 0L
 
-    // Snapshot plumbing. Observers are process-lifetime; the runtime is a singleton.
-    private var applyObserver: ObserverHandle? = null
-    private var writeObserver: ObserverHandle? = null
-    private var notifyRef: StableRef<GtkFrameClock>? = null
+    /** Suspended `withFrameNanos` callers; broadcast semantics live in [FrameCallbacks]. */
+    private val frames = FrameCallbacks()
 
-    // Exactly one notify idle may be in flight. 0 = idle, 1 = scheduled/running.
-    private val notifyScheduled = AtomicInt(0)
+    /** Snapshot observers + the deduplicated apply-notification idle (see [SnapshotNotifier]). */
+    private val snapshots = SnapshotNotifier(::ensureTicking)
 
     /**
      * Starts the clock: registers the snapshot observers that replace the old
@@ -133,18 +97,9 @@ class GtkFrameClock : MonotonicFrameClock {
      * start only when [withFrameNanos] or [SizeAnimationRegistry] asks for them.
      */
     fun start() {
-        if (applyObserver != null) return
-        notifyRef = StableRef.create(this)
+        if (snapshots.started) return
         println("[frameclock] started ticks=0 (lazy: tick callback installed on demand)")
-        // Apply observers fire on the thread that applied a snapshot — e.g. `ComposeRuntime`
-        // applying `MutableSnapshot`s or a Rust callback committing on a worker thread.
-        applyObserver = Snapshot.registerApplyObserver { _, _ -> scheduleNotify() }
-        // Global write observers fire synchronously on the thread that writes state. This is
-        // what makes a `mutableStateOf` write from a Rust worker thread reach the UI: without
-        // it nothing would ever send the apply notifications that wake the Recomposer, which
-        // is exactly why the old implementation had to poll every 16 ms. Both observers feed
-        // the same deduplicated idle, so a write costs at most one main-loop round trip.
-        writeObserver = Snapshot.registerGlobalWriteObserver { scheduleNotify() }
+        snapshots.start()
     }
 
     /**
@@ -178,8 +133,8 @@ class GtkFrameClock : MonotonicFrameClock {
 
     override suspend fun <R> withFrameNanos(onFrame: (frameTimeNanos: Long) -> R): R {
         val nanos = suspendCancellableCoroutine<Long> { continuation ->
-            waiters += continuation
-            continuation.invokeOnCancellation { waiters.remove(continuation) }
+            frames.add(continuation)
+            continuation.invokeOnCancellation { frames.remove(continuation) }
             // The first waiter (re)installs the tick callbacks; they remove themselves once
             // the last waiter and the last animation are gone.
             ensureTicking()
@@ -192,7 +147,7 @@ class GtkFrameClock : MonotonicFrameClock {
     // ---------------------------------------------------------------------------------
 
     /** True when at least one Compose animation or one node-level size animation needs frames. */
-    private fun needsFrames(): Boolean = waiters.isNotEmpty() || SizeAnimationRegistry.hasWork
+    private fun needsFrames(): Boolean = frames.isNotEmpty() || SizeAnimationRegistry.hasWork
 
     private fun ensureTicking() {
         if (!needsFrames()) return
@@ -201,49 +156,6 @@ class GtkFrameClock : MonotonicFrameClock {
         for (binding in bindings.toList()) {
             if (!binding.installed) install(binding)
         }
-    }
-
-    private fun install(binding: TickBinding) {
-        if (binding.installed) return
-        val ref = StableRef.create(binding)
-        binding.stableRef = ref
-        binding.installed = true
-        // A fresh callback starts a fresh delta: the first frame falls back to the host
-        // monotonic source instead of comparing epochs of two different GdkFrameClocks.
-        binding.lastRawNanos = 0L
-        binding.tickId = gtk_widget_add_tick_callback(
-            binding.widget,
-            // gboolean (*)(GtkWidget *, GdkFrameClock *, gpointer)
-            staticCFunction { _: CPointer<GtkWidget>?, clock: CPointer<GdkFrameClock>?, data: COpaquePointer? ->
-                val tick = data?.asStableRef<TickBinding>()?.get()
-                if (tick != null) tick.clock.onTick(tick, clock) else G_SOURCE_REMOVE
-            }.reinterpret(),
-            ref.asCPointer(),
-            // Destroy notify: called by GTK when the callback is removed or the widget is
-            // destroyed. It is the single owner of the StableRef, so a window torn down
-            // without an explicit unregisterRoot still cannot leak it.
-            staticCFunction { data: COpaquePointer? ->
-                val stable = data?.asStableRef<TickBinding>()
-                val tick = stable?.get()
-                if (tick != null) {
-                    tick.installed = false
-                    tick.tickId = 0u
-                    tick.stableRef = null
-                }
-                stable?.dispose()
-                Unit
-            }.reinterpret(),
-        )
-    }
-
-    private fun removeTick(binding: TickBinding) {
-        if (!binding.installed) return
-        val id = binding.tickId
-        // Clear the bookkeeping before the call: `gtk_widget_remove_tick_callback` invokes the
-        // destroy notify above synchronously, which disposes the StableRef and resets these.
-        binding.installed = false
-        binding.tickId = 0u
-        gtk_widget_remove_tick_callback(binding.widget, id)
     }
 
     // ---------------------------------------------------------------------------------
@@ -284,11 +196,7 @@ class GtkFrameClock : MonotonicFrameClock {
         // 2. Publish the frame to every suspended `withFrameNanos` caller (broadcast: all of
         //    them are resumed with the same nanos).
         val nanos = nextFrameNanos(binding, clock)
-        val pending = waiters.toList()
-        waiters.clear()
-        for (waiter in pending) {
-            waiter.resume(nanos) { }
-        }
+        frames.dispatch(nanos)
 
         // 3. Node-level size animations tick on the same frame time and do not register
         //    frame waiters, so they are advanced regardless of Compose's own waiters.
@@ -346,56 +254,17 @@ class GtkFrameClock : MonotonicFrameClock {
         return publishedNanos
     }
 
-    // ---------------------------------------------------------------------------------
-    // Snapshot apply notifications (replaces the old polling in the 16 ms timeout)
-    // ---------------------------------------------------------------------------------
-
-    /**
-     * Schedules one `Snapshot.sendApplyNotifications()` on the GLib main loop.
-     *
-     * Safe to call from any thread: the atomic flag keeps a burst of writes down to a single
-     * idle source and `g_idle_add()` is documented as thread-safe.
-     */
-    private fun scheduleNotify() {
-        if (!notifyScheduled.compareAndSet(0, 1)) return
-        val ref = notifyRef
-        if (ref == null) {
-            notifyScheduled.value = 0
-            return
-        }
-        g_idle_add(
-            staticCFunction { data: COpaquePointer? ->
-                val clock = data?.asStableRef<GtkFrameClock>()?.get()
-                clock?.onNotifyIdle()
-                G_SOURCE_REMOVE
-            }.reinterpret(),
-            ref.asCPointer(),
-        )
-    }
-
-    /** Runs on the GLib main thread (idle source) after at least one state write/applied snapshot. */
-    private fun onNotifyIdle() {
-        // Clear before sending: a write that lands while notifications are dispatched must
-        // schedule a new idle instead of being folded into the round we already advanced.
-        notifyScheduled.value = 0
-        Snapshot.sendApplyNotifications()
-        // A state change may have started node-level work without a Compose frame waiter.
-        ensureTicking()
-    }
-
     /**
      * Periodic diagnostic line for `scripts/anim-bench.sh` (`idle.ticks` gate): total frames
      * produced so far plus current subscription state. Parsed as
      * `[frameclock] ticks=N waiters=W registry=R`.
      */
     private fun logTickStats() {
-        println("[frameclock] ticks=$tickCount waiters=${waiters.size} registry=${SizeAnimationRegistry.hasWork} ${SizeAnimationRegistry.stats()}")
+        println("[frameclock] ticks=$tickCount waiters=${frames.pending} registry=${SizeAnimationRegistry.hasWork} ${SizeAnimationRegistry.stats()}")
     }
 
-    private companion object {
-        const val G_SOURCE_CONTINUE = 1
-        const val G_SOURCE_REMOVE = 0
 
+    private companion object {
         /** `gdk_frame_clock_get_frame_time()` reports microseconds. */
         const val MICROS_TO_NANOS = 1_000L
 

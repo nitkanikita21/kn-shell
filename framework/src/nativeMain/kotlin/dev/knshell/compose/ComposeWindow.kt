@@ -26,7 +26,7 @@ import kn.gtk.gdk_display_get_default
  * `gtk_*` calls happen on the main thread. GTK has no thread-safe widget API, so
  * this is the single most important piece of the bridge.
  */
-class GLibDispatcher : CoroutineDispatcher() {
+internal class GLibDispatcher : CoroutineDispatcher() {
     override fun dispatch(context: CoroutineContext, block: Runnable) {
         val ref = StableRef.create(block)
         g_idle_add(

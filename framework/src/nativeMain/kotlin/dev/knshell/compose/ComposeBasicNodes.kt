@@ -1,0 +1,240 @@
+// ---------------------------------------------------------------------------
+// Content nodes: the GTK widgets behind `Label` / `Markup`, `Button` (label and
+// container variants), `Canvas` and `Slider`. All of them are DSL internals and
+// only ever constructed by the composables in Widgets.kt.
+// ---------------------------------------------------------------------------
+
+@file:OptIn(ExperimentalForeignApi::class)
+
+package dev.knshell.compose
+
+import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.COpaquePointer
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.StableRef
+import kotlinx.cinterop.asStableRef
+import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.staticCFunction
+import kn.gtk.GtkBox
+import kn.gtk.GtkButton
+import kn.gtk.GtkDrawingArea
+import kn.gtk.GtkLabel
+import kn.gtk.GtkOrientation
+import kn.gtk.GtkWidget
+import kn.gtk.PangoEllipsizeMode
+import kn.gtk.cairo_t
+import kn.gtk.g_signal_connect_data
+import kn.gtk.gtk_box_append
+import kn.gtk.gtk_box_new
+import kn.gtk.gtk_box_remove
+import kn.gtk.gtk_button_new
+import kn.gtk.gtk_button_new_with_label
+import kn.gtk.gtk_button_set_child
+import kn.gtk.gtk_button_set_label
+import kn.gtk.gtk_drawing_area_new
+import kn.gtk.gtk_drawing_area_set_content_height
+import kn.gtk.gtk_drawing_area_set_content_width
+import kn.gtk.gtk_drawing_area_set_draw_func
+import kn.gtk.gtk_label_new
+import kn.gtk.gtk_label_set_ellipsize
+import kn.gtk.gtk_label_set_label
+import kn.gtk.gtk_label_set_lines
+import kn.gtk.gtk_label_set_markup
+import kn.gtk.gtk_label_set_max_width_chars
+import kn.gtk.gtk_label_set_wrap
+import kn.gtk.gtk_label_set_xalign
+import kn.gtk.gtk_range_set_value
+import kn.gtk.gtk_scale_new_with_range
+import kn.gtk.gtk_widget_queue_draw
+
+internal class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
+    private var lastText: String = ""
+
+    fun setText(text: String) {
+        lastText = text
+        gtk_label_set_label(widget.reinterpret<GtkLabel>(), text)
+    }
+
+    /** Pango markup: `<b>`, `<i>`, `<u>`, `<s>`, `<span foreground="#…">`, `<big>`, … */
+    fun setMarkup(markup: String) {
+        lastText = markup
+        gtk_label_set_markup(widget.reinterpret<GtkLabel>(), markup)
+    }
+
+    /** Re-applies the last text with the requested markup mode. */
+    fun refreshText(markup: Boolean) {
+        if (markup) setMarkup(lastText) else setText(lastText)
+    }
+
+    fun setWrap(wrap: Boolean) {
+        gtk_label_set_wrap(widget.reinterpret<GtkLabel>(), if (wrap) 1 else 0)
+    }
+
+    fun setEllipsize(enabled: Boolean) {
+        val mode = if (enabled) PangoEllipsizeMode.PANGO_ELLIPSIZE_END else PangoEllipsizeMode.PANGO_ELLIPSIZE_NONE
+        gtk_label_set_ellipsize(widget.reinterpret<GtkLabel>(), mode)
+    }
+
+    /** Horizontal text alignment inside the label: 0 = left, 0.5 = center, 1 = right. */
+    fun setXAlign(align: Float) {
+        gtk_label_set_xalign(widget.reinterpret<GtkLabel>(), align)
+    }
+
+    /** Maximum number of lines (-1 = unlimited, needs wrapping). */
+    fun setLines(lines: Int) {
+        gtk_label_set_lines(widget.reinterpret<GtkLabel>(), lines)
+    }
+
+    /**
+     * Clamps the label width in average characters and enables end-ellipsis.
+     * Unlike pixel clamps this follows the label's own font, so "…" appears exactly where
+     * the text stops fitting — no manual per-font tuning. Pass -1 to disable.
+     */
+    fun setMaxWidthChars(chars: Int) {
+        gtk_label_set_max_width_chars(widget.reinterpret<GtkLabel>(), chars)
+        if (chars >= 0) {
+            gtk_label_set_ellipsize(
+                widget.reinterpret<GtkLabel>(),
+                PangoEllipsizeMode.PANGO_ELLIPSIZE_END,
+            )
+        }
+    }
+}
+
+internal class GtkButtonNode(text: String) : GtkNode(gtk_button_new_with_label(text)!!) {
+    var onClick: (() -> Unit)? = null
+
+    // Kept alive for the lifetime of the GTK widget: without this the StableRef created
+    // below may be garbage-collected and the handler would receive a dangling pointer.
+    @Suppress("unused")
+    private val selfRef = StableRef.create(this)
+
+    init {
+        val ref = selfRef
+        val handler = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
+            data?.asStableRef<GtkButtonNode>()?.get()?.onClick?.invoke()
+            Unit
+        }
+        g_signal_connect_data(
+            instance = widget,
+            detailed_signal = "clicked",
+            c_handler = handler.reinterpret(),
+            data = ref.asCPointer(),
+            destroy_data = null,
+            connect_flags = 0u,
+        )
+    }
+
+    fun setText(text: String) {
+        gtk_button_set_label(widget.reinterpret<GtkButton>(), text)
+    }
+}
+
+/**
+ * A button that hosts arbitrary widgets instead of a plain label.
+ *
+ * GTK buttons accept a single child, so the composable content is mounted into an
+ * internal horizontal box.
+ */
+internal class GtkButtonContainerNode : GtkNode(gtk_button_new()!!) {
+    var onClick: (() -> Unit)? = null
+
+    private val contentBox = gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!
+
+    @Suppress("unused")
+    private val selfRef = StableRef.create(this)
+
+    init {
+        gtk_button_set_child(widget.reinterpret<GtkButton>(), contentBox)
+
+        val ref = selfRef
+        val handler = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
+            data?.asStableRef<GtkButtonContainerNode>()?.get()?.onClick?.invoke()
+            Unit
+        }
+        g_signal_connect_data(
+            instance = widget,
+            detailed_signal = "clicked",
+            c_handler = handler.reinterpret(),
+            data = ref.asCPointer(),
+            destroy_data = null,
+            connect_flags = 0u,
+        )
+    }
+
+    override fun attachChild(child: CPointer<GtkWidget>) {
+        gtk_box_append(contentBox.reinterpret<GtkBox>(), child)
+    }
+
+    override fun detachChild(child: CPointer<GtkWidget>) {
+        gtk_box_remove(contentBox.reinterpret<GtkBox>(), child)
+    }
+}
+
+internal class GtkSliderNode(min: Float, max: Float, step: Float) :
+    GtkNode(gtk_scale_new_with_range(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, min.toDouble(), max.toDouble(), step.toDouble())!!) {
+
+    var onChange: ((Float) -> Unit)? = null
+
+    private var programmaticUpdate = false
+
+    @Suppress("unused")
+    private val selfRef = StableRef.create(this)
+
+    init {
+        val self = selfRef
+        val handler = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
+            val node = data?.asStableRef<GtkSliderNode>()?.get()
+            if (node != null && !node.programmaticUpdate) {
+                val value = kn.gtk.gtk_range_get_value(node.widget.reinterpret()).toFloat()
+                node.onChange?.invoke(value)
+            }
+            Unit
+        }
+        g_signal_connect_data(
+            instance = widget,
+            detailed_signal = "value-changed",
+            c_handler = handler.reinterpret(),
+            data = self.asCPointer(),
+            destroy_data = null,
+            connect_flags = 0u,
+        )
+    }
+
+    fun setValue(value: Float) {
+        if (programmaticUpdate) return
+        programmaticUpdate = true
+        gtk_range_set_value(widget.reinterpret(), value.toDouble())
+        programmaticUpdate = false
+    }
+}
+
+internal class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area_new()!!) {
+
+    /** Draw callback supplied by the composable; re-read on every GTK frame. */
+    var drawFn: ((CPointer<cairo_t>, Int, Int) -> Unit)? = null
+
+    // Retained for the lifetime of the widget: the draw function receives this
+    // StableRef as user_data, so it must never be collected.
+    @Suppress("unused")
+    private val selfRef = StableRef.create(this)
+
+    init {
+        gtk_drawing_area_set_content_width(widget.reinterpret<GtkDrawingArea>(), width)
+        gtk_drawing_area_set_content_height(widget.reinterpret<GtkDrawingArea>(), height)
+
+        val self = selfRef
+        val draw = staticCFunction { _: CPointer<GtkDrawingArea>?, cr: CPointer<cairo_t>?, w: Int, h: Int, data: COpaquePointer? ->
+            val node = data?.asStableRef<GtkCanvasNode>()?.get()
+            if (cr != null && node != null) {
+                node.drawFn?.invoke(cr, w, h)
+            }
+            Unit
+        }
+        gtk_drawing_area_set_draw_func(widget.reinterpret(), draw.reinterpret(), self.asCPointer(), null)
+    }
+
+    fun requestRedraw() {
+        gtk_widget_queue_draw(widget)
+    }
+}

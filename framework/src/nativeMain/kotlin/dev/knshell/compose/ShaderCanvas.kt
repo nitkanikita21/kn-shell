@@ -317,6 +317,14 @@ class GtkShaderCanvasNode(
     }
 }
 
+/**
+ * Draws a fragment shader (OpenGL/ES via libepoxy) inside a `GtkDrawingArea`, sized [width]×[height] px.
+ *
+ * [fragmentSource] is a GLSL fragment shader; the framework supplies the vertex shader, the
+ * uniform plumbing and the framebuffer, and re-renders once per frame while [animated] is true
+ * (driven by the shared GTK frame clock — an idle canvas requests no frames). [radius] clips the
+ * corners to that many px, [modifier] styles the widget like any other DSL leaf.
+ */
 @Composable
 fun ShaderCanvas(
     width: Int,

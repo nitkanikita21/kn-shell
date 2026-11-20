@@ -1,3 +1,11 @@
+// ---------------------------------------------------------------------------
+// The composable DSL — `Column` / `Row` / `Box` / `Stack` / `Overlay` /
+// `CenterBox` and the content widgets (`Label`, `Markup`, `Button`, `Canvas`,
+// `Slider`). Every call emits a node through `ComposeNode`, and `GtkApplier`
+// turns nodes into GTK widgets. Node classes live in ComposeNodes.kt and
+// ComposeBasicNodes.kt.
+// ---------------------------------------------------------------------------
+
 @file:OptIn(ExperimentalForeignApi::class)
 
 package dev.knshell.compose
@@ -5,479 +13,10 @@ package dev.knshell.compose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
 import kotlinx.cinterop.CPointer
-import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.ExperimentalForeignApi
-import kotlinx.cinterop.StableRef
-import kotlinx.cinterop.asStableRef
-import kotlinx.cinterop.reinterpret
-import kotlinx.cinterop.staticCFunction
-import kn.gtk.GtkBox
-import kn.gtk.GtkButton
-import kn.gtk.GtkCenterBox
-import kn.gtk.GtkDrawingArea
-import kn.gtk.GtkLabel
 import kn.gtk.GtkOrientation
-import kn.gtk.GtkWidget
 import kn.gtk.cairo_t
-import kn.gtk.g_signal_connect_data
-import dev.knshell.core.attachBoxLayout
-import dev.knshell.core.forgetBoxChild
-import dev.knshell.core.setBoxChildWeight
-import dev.knshell.core.setBoxHomogeneous
-import dev.knshell.core.setBoxOrientation
-import dev.knshell.core.setBoxSpacing
-import kotlinx.cinterop.rawValue
-import kn.gtk.gtk_box_append
-import kn.gtk.gtk_box_insert_child_after
-import kn.gtk.gtk_widget_get_layout_manager
-import kn.gtk.gtk_widget_get_parent
 import kn.gtk.gtk_box_new
-import kn.gtk.gtk_box_remove
-import kn.gtk.GTK_ALIGN_CENTER
-import kn.gtk.GTK_ALIGN_FILL
-import kn.gtk.GtkOverlay
-import kn.gtk.gtk_overlay_add_overlay
-import kn.gtk.gtk_overlay_remove_overlay
-import kn.gtk.gtk_overlay_new
-import kn.gtk.gtk_overlay_set_measure_overlay
-import kn.gtk.gtk_widget_set_halign
-import kn.gtk.gtk_widget_set_hexpand
-import kn.gtk.gtk_widget_set_valign
-import kn.gtk.gtk_widget_set_vexpand
-import kn.gtk.gtk_button_new
-import kn.gtk.gtk_button_new_with_label
-import kn.gtk.gtk_button_set_child
-import kn.gtk.gtk_button_set_label
-import kn.gtk.gtk_center_box_get_center_widget
-import kn.gtk.gtk_center_box_get_end_widget
-import kn.gtk.gtk_center_box_get_start_widget
-import kn.gtk.gtk_center_box_new
-import kn.gtk.gtk_center_box_set_center_widget
-import kn.gtk.gtk_center_box_set_end_widget
-import kn.gtk.gtk_center_box_set_start_widget
-import kn.gtk.gtk_drawing_area_new
-import kn.gtk.gtk_drawing_area_set_content_height
-import kn.gtk.gtk_drawing_area_set_content_width
-import kn.gtk.gtk_drawing_area_set_draw_func
-import kn.gtk.PangoEllipsizeMode
-import kn.gtk.gtk_label_new
-import kn.gtk.gtk_label_set_ellipsize
-import kn.gtk.gtk_label_set_lines
-import kn.gtk.gtk_label_set_markup
-import kn.gtk.gtk_label_set_max_width_chars
-import kn.gtk.gtk_label_set_wrap
-import kn.gtk.gtk_label_set_xalign
-import kn.gtk.gtk_label_set_label
-import kn.gtk.gtk_range_set_value
-import kn.gtk.gtk_scale_new_with_range
-import kn.gtk.gtk_widget_add_css_class
-import kn.gtk.gtk_widget_queue_draw
-
-// ---------------------------------------------------------------------------
-// GTK widget nodes
-// ---------------------------------------------------------------------------
-
-/**
- * Marks a freshly created node as "plain".
- *
- * [PLAIN_CLASS] is the only hook of [PLAIN_CSS]: every DSL widget carries it, so the
- * theme never paints a background, border, shadow, padding or state highlight and the
- * whole visual definition comes from the [Modifier] DSL.
- */
-/**
- * Marks a node as "plain" — public so satellite widget modules (`:icons:core`)
- * can register their own widgets through the same DSL styling pipeline.
- */
-fun <T : GtkNode> T.plain(): T {
-    gtk_widget_add_css_class(widget, PLAIN_CLASS)
-    return this
-}
-
-/**
- * The framework's box container: a `GtkBox` whose packing is done by the native
- * `KnBoxLayout` manager (`rust-core/src/kn_box_layout.c`) instead of GtkBox's own final
- * `GtkBoxLayout`.
- *
- * A manager is the only way to express the parts of the Android/Compose layout contract GTK has
- * no API for: a per-child `weight`, a real height-for-width negotiation (`for_size` forwarded to
- * the children), main-axis alignment inside a claimed cell, and the Compose-owned animated size.
- * The widget stays a `GtkBox`, so its node tree, CSS name and child-management API
- * (`gtk_box_append`/`gtk_box_insert_child_after`) are untouched — only the *packing* moved, which
- * is why `spacing` must now be pushed to the manager rather than to `gtk_box_set_spacing()`.
- */
-open class GtkBoxNode(widget: CPointer<GtkWidget>) : GtkNode(widget) {
-    private val containerHandle: ULong = widget.rawValue.toLong().toULong()
-
-    init {
-        attachBoxLayout(containerHandle, AXIS_WIDTH, 0, false)
-    }
-
-    /** Called once by [gtkBox] right after the widget is created. */
-    internal fun configureBox(vertical: Boolean, spacing: Int, homogeneous: Boolean) {
-        setBoxOrientation(containerHandle, if (vertical) AXIS_HEIGHT else AXIS_WIDTH)
-        setBoxSpacing(containerHandle, spacing.coerceAtLeast(0))
-        setBoxHomogeneous(containerHandle, homogeneous)
-    }
-
-    /** Re-pushes every child's layout properties; covers the case where a child changed its
-     * weight or cap without leaving the tree (its modifier is applied before this node's
-     * recomposition runs). */
-    private fun syncChildLayouts() {
-        children.forEach { it.pushChildLayout() }
-    }
-
-    internal override fun applyModifier(modifier: Modifier) {
-        super.applyModifier(modifier)
-        // Our own chain changed nothing about the children, but theirs may have: a child that
-        // changed its weight or its cap without leaving the tree is only visible through its node.
-        syncChildLayouts()
-    }
-
-    /**
-     * Order-aware insert: GTK appends by default, which breaks conditional siblings — the
-     * new widget must land *before* the child that currently follows [index].
-     */
-    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
-        val box = widget.reinterpret<GtkBox>()
-        val previous = children.getOrNull(index - 1)?.widget
-        gtk_box_insert_child_after(box, child, previous)
-        // The child's own modifier was applied before it got a parent, so its layout properties
-        // can only be pushed now (main-axis align needs no such revisit: the manager gives an
-        // aligned child a cell itself — plan L1).
-        children.lastOrNull { it.widget == child }?.pushChildLayout()
-    }
-
-    override fun attachChild(child: CPointer<GtkWidget>) {
-        gtk_box_append(widget.reinterpret<GtkBox>(), child)
-        children.lastOrNull { it.widget == child }?.pushChildLayout()
-    }
-
-    override fun detachChild(child: CPointer<GtkWidget>) {
-        forgetBoxChild(containerHandle, child.rawValue.toLong().toULong())
-        gtk_box_remove(widget.reinterpret<GtkBox>(), child)
-    }
-
-    private companion object {
-        /** Axis constants of `KnBoxLayout` (`KN_AXIS_WIDTH` / `KN_AXIS_HEIGHT`). */
-        const val AXIS_WIDTH = 0
-        const val AXIS_HEIGHT = 1
-    }
-}
-
-/**
- * GtkOverlay where overlay children are painted on top but **do not affect the measured
- * size** (`gtk_overlay_set_measure_overlay` stays false), so the overlay can be as small as
- * its parent requests — e.g. a 16px circle whose label is drawn on top and clipped instead of
- * stretching the chip.
- *
- * `GtkOverlay` needs no main child for that: a main child is always measured, and with every
- * child in the overlay list and `measure-overlay` off the container measures 0×0 on its own
- * (plan L11 — the invisible spacer GtkBox an earlier version kept here was unnecessary, and it
- * also made the node report expand through a child nobody composed).
- *
- * Overlay children are centered horizontally and vertically.
- */
-class GtkOverlayNode : GtkOverlayBaseNode(measureChildren = false, centerChildren = true)
-
-/**
- * Shared plumbing for [GtkOverlayNode] and [GtkStackNode]: every child joins the overlay list.
- *
- * Which of the two behaviours applies is a property of the node, not of the child, so there is
- * no main-child slot to shuffle: a child that is remeasured, removed or reordered never has to
- * be evicted from `gtk_overlay_set_child()`.
- */
-abstract class GtkOverlayBaseNode(
-    private val measureChildren: Boolean,
-    private val centerChildren: Boolean,
-) : GtkNode(gtk_overlay_new()!!) {
-    override fun attachChild(child: CPointer<GtkWidget>) {
-        val overlay = widget.reinterpret<GtkOverlay>()
-        if (centerChildren) {
-            gtk_widget_set_halign(child, GTK_ALIGN_CENTER)
-            gtk_widget_set_valign(child, GTK_ALIGN_CENTER)
-        }
-        gtk_overlay_add_overlay(overlay, child)
-        gtk_overlay_set_measure_overlay(overlay, child, if (measureChildren) 1 else 0)
-    }
-
-    override fun detachChild(child: CPointer<GtkWidget>) {
-        // Children can be conditional (`if (active) Text(...)`): without this the removed label
-        // stays in the overlay and the next one is drawn on top of it.
-        gtk_overlay_remove_overlay(widget.reinterpret<GtkOverlay>(), child)
-    }
-}
-
-/**
- * Stacks children on top of each other and is as large as its **largest** child — Compose's
- * `Box`, and the z-stacking container [Box] deliberately is not (`GtkBox` block flow).
- *
- * GtkOverlay does the work: `measure-overlay` is switched on for every child, so each of them
- * contributes to the size instead of the container having to invent an invisible main child.
- * Every child is allocated the whole cell and decides its own position inside it with
- * `Modifier.align` (GTK fills by default, and GTK fills *both* axes, so a `Stack` child that
- * must keep its natural size needs `Modifier.align(h = Align.Start, v = Align.Start)`).
- *
- * Children paint in composition order, which is what makes a badge drawn after its icon land on
- * top. No child ever becomes GtkOverlay's main child (that one cannot be switched off from the
- * measured size), so composing at any index — including 0 — is just an overlay append.
- */
-class GtkStackNode : GtkOverlayBaseNode(measureChildren = true, centerChildren = false)
-
-/**
- * Which region of a [CenterBox] a node occupies.
- */
-enum class CenterSlot { Start, Center, End }
-
-/**
- * The horizontal box that hosts one region of a [CenterBox].
- *
- * A region is a real box, so it can hold several widgets without the caller wrapping them in a
- * `Row` (`start = { Clock(); Space(8) }`). The parent [GtkCenterBoxNode] reads [slot] off the
- * node instead of counting attach calls: the slot therefore survives `rebuildOrder()` (which
- * detaches and re-attaches every child) and composition order cannot shift a region to the
- * other side of the bar.
- */
-class GtkCenterRegionNode(slot: CenterSlot) :
-    GtkBoxNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!) {
-    /** Set again on recomposition, so a region can move between slots. */
-    var slot: CenterSlot = slot
-}
-
-/**
- * Three-region bar layout (`GtkCenterBox`): start / center / end.
- *
- * A child that is a [GtkCenterRegionNode] goes to the slot the region names. Any other child
- * falls back to composition order (`start`, `center`, `end`), and — because `GtkCenterBox`
- * holds exactly one widget per region — a fourth one takes the `end` slot instead of being
- * left unparented.
- *
- * Sizing is GTK's, not Compose's: the start and end regions get their natural width, the centre
- * region keeps its natural width too and the slack goes to a region with an expanding child
- * (`gtk_center_box_set_shrink_center_last()` defaults to TRUE — see `docs/shell-api.md`).
- */
-class GtkCenterBoxNode : GtkNode(gtk_center_box_new()!!) {
-    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) = place(child)
-
-    override fun attachChild(child: CPointer<GtkWidget>) = place(child)
-
-    private fun place(child: CPointer<GtkWidget>) {
-        val box = widget.reinterpret<GtkCenterBox>()
-        val node = children.firstOrNull { it.widget == child }
-        // Region nodes carry their slot; a plain child is placed by its position in the child
-        // list (never by a mutable call counter — `rebuildOrder()` re-attaches out of order).
-        val slot = (node as? GtkCenterRegionNode)?.slot
-            ?: CenterSlot.entries.getOrElse(children.indexOfFirst { it.widget == child }) { CenterSlot.End }
-        when (slot) {
-            CenterSlot.Start -> gtk_center_box_set_start_widget(box, child)
-            CenterSlot.Center -> gtk_center_box_set_center_widget(box, child)
-            CenterSlot.End -> gtk_center_box_set_end_widget(box, child)
-        }
-    }
-
-    override fun detachChild(child: CPointer<GtkWidget>) {
-        // Slots are dynamic: remove the matching region so conditional content does not leak.
-        val box = widget.reinterpret<GtkCenterBox>()
-        if (gtk_center_box_get_start_widget(box) == child) gtk_center_box_set_start_widget(box, null)
-        if (gtk_center_box_get_center_widget(box) == child) gtk_center_box_set_center_widget(box, null)
-        if (gtk_center_box_get_end_widget(box) == child) gtk_center_box_set_end_widget(box, null)
-    }
-}
-
-class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
-    private var lastText: String = ""
-
-    fun setText(text: String) {
-        lastText = text
-        gtk_label_set_label(widget.reinterpret<GtkLabel>(), text)
-    }
-
-    /** Pango markup: `<b>`, `<i>`, `<u>`, `<s>`, `<span foreground="#…">`, `<big>`, … */
-    fun setMarkup(markup: String) {
-        lastText = markup
-        gtk_label_set_markup(widget.reinterpret<GtkLabel>(), markup)
-    }
-
-    /** Re-applies the last text with the requested markup mode. */
-    fun refreshText(markup: Boolean) {
-        if (markup) setMarkup(lastText) else setText(lastText)
-    }
-
-    fun setWrap(wrap: Boolean) {
-        gtk_label_set_wrap(widget.reinterpret<GtkLabel>(), if (wrap) 1 else 0)
-    }
-
-    fun setEllipsize(enabled: Boolean) {
-        val mode = if (enabled) PangoEllipsizeMode.PANGO_ELLIPSIZE_END else PangoEllipsizeMode.PANGO_ELLIPSIZE_NONE
-        gtk_label_set_ellipsize(widget.reinterpret<GtkLabel>(), mode)
-    }
-
-    /** Horizontal text alignment inside the label: 0 = left, 0.5 = center, 1 = right. */
-    fun setXAlign(align: Float) {
-        gtk_label_set_xalign(widget.reinterpret<GtkLabel>(), align)
-    }
-
-    /** Maximum number of lines (-1 = unlimited, needs wrapping). */
-    fun setLines(lines: Int) {
-        gtk_label_set_lines(widget.reinterpret<GtkLabel>(), lines)
-    }
-
-    /**
-     * Clamps the label width in average characters and enables end-ellipsis.
-     * Unlike pixel clamps this follows the label's own font, so "…" appears exactly where
-     * the text stops fitting — no manual per-font tuning. Pass -1 to disable.
-     */
-    fun setMaxWidthChars(chars: Int) {
-        gtk_label_set_max_width_chars(widget.reinterpret<GtkLabel>(), chars)
-        if (chars >= 0) {
-            gtk_label_set_ellipsize(
-                widget.reinterpret<GtkLabel>(),
-                PangoEllipsizeMode.PANGO_ELLIPSIZE_END,
-            )
-        }
-    }
-}
-
-class GtkButtonNode(text: String) : GtkNode(gtk_button_new_with_label(text)!!) {
-    var onClick: (() -> Unit)? = null
-
-    // Kept alive for the lifetime of the GTK widget: without this the StableRef created
-    // below may be garbage-collected and the handler would receive a dangling pointer.
-    @Suppress("unused")
-    private val selfRef = StableRef.create(this)
-
-    init {
-        val ref = selfRef
-        val handler = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
-            data?.asStableRef<GtkButtonNode>()?.get()?.onClick?.invoke()
-            Unit
-        }
-        g_signal_connect_data(
-            instance = widget,
-            detailed_signal = "clicked",
-            c_handler = handler.reinterpret(),
-            data = ref.asCPointer(),
-            destroy_data = null,
-            connect_flags = 0u,
-        )
-    }
-
-    fun setText(text: String) {
-        gtk_button_set_label(widget.reinterpret<GtkButton>(), text)
-    }
-}
-
-/**
- * A button that hosts arbitrary widgets instead of a plain label.
- *
- * GTK buttons accept a single child, so the composable content is mounted into an
- * internal horizontal box.
- */
-class GtkButtonContainerNode : GtkNode(gtk_button_new()!!) {
-    var onClick: (() -> Unit)? = null
-
-    private val contentBox = gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!
-
-    @Suppress("unused")
-    private val selfRef = StableRef.create(this)
-
-    init {
-        gtk_button_set_child(widget.reinterpret<GtkButton>(), contentBox)
-
-        val ref = selfRef
-        val handler = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
-            data?.asStableRef<GtkButtonContainerNode>()?.get()?.onClick?.invoke()
-            Unit
-        }
-        g_signal_connect_data(
-            instance = widget,
-            detailed_signal = "clicked",
-            c_handler = handler.reinterpret(),
-            data = ref.asCPointer(),
-            destroy_data = null,
-            connect_flags = 0u,
-        )
-    }
-
-    override fun attachChild(child: CPointer<GtkWidget>) {
-        gtk_box_append(contentBox.reinterpret<GtkBox>(), child)
-    }
-
-    override fun detachChild(child: CPointer<GtkWidget>) {
-        gtk_box_remove(contentBox.reinterpret<GtkBox>(), child)
-    }
-}
-
-class GtkSliderNode(min: Float, max: Float, step: Float) :
-    GtkNode(gtk_scale_new_with_range(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, min.toDouble(), max.toDouble(), step.toDouble())!!) {
-
-    var onChange: ((Float) -> Unit)? = null
-
-    private var programmaticUpdate = false
-
-    @Suppress("unused")
-    private val selfRef = StableRef.create(this)
-
-    init {
-        val self = selfRef
-        val handler = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
-            val node = data?.asStableRef<GtkSliderNode>()?.get()
-            if (node != null && !node.programmaticUpdate) {
-                val value = kn.gtk.gtk_range_get_value(node.widget.reinterpret()).toFloat()
-                node.onChange?.invoke(value)
-            }
-            Unit
-        }
-        g_signal_connect_data(
-            instance = widget,
-            detailed_signal = "value-changed",
-            c_handler = handler.reinterpret(),
-            data = self.asCPointer(),
-            destroy_data = null,
-            connect_flags = 0u,
-        )
-    }
-
-    fun setValue(value: Float) {
-        if (programmaticUpdate) return
-        programmaticUpdate = true
-        gtk_range_set_value(widget.reinterpret(), value.toDouble())
-        programmaticUpdate = false
-    }
-}
-
-class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area_new()!!) {
-
-    /** Draw callback supplied by the composable; re-read on every GTK frame. */
-    var drawFn: ((CPointer<cairo_t>, Int, Int) -> Unit)? = null
-
-    // Retained for the lifetime of the widget: the draw function receives this
-    // StableRef as user_data, so it must never be collected.
-    @Suppress("unused")
-    private val selfRef = StableRef.create(this)
-
-    init {
-        gtk_drawing_area_set_content_width(widget.reinterpret<GtkDrawingArea>(), width)
-        gtk_drawing_area_set_content_height(widget.reinterpret<GtkDrawingArea>(), height)
-
-        val self = selfRef
-        val draw = staticCFunction { _: CPointer<GtkDrawingArea>?, cr: CPointer<cairo_t>?, w: Int, h: Int, data: COpaquePointer? ->
-            val node = data?.asStableRef<GtkCanvasNode>()?.get()
-            if (cr != null && node != null) {
-                node.drawFn?.invoke(cr, w, h)
-            }
-            Unit
-        }
-        gtk_drawing_area_set_draw_func(widget.reinterpret(), draw.reinterpret(), self.asCPointer(), null)
-    }
-
-    fun requestRedraw() {
-        gtk_widget_queue_draw(widget)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Compose DSL — emitted through ComposeNode, applied by GtkApplier
-// ---------------------------------------------------------------------------
 
 @Composable
 private fun gtkBox(
@@ -507,6 +46,17 @@ private fun gtkBox(
     }
 }
 
+/**
+ * Vertical flex container (`GtkBox` packed by `KnBoxLayout`): children are packed top to bottom
+ * with [spacing] pixels between them.
+ *
+ * [homogeneous] gives every child the same main-axis size. Per-child growth is `Modifier.weight`;
+ * cross-axis placement is `Modifier.align`.
+ *
+ * ```kotlin
+ * Column(spacing = 4) { Label("cpu"); Label("42%", modifier = Modifier.weight(1f)) }
+ * ```
+ */
 @Composable
 fun Column(
     spacing: Int = 8,
@@ -518,6 +68,13 @@ fun Column(
         modifier = modifier, content = content)
 }
 
+/**
+ * Horizontal flex container (`GtkBox` packed by `KnBoxLayout`): children are packed left to right
+ * with [spacing] pixels between them.
+ *
+ * [homogeneous] gives every child the same main-axis size. Per-child growth is `Modifier.weight`;
+ * cross-axis placement is `Modifier.align`.
+ */
 @Composable
 fun Row(
     spacing: Int = 8,
@@ -604,6 +161,17 @@ fun Overlay(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     }
 }
 
+/**
+ * Three-region bar (`GtkCenterBox`): [start], [center] and [end] are composed into their own
+ * horizontal boxes, so a region can hold several widgets without an explicit `Row`.
+ *
+ * ```kotlin
+ * CenterBox(start = { Clock() }, center = { Workspaces() }, end = { Tray() })
+ * ```
+ *
+ * Sizing is GTK's: the regions keep their natural width and the slack goes to whichever region has
+ * an expanding child.
+ */
 @Composable
 fun CenterBox(modifier: Modifier = Modifier, start: @Composable () -> Unit, center: @Composable () -> Unit, end: @Composable () -> Unit) {
     ComposeNode<GtkCenterBoxNode, GtkApplier>(
@@ -675,6 +243,7 @@ fun Markup(markup: String, modifier: Modifier = Modifier) {
     Label(markup, modifier, markup = true)
 }
 
+/** Text button with a plain GTK label ([text]) and a click handler — the simple form of [Button]. */
 @Composable
 fun Button(text: String, modifier: Modifier = Modifier, onClick: () -> Unit = {}) {
     ComposeNode<GtkButtonNode, GtkApplier>(
@@ -701,6 +270,11 @@ fun Button(modifier: Modifier = Modifier, onClick: () -> Unit = {}, content: @Co
     }
 }
 
+/**
+ * Drawing area of [width]×[height] CSS pixels; [onDraw] runs on every GTK frame with a Cairo
+ * context and the current allocation, so it can use the real (allocated) size instead of the
+ * requested one. Kept out of the Compose tree's layout: only the size request above applies.
+ */
 @Composable
 fun Canvas(width: Int, height: Int, modifier: Modifier = Modifier, onDraw: (CPointer<cairo_t>, Int, Int) -> Unit) {
     ComposeNode<GtkCanvasNode, GtkApplier>(
@@ -715,6 +289,15 @@ fun Canvas(width: Int, height: Int, modifier: Modifier = Modifier, onDraw: (CPoi
     )
 }
 
+/**
+ * Horizontal `GtkScale` slider over [min]..[max] with [step] granularity; [onValueChange] fires on
+ * user drags only (programmatic updates from [value] do not loop back).
+ *
+ * ```kotlin
+ * Slider(value = volume, onValueChange = { player.setVolume(it) },
+ *     modifier = Modifier.width(80).slider(highlightColor = Catppuccin.Green))
+ * ```
+ */
 @Composable
 fun Slider(
     value: Float,
