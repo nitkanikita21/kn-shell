@@ -8,8 +8,12 @@ import androidx.compose.runtime.setValue
 import dev.knshell.app.theme.ThemeMode
 import dev.knshell.app.theme.ThemeService
 import dev.knshell.app.theme.ThemeTokens
+import dev.knshell.app.theme.ThemeTuning
+import dev.knshell.app.theme.WallpaperPalette
+import dev.knshell.app.ui.helpers.collectPalette
 import dev.knshell.app.ui.helpers.collectTheme
 import dev.knshell.app.ui.helpers.collectThemeMode
+import dev.knshell.app.ui.helpers.collectThemeTuning
 import dev.knshell.app.ui.helpers.injectDi
 import dev.knshell.compose.Align
 import dev.knshell.compose.Box
@@ -47,6 +51,7 @@ import dev.knshell.compose.width
 import dev.knshell.icons.IconRef
 import dev.knshell.icons.lucide.Lucide
 import dev.knshell.ui.primitives.Text
+import kotlin.math.roundToInt
 
 /**
  * A single, flat demo surface that exercises the toolkit against a real wallpaper-derived
@@ -61,6 +66,8 @@ import dev.knshell.ui.primitives.Text
 fun TestUi() {
     val theme by collectTheme()
     val mode by collectThemeMode()
+    val tuning by collectThemeTuning()
+    val palette by collectPalette()
     val service by injectDi<ThemeService>()
     val c = theme.colors
     var tab by remember { mutableStateOf(0) }
@@ -70,7 +77,7 @@ fun TestUi() {
         spacing = 16,
         modifier = Modifier.width(440).background(c.background).padding(20),
     ) {
-        Header(c, mode)
+        Header(c, mode, palette)
 
         // Tab bar. `onClick` is a gesture on the plain Box, so the tab is not a GTK Button and
         // keeps the exact pill shape: no button chrome to fight with `kn-plain`.
@@ -84,7 +91,7 @@ fun TestUi() {
         when (tab) {
             0 -> OverviewTab(c)
             1 -> ListTab(c)
-            else -> SettingsTab(c, mode, service::setMode)
+            else -> SettingsTab(c, mode, tuning, palette, service::setMode, service::setTuning)
         }
 
         // `entries()` is the theme's own list, so a token added to the theme cannot be
@@ -118,7 +125,7 @@ fun TestUi() {
 // ------------------------------------------------------------------ header
 
 @Composable
-private fun Header(c: ThemeTokens, mode: ThemeMode) {
+private fun Header(c: ThemeTokens, mode: ThemeMode, palette: WallpaperPalette) {
     Row(spacing = 12, modifier = Modifier.fillWidth()) {
         // `Stack`, not `Box`: a block-flow `Box` packs its children along the main axis, so
         // `align(v = Center)` would have no claimed cell to centre into.
@@ -139,6 +146,13 @@ private fun Header(c: ThemeTokens, mode: ThemeMode) {
             Text(
                 "theme demo · ${if (c.isDark) "dark" else "light"} (${mode.name.lowercase()}) · ${c.primary.hex()}",
                 size = 12,
+                color = c.mutedForeground,
+            )
+            // Why the theme looks the way it does: the wallpaper's dominant hue, its second
+            // colour family (if any) and how saturated the dominant family actually gets.
+            Text(
+                palette.summaryLine(),
+                size = 11,
                 color = c.mutedForeground,
             )
         }
@@ -289,7 +303,14 @@ private fun ListRow(c: ThemeTokens, entry: ListEntry) {
 // ------------------------------------------------------------------ tab 2: settings
 
 @Composable
-private fun SettingsTab(c: ThemeTokens, mode: ThemeMode, onMode: (ThemeMode) -> Unit) {
+private fun SettingsTab(
+ c: ThemeTokens,
+ mode: ThemeMode,
+ tuning: ThemeTuning,
+ palette: WallpaperPalette,
+ onMode: (ThemeMode) -> Unit,
+ onTuning: (ThemeTuning) -> Unit,
+) {
     var wifi by remember { mutableStateOf(true) }
     var bluetooth by remember { mutableStateOf(false) }
     var focus by remember { mutableStateOf(true) }
@@ -306,6 +327,8 @@ private fun SettingsTab(c: ThemeTokens, mode: ThemeMode, onMode: (ThemeMode) -> 
                 }
             }
         }
+        TuningSection(c, palette, tuning, onTuning)
+
         Box(Modifier.fillWidth().height(1).background(c.border))
 
         SwitchRow(c, "Wi-Fi", "Join kn-shell-5G automatically", wifi) { wifi = it }
@@ -353,6 +376,70 @@ private fun SwitchRow(c: ThemeTokens, title: String, subtitle: String, checked: 
             Box(
                 Modifier.width(18).height(18).radius(999, 999).background(c.background)
                     .align(h = if (checked) Align.End else Align.Start, v = Align.Center),
+            )
+        }
+    }
+}
+
+/**
+ * The wallpaper-tint controls: four presets plus a continuous multiplier.
+ *
+ * This exists to make [ThemeTuning] a *runtime* decision — the tint can be judged against the
+ * live wallpaper instead of being recompiled. The number shown is `tuning.tint`; the presets are
+ * the same value objects the settings file/CLI would use, so there is one definition of "vivid".
+ */
+@Composable
+private fun TuningSection(
+    c: ThemeTokens,
+    palette: WallpaperPalette,
+    tuning: ThemeTuning,
+    onTuning: (ThemeTuning) -> Unit,
+) {
+    Column(spacing = 8, modifier = Modifier.fillWidth()) {
+        Row(spacing = 8, modifier = Modifier.fillWidth()) {
+            Icon(Lucide.SlidersHorizontal, size = 16, color = c.mutedForeground)
+            Text("Wallpaper tint", size = 13, color = c.foreground, modifier = Modifier.weight(1.0))
+            Text(twoDecimals(tuning.tint) + "×", size = 13, color = c.mutedForeground)
+        }
+        Row(spacing = 6, modifier = Modifier.fillWidth()) {
+            for ((name, preset) in ThemeTuning.presets) {
+                PresetPill(c, name, active = tuning == preset) { onTuning(preset) }
+            }
+        }
+        // The slider edits only the multiplier: presets keep their own lift/caps, and dragging
+        // from a preset leaves the rest of that preset in place.
+        Slider(
+            value = tuning.tint,
+            min = 0f,
+            max = 2f,
+            step = 0.05f,
+            onValueChange = { onTuning(tuning.copy(tint = it)) },
+        )
+        // `family` is what the surfaces are built from — the mean `chroma` would read lower on a
+        // bold wallpaper, which is exactly the bug the tint fixes.
+        Text(palette.summaryLine(), size = 11, color = c.mutedForeground)
+    }
+}
+
+@Composable
+private fun PresetPill(c: ThemeTokens, name: String, active: Boolean, onClick: () -> Unit) {
+    Row(
+        spacing = 6,
+        modifier = Modifier
+            .weight(1.0)
+            .onClick(onClick)
+            .pointerCursor()
+            .padding(vertical = 9)
+            .radius(9)
+            .background(if (active) c.primary else c.secondary),
+    ) {
+        Overlay(Modifier.fillWidth()) {
+            Label(
+                name.replaceFirstChar { it.uppercase() },
+                modifier = Modifier
+                    .fontFamily("sans")
+                    .align(h = Align.Center)
+                    .textColor(if (active) c.background else c.foreground),
             )
         }
     }
@@ -432,4 +519,16 @@ private fun twoDecimals(value: Float): String {
 private fun Color.hex(): String {
     fun part(value: Int): String = value.toString(16).padStart(2, '0')
     return "#${part(r)}${part(g)}${part(b)}"
+}
+
+/** `h 126° · h₂ 104° · family 0.075` — the palette behind the current tokens. */
+private fun WallpaperPalette.summaryLine(): String {
+    val second = secondHue?.let { "h₂ ${it.roundToInt()}°" } ?: "h₂ —"
+    return "h ${hue.roundToInt()}° · $second · family ${threeDecimals(familyChroma)}"
+}
+
+/** Same reason as [twoDecimals]: Kotlin/Native has no `String.format`. */
+private fun threeDecimals(value: Float): String {
+    val thousandths = (value * 1000f).toInt()
+    return "${thousandths / 1000}.${(thousandths % 1000).toString().padStart(3, '0')}"
 }

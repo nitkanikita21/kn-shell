@@ -192,9 +192,12 @@ fun MyBar() {
 `start`, `center` and `end` are three **regions**, and each region is a real box: anything you
 compose into one region shares that box, so `start = { Clock(); Space(8); Workspaces() }` needs no
 wrapper `Row`. The slot is structural (`CenterSlot.Start/Center/End`), so conditional content in
-one region can never move the others. Sizing is GTK's: the centre region keeps its natural width
-and the slack goes to a region that contains an expanding child (`Modifier.fillWidth()` inside
-`start` still stretches), which is the `shrink-center-last` default of `GtkCenterBox`.
+one region can never move the others. Sizing is GTK's, not Compose's: the centre region is centred
+on the **whole width** of the box and keeps its natural width while the sides shrink; a side takes
+the leftover only when it contains an expanding child (`Modifier.fillWidth()` inside `start`
+stretches it up to the centre). The full allocation order, the push-in clamps and the
+`shrink-center-last` default are in [layout-model.md](layout-model.md) → "CenterBox: who gets the
+width".
 
 Services are plain `StateFlow`s — collect them into Compose state yourself:
 

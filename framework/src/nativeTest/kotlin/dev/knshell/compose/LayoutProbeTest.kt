@@ -84,7 +84,7 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
- * Headless layout probe — plan step K1 of `plans/gtk4-layout-semantics.md`.
+ * Headless layout probe for the GTK 4 layout semantics.
  *
  * GTK 4 negotiates size bottom-up: a widget reports `(minimum, natural)` from `measure()`, and
  * the container distributes the leftover during `allocate()`. Both steps are reachable **without

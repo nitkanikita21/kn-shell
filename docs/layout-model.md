@@ -89,6 +89,49 @@ Stack(Modifier.size(44).radius(12).background(c.accent)) {
 expand flags of its children, so an expanding spacer would stretch its whole row. Ask for
 expansion explicitly with `Modifier.align(h = Align.Fill)` / `fillWidth()`.
 
+## CenterBox: who gets the width
+
+`CenterBox` is `GtkCenterBox` whose three slots are real region boxes (`GtkCenterRegionNode`, a
+horizontal `GtkBox` with `KnBoxLayout` each). The allocation itself is GTK's
+`gtk_center_layout_distribute()` (GTK 4.12+) — the framework only routes a child into the slot its
+node names (`ComposeNodes.kt`, `GtkCenterBoxNode.place`). Nothing about centring is ours.
+
+Given the box width `W`, the CSS `border-spacing` `s` (0 by default, the plain reset does not set
+it) and the `(min, natural)` of each visible region, the four steps run in this order:
+
+1. **Centre first, against the sides' *minimums*.**
+   `centre = clamp(W − s − (start.min + end.min), centre.min, centre.nat)`.
+   `shrink-center-last` is `TRUE` by default, so the upper bound is the centre's natural width: the
+   centre keeps it while the sides shrink, and only shrinks itself once they sit at their minimums.
+2. **Sides next, against the centre and the other side's minimum.**
+   `start = clamp(W − s − (centre + end.min), start.min, start.nat)`, symmetric for `end`. A side
+   never exceeds its natural width at this step.
+3. **Position: the centre is centred on the whole width.**
+   `x = W/2 − centre/2`. If that would overlap a side, the centre is pushed in instead:
+   `x = start + s` when `start + s > x`, otherwise `x = W − centre − end − s` when the end would
+   overlap. The start check is tried first.
+4. **Expanders take the leftover, up to the centre.**
+   A region whose child computes `expand` gets everything between it and the centre:
+   `start = x − s`, `end = W − (x + centre) − s`. An expanding *centre* instead spans
+   `W − 2·max(start, end)` (symmetric margins). With no centre child the whole leftover goes to an
+   expanding start, else to an expanding end, and is split in half when both expand.
+
+Consequences that matter in a bar:
+
+* The centre pill sits at the middle of the **surface**, not of the free space: an asymmetric start
+  group does not shift it until it grows wide enough to collide with it.
+* `W` is decided one level up — `Modifier.fillWidth()` or layer-shell anchors — because the box's
+  own measure is `natural = centre.nat + 2·max(start.nat, end.nat)`: the measure pass assumes
+  symmetric sides, so a `CenterBox` never reports a content width.
+* A region keeps its natural width unless a child inside it expands (`fillWidth()`, `hExpand()`,
+  `weight`). `weight` splits the *region's* leftover and cannot cross the region boundary.
+* Tight space squeezes the sides to their minimums first, then the centre to its own minimum. The
+  probe (`LayoutProbeTest.kt:309`, "CenterBox cannot express which side is squeezed first") pins
+  that `shrink-center-last` changes nothing for a centre that already fits its minimum: the centre
+  always receives `W − start − end`.
+* Spacing between regions is GTK's `border-spacing`, not a Kotlin parameter — `CenterBox` has no
+  `spacing` argument; use `Row(spacing = …)` *inside* a region.
+
 ## What is emulated, and what cannot work
 
 * **`weight` and `aspectRatio` are not native.** They live in `KnBoxLayout`, so they only work inside `Row`, `Column`,

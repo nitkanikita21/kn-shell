@@ -1,7 +1,5 @@
 package dev.knshell.app.theme
 
-import dev.knshell.app.theme.AwwwWallpaperSource
-import dev.knshell.app.theme.DesignTokens
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.cstr
 import kotlinx.cinterop.memScoped
@@ -13,10 +11,20 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 
 interface ThemeService {
+
     val tokens: StateFlow<DesignTokens>
+
+    /**
+     * The wallpaper palette the tokens were derived from — exposed for the settings UI, which
+     * shows *why* the theme looks the way it does (dominant hue, second hue, family chroma).
+     */
+    val palette: StateFlow<WallpaperPalette>
 
     /** Who picks the dark/light scale: the palette ([ThemeMode.Auto]) or the user. */
     val mode: StateFlow<ThemeMode>
+
+    /** How strongly the wallpaper is allowed to colour the UI. */
+    val tuning: StateFlow<ThemeTuning>
 
     suspend fun reloadTheme()
 
@@ -25,28 +33,33 @@ interface ThemeService {
      * have to re-read the wallpaper (and works before the first palette arrives, too).
      */
     fun setMode(mode: ThemeMode)
-}
 
-/** Hue used when the wallpaper has no chromatic clusters (palette-core reports NAN). */
-private const val NEUTRAL_HUE = 250f
+    /** Changes how loud the tint is; re-derives from the cached palette, without a re-read. */
+    fun setTuning(tuning: ThemeTuning)
+}
 
 class ThemeServiceImpl(
     private val json: Json,
-    private val wallpaperSource: WallpaperSource
+    private val wallpaperSource: WallpaperSource,
 ) : ThemeService {
-    override val tokens: MutableStateFlow<DesignTokens> = MutableStateFlow<DesignTokens>(DesignTokens.default())
 
+    override val tokens: MutableStateFlow<DesignTokens> = MutableStateFlow(DesignTokens.default())
+    override val palette: MutableStateFlow<WallpaperPalette> = MutableStateFlow(WallpaperPalette.Achromatic)
     override val mode: MutableStateFlow<ThemeMode> = MutableStateFlow(ThemeMode.Auto)
+    override val tuning: MutableStateFlow<ThemeTuning> = MutableStateFlow(ThemeTuning.Balanced)
 
-    // Last palette the wallpaper produced (`reloadTheme` owns it): a mode switch re-derives the
-    // tokens from these instead of shelling out to palette-core again.
-    private var paletteHue: Float = NEUTRAL_HUE
-    private var paletteChroma: Float = 0f
+    // The palette is the cache: a mode or tuning switch re-derives the tokens from it instead of
+    // shelling out to palette-core again.
     private var paletteSuggestsDark: Boolean = true
 
     override fun setMode(mode: ThemeMode) {
         this.mode.value = mode
-        tokens.value = DesignTokens.fromPalette(paletteHue, paletteChroma, resolveDark())
+        rederive()
+    }
+
+    override fun setTuning(tuning: ThemeTuning) {
+        this.tuning.value = tuning
+        rederive()
     }
 
     /** The mode the user asked for, or the palette's guess when they did not ask. */
@@ -56,26 +69,30 @@ class ThemeServiceImpl(
         ThemeMode.Auto -> paletteSuggestsDark
     }
 
-    override suspend fun reloadTheme() {
-        val imagePath = wallpaperSource.query().also {
-            println("img path $it")
-        } ?: return
+    private fun rederive() {
+        tokens.value = DesignTokens.fromPalette(palette.value, resolveDark(), tuning.value)
+    }
 
+    override suspend fun reloadTheme() {
+        val imagePath = wallpaperSource.query() ?: return
         val rawJson = withContext(Dispatchers.IO) { PaletteClient.extractSync(imagePath) } ?: return
         val paletteJson = json.decodeFromString<PaletteJson>(rawJson)
-
-
-        println("""
-            colors: ${paletteJson.colors.joinToString(", ")}
-            mode: ${paletteJson.suggestedMode}
-            isFallback: ${paletteJson.isFallback}
-            hash: ${paletteJson.sourceHash}
-        """.trimIndent())
-
-        paletteHue = paletteJson.suggestedHue ?: NEUTRAL_HUE
-        paletteChroma = paletteJson.suggestedChroma
+        palette.value = paletteJson.toWallpaperPalette()
         paletteSuggestsDark = paletteJson.suggestedMode == "dark"
-
-        tokens.value = DesignTokens.fromPalette(paletteHue, paletteChroma, resolveDark())
+        rederive()
     }
 }
+
+/**
+ * palette-core's reply → the theme's design input.
+ *
+ * The clusters are the part that used to be dropped on the floor: `suggested_chroma` is a mean
+ * and cannot say *how* saturated the wallpaper's own hue gets, nor whether a second hue family
+ * is present. Keeping the clusters costs nothing (they are already in the JSON) and is what lets
+ * the surfaces carry a real tint.
+ */
+internal fun PaletteJson.toWallpaperPalette(): WallpaperPalette = WallpaperPalette(
+    hue = suggestedHue?.takeUnless { it.isNaN() } ?: NEUTRAL_HUE,
+    chroma = if (suggestedChroma.isNaN()) 0f else suggestedChroma,
+    swatches = colors.map { PaletteSwatch(l = it.l, c = it.c, h = it.h, weight = it.weight) },
+)

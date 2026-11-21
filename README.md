@@ -103,7 +103,7 @@ so a plain `./gradlew run` works without any manual setup (this also pins JDK 21
 
 ```bash
 # fast development loop — Kotlin/Native DEBUG binary (no LTO)
-./scripts/dev.sh                 # build + run (windowed by default)
+./scripts/dev.sh                 # build + run (windowed, log streamed to the terminal)
 ./scripts/dev.sh --watch         # rebuild + restart on .kt/.rs changes
 KN_SHELL_MODE=panel ./scripts/dev.sh --watch
 
@@ -116,8 +116,9 @@ KN_SHELL_MODE=panel ./scripts/dev.sh --watch
 ```
 
 `scripts/dev.sh` runs the shell in its own process group with output in
-`shell-app/build/dev.log` (`--logs` follows it), so Ctrl+C stops both the watcher and the
-app — no orphaned process and no log spam in the terminal. It also notices Rust source
+`shell-app/build/dev.log`, mirrored to the terminal by a single `tail -F` (default;
+`--no-logs` keeps the file only), so Ctrl+C stops both the watcher and the app — no
+orphaned process, and `--watch` restarts never stack up duplicate followers. It also notices Rust source
 changes and cleans the native build dirs before rebuilding: incremental links were observed to reuse a stale Rust static library, silently
 running old service code (e.g. the workspace list staying empty for seconds at startup).
 

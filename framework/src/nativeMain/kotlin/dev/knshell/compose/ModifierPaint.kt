@@ -100,13 +100,20 @@ fun Modifier.radius(horizontal: Int, vertical: Int): Modifier =
     with(RadiusElement("border-radius: ${horizontal}px ${vertical}px;"))
 
 /** Per-corner radii, clockwise: top-left, top-right, bottom-right, bottom-left. */
-fun Modifier.radius(topLeft: Int, topRight: Int, bottomRight: Int, bottomLeft: Int): Modifier =
+fun Modifier.radius(
+    topLeft: Int? = null,
+    topRight: Int? = null,
+    bottomRight: Int? = null,
+    bottomLeft: Int? = null
+): Modifier =
     with(
         RadiusElement(
-            "border-top-left-radius: ${topLeft}px; " +
-                "border-top-right-radius: ${topRight}px; " +
-                "border-bottom-right-radius: ${bottomRight}px; " +
-                "border-bottom-left-radius: ${bottomLeft}px;",
+            buildString {
+                if(topLeft != null)append("border-top-left-radius: ${topLeft}px; ")
+                if(topRight != null)append("border-top-right-radius: ${topRight}px; ")
+                if(bottomRight != null)append("border-bottom-right-radius: ${bottomRight}px; ")
+                if(bottomLeft != null)append("border-bottom-left-radius: ${bottomLeft}px; ")
+            }
         ),
     )
 
@@ -115,9 +122,9 @@ fun Modifier.radius(topLeft: Corner, topRight: Corner, bottomRight: Corner, bott
     with(
         RadiusElement(
             "border-top-left-radius: ${topLeft.horizontal}px ${topLeft.vertical}px; " +
-                "border-top-right-radius: ${topRight.horizontal}px ${topRight.vertical}px; " +
-                "border-bottom-right-radius: ${bottomRight.horizontal}px ${bottomRight.vertical}px; " +
-                "border-bottom-left-radius: ${bottomLeft.horizontal}px ${bottomLeft.vertical}px;",
+                    "border-top-right-radius: ${topRight.horizontal}px ${topRight.vertical}px; " +
+                    "border-bottom-right-radius: ${bottomRight.horizontal}px ${bottomRight.vertical}px; " +
+                    "border-bottom-left-radius: ${bottomLeft.horizontal}px ${bottomLeft.vertical}px;",
         ),
     )
 

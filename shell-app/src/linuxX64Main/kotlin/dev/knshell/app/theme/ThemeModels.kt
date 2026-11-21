@@ -12,9 +12,9 @@ data class DesignTokens(
     val icon: IconTokens,
 ) {
     companion object {
-        /** Default theme before any wallpaper/palette is loaded. */
-        fun default(): DesignTokens = DesignTokens(
-            colors = ThemeScale.fallback(isDark = true),
+        /** Default theme before any wallpaper/palette is loaded: neutral, no invented colour. */
+        fun default(tuning: ThemeTuning = ThemeTuning.Balanced): DesignTokens = DesignTokens(
+            colors = ThemeScale.fallback(isDark = true, tuning = tuning),
             radius = RadiusScale(),
             spacing = SpacingScale(),
             typography = TypeScale(fontFamily = "sans"),
@@ -22,10 +22,17 @@ data class DesignTokens(
             icon = IconTokens(),
         )
 
-        /** Theme derived from a palette (hue/chroma/mode). */
-        fun fromPalette(hue: Float, chroma: Float, isDark: Boolean): DesignTokens =
+        /**
+         * Theme derived from a wallpaper palette: hue and chroma come from the palette, the mode
+         * from the caller, and how loud the tint is from [tuning].
+         */
+        fun fromPalette(
+            palette: WallpaperPalette,
+            isDark: Boolean,
+            tuning: ThemeTuning = ThemeTuning.Balanced,
+        ): DesignTokens =
             DesignTokens(
-                colors = if (isDark) ThemeScale.dark(hue, chroma) else ThemeScale.light(hue, chroma),
+                colors = if (isDark) ThemeScale.dark(palette, tuning) else ThemeScale.light(palette, tuning),
                 radius = RadiusScale(),
                 spacing = SpacingScale(),
                 typography = TypeScale(fontFamily = "sans"),

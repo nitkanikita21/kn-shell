@@ -9,6 +9,12 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
+/** Bisection steps used by [Color.oklchFitted]; 20 halvings of 0..0.4 resolve ~4e-7 chroma. */
+private const val GAMUT_SEARCH_STEPS = 20
+
+/** Slack on the linear channels: a fitted colour may land a hair outside after rounding. */
+private const val GAMUT_EPSILON = 1e-4f
+
 /** A simple ARGB color with a CSS representation. */
 data class Color(val r: Int, val g: Int, val b: Int, val alpha: Float = 1f) {
 
@@ -37,21 +43,7 @@ data class Color(val r: Int, val g: Int, val b: Int, val alpha: Float = 1f) {
 
         /** OKLCH (l, c, h) → Color. `l` ∈ 0..1 lightness, `c` ∈ 0..~0.4 chroma, `h` in degrees. */
         fun oklch(l: Float, c: Float, h: Float, alpha: Float = 1f): Color {
-            val hRad = h * PI.toFloat() / 180f
-            val a = c * cos(hRad)
-            val b = c * sin(hRad)
-
-            val l_ = l + 0.3963377774f * a + 0.2158037573f * b
-            val m_ = l - 0.1055613458f * a - 0.0638541728f * b
-            val s_ = l - 0.0894841775f * a - 1.2914855480f * b
-
-            val l3 = l_ * l_ * l_
-            val m3 = m_ * m_ * m_
-            val s3 = s_ * s_ * s_
-
-            val rLin = 4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3
-            val gLin = -1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3
-            val bLin = -0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3
+            val (rLin, gLin, bLin) = oklchToLinear(l, c, h)
 
             return Color(
                 r = (rLin.linearToSrgb().coerceIn(0f, 1f) * 255f).toInt().coerceIn(0, 255),
@@ -60,7 +52,61 @@ data class Color(val r: Int, val g: Int, val b: Int, val alpha: Float = 1f) {
                 alpha = alpha,
             )
         }
+
+        /**
+         * OKLCH → Color that **stays inside sRGB**, by giving up chroma instead of hue.
+         *
+         * [oklch] clips every channel on its own, so an out-of-gamut `(l, c, h)` comes back as a
+         * different colour: the hue drifts and saturated hues (green worst of all) lose most of
+         * their punch. A theme that derives surfaces from a wallpaper hits this constantly — a dark
+         * surface sits at L ≈ 0.16, where sRGB only allows chroma ≈ 0.04 for green and ≈ 0.05 for
+         * blue. Bisecting on `c` keeps `l` and `h` exactly as asked and returns the most saturated
+         * colour that is still representable, so a requested tint degrades gracefully instead of
+         * turning a different hue.
+         */
+        fun oklchFitted(l: Float, c: Float, h: Float, alpha: Float = 1f): Color {
+            val lightness = l.coerceIn(0f, 1f)
+            val chroma = c.coerceAtLeast(0f)
+            if (chroma == 0f || inGamut(oklchToLinear(lightness, chroma, h))) {
+                return oklch(lightness, chroma, h, alpha)
+            }
+            var low = 0f
+            var high = chroma
+            repeat(GAMUT_SEARCH_STEPS) {
+                val mid = (low + high) / 2f
+                if (inGamut(oklchToLinear(lightness, mid, h))) low = mid else high = mid
+            }
+            return oklch(lightness, low, h, alpha)
+        }
     }
+}
+
+/** OKLCH → linear-light sRGB, unclamped (the caller decides what to do out of gamut). */
+private fun oklchToLinear(l: Float, c: Float, h: Float): Triple<Float, Float, Float> {
+    val hRad = h * PI.toFloat() / 180f
+    val a = c * cos(hRad)
+    val b = c * sin(hRad)
+
+    val l_ = l + 0.3963377774f * a + 0.2158037573f * b
+    val m_ = l - 0.1055613458f * a - 0.0638541728f * b
+    val s_ = l - 0.0894841775f * a - 1.2914855480f * b
+
+    val l3 = l_ * l_ * l_
+    val m3 = m_ * m_ * m_
+    val s3 = s_ * s_ * s_
+
+    return Triple(
+        4.0767416621f * l3 - 3.3077115913f * m3 + 0.2309699292f * s3,
+        -1.2684380046f * l3 + 2.6097574011f * m3 - 0.3413193965f * s3,
+        -0.0041960863f * l3 - 0.7034186147f * m3 + 1.7076147010f * s3,
+    )
+}
+
+private fun inGamut(linear: Triple<Float, Float, Float>): Boolean {
+    val (r, g, b) = linear
+    return r >= -GAMUT_EPSILON && r <= 1f + GAMUT_EPSILON &&
+        g >= -GAMUT_EPSILON && g <= 1f + GAMUT_EPSILON &&
+        b >= -GAMUT_EPSILON && b <= 1f + GAMUT_EPSILON
 }
 
 private fun Float.linearToSrgb(): Float =

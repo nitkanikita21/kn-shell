@@ -353,9 +353,12 @@ fun main() = Shell.run {
 ```
 
 Each of `start` / `center` / `end` is a region — a real box — so a region can hold several
-modules without a wrapper `Row` (`start = { Clock(); Space(8); Workspaces() }`). The centre keeps
-its natural width and the slack goes to a region with an expanding child, which is `GtkCenterBox`'s
-`shrink-center-last` default; see [shell-api.md](shell-api.md) for the full contract.
+modules without a wrapper `Row` (`start = { Clock(); Space(8); Workspaces() }`). The centre region
+is centred on the whole surface width and keeps its natural width; a side takes the leftover only
+when something inside it expands (`fillWidth()`), and only up to the centre. The allocation order,
+the push-in clamps and the `shrink-center-last` default are in
+[layout-model.md](layout-model.md) → "CenterBox: who gets the width"; the region/slot contract is
+in [shell-api.md](shell-api.md).
 
 ## Animations
 
