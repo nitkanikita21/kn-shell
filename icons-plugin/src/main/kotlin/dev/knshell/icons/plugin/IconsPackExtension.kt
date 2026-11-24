@@ -63,7 +63,7 @@ abstract class IconsPackExtension @Inject constructor(objects: ObjectFactory) {
 
     /** Source roots scanned for `Icon` usages (file paths, NOT project deps — avoids cycles). */
     val iconScanRoots: SetProperty<String> = objects.setProperty(String::class.java)
-        .convention(setOf("framework/src", "shell-app/src", "icons-packs"))
+        .convention(setOf("framework/src", "shell-app/src", "atlas-core/src", "icons-packs"))
 
     /** Repo root the scan roots are resolved against. */
     val scanBaseDir: org.gradle.api.file.DirectoryProperty = objects.directoryProperty()

@@ -1,0 +1,5 @@
+headers = fontconfig/fontconfig.h
+package = dev.knshell.fontconfig
+
+compilerOpts.linux = -I/usr/include
+linkerOpts.linux = -L/usr/lib -lfontconfig

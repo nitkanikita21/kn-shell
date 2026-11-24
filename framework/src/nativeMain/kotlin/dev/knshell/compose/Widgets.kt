@@ -59,7 +59,7 @@ private fun gtkBox(
  */
 @Composable
 fun Column(
-    spacing: Int = 8,
+    spacing: Int = 0,
     homogeneous: Boolean = false,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
@@ -77,7 +77,7 @@ fun Column(
  */
 @Composable
 fun Row(
-    spacing: Int = 8,
+    spacing: Int = 0,
     homogeneous: Boolean = false,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,

@@ -12,6 +12,7 @@ kotlin {
                 // DSL (atlas.dsl): тільки Compose runtime, без UI
                 implementation(project(":framework"))
                 implementation(libs.kotlinx.coroutines.core)
+                implementation(project(":icons-packs:lucide"))
 
                 // Viewer (atlas.viewer): твої GTK-примітиви
                 api(project(":framework"))

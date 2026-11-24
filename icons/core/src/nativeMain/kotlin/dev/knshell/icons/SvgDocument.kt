@@ -79,7 +79,17 @@ fun buildTintedDocument(
     val box = style.viewBoxOverride ?: "0 0 $vb $vb"
     val width = strokeWidth ?: style.strokeWidth
     val body = if (colorHex == null) {
-        normalizeStrokeWidth(inner, width)
+        val normalized = normalizeStrokeWidth(inner, width)
+        // Generated pack bodies drop the upstream root <svg> tag, and with it the
+        // pack-wide `fill="none" stroke="currentColor"` geometry. Without this
+        // wrapper closed Lucide paths default to a black fill, so a colourless
+        // Icon paints a solid square instead of its outline.
+        if (style.tintAttribute.startsWith("stroke")) {
+            "<g fill=\"none\" stroke=\"currentColor\" stroke-linecap=\"round\" " +
+                "stroke-linejoin=\"round\" stroke-width=\"${formatWidth(width)}\">$normalized</g>"
+        } else {
+            normalized
+        }
     } else {
         val stripped = stripAttribute(inner, style.tintAttribute)
         val geometry = if (style.tintAttribute.startsWith("stroke")) {

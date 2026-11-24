@@ -56,6 +56,17 @@ class SvgDocumentTest {
     }
 
     @Test
+    fun nullColorRestoresStrokeGeometryLostWithTheRootTag() {
+        // Generated Lucide bodies contain no root attributes, so the pack's
+        // fill="none" / stroke="currentColor" must be re-applied by the renderer.
+        val generatedLucideBody = """<rect width="18" height="18" x="3" y="3" rx="2"/>"""
+        val doc = buildTintedDocument(generatedLucideBody, stroke, null)!!
+        assertTrue(doc.contains("fill=\"none\""), "closed paths must stay unfilled: $doc")
+        assertTrue(doc.contains("stroke=\"currentColor\""), doc)
+        assertTrue(doc.contains("stroke-width=\"2\""), "pack default survives without an explicit color: $doc")
+    }
+
+    @Test
     fun strokeWidthOverrideWinsOverPackDefault() {
         val doc = buildTintedDocument(body, stroke, "#000000", strokeWidth = 1.5)!!
         assertTrue(doc.contains("stroke-width=\"1.5\""), doc)

@@ -7,10 +7,16 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class AtlasHostService(
-    val stories: List<StoryGroup>
+    val groups: List<StoryGroup>
 ) {
     private var _activeStory: MutableStateFlow<StoryEntry?> = MutableStateFlow(null)
     val activeStory: StateFlow<StoryEntry?> get() = _activeStory.asStateFlow()
 
+    private var _activeGroup: MutableStateFlow<StoryGroup?> = MutableStateFlow(null)
+    val activeGroup: StateFlow<StoryGroup?> get() = _activeGroup.asStateFlow()
 
+    fun select(group: StoryGroup, entry: StoryEntry) {
+        _activeStory.value = entry
+        _activeGroup.value = group
+    }
 }

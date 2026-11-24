@@ -15,6 +15,10 @@ val epoxyCflags: List<String> = providers.exec {
     commandLine("pkg-config", "--cflags", "epoxy")
 }.standardOutput.asText.get().trim().split(Regex("\\s+")).filter { it.isNotBlank() }
 
+val fontconfigCflags: List<String> =
+    providers.exec { commandLine("pkg-config", "--cflags", "fontconfig") }
+        .standardOutput.asText.get().trim().split(" ").filter { it.isNotBlank() }
+
 kotlin {
     linuxX64 {
         // The host GTK 4.22 needs newer glibc symbols than Kotlin/Native's bundled sysroot;
@@ -29,6 +33,11 @@ kotlin {
         compilations.getByName("main").cinterops.create("gl") {
             defFile(project.file("src/nativeInterop/cinterop/gl.def"))
             compilerOpts(epoxyCflags)
+        }
+
+        compilations.getByName("main").cinterops.create("fontconfig") {
+            defFile(project.file("src/nativeInterop/cinterop/fontconfig.def"))
+            compilerOpts(fontconfigCflags)
         }
     }
 
