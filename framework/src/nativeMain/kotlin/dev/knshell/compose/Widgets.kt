@@ -316,3 +316,47 @@ fun Slider(
         },
     )
 }
+
+/**
+ * Scrollable viewport over [content] (`GtkScrolledWindow`). Vertical scroll is on by default,
+ * horizontal is off. It only scrolls when constrained: give it `Modifier.weight(1f)` inside a
+ * [Column]/[Row], or a fixed size; otherwise the window just grows to fit the content.
+ */
+@Composable
+fun Scroll(
+    modifier: Modifier = Modifier,
+    horizontal: Boolean = false,
+    vertical: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    ComposeNode<GtkScrollNode, GtkApplier>(
+        factory = { GtkScrollNode().plain().also { it.configurePolicy(horizontal, vertical) } },
+        update = {
+            set(horizontal) { value -> configurePolicy(value, vertical) }
+            set(vertical) { value -> configurePolicy(horizontal, value) }
+            set(modifier) { value -> applyModifier(value) }
+        },
+    ) {
+        content()
+    }
+}
+
+/** Wrapping flow container (`GtkFlowBox`): children keep their natural size and wrap by width. */
+@Composable
+fun Flow(
+    spacing: Int = 8,
+    maxPerLine: Int = 100,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    ComposeNode<GtkFlowNode, GtkApplier>(
+        factory = { GtkFlowNode().plain().also { it.configure(spacing, maxPerLine) } },
+        update = {
+            set(spacing) { value -> configure(value, maxPerLine) }
+            set(maxPerLine) { value -> configure(spacing, value) }
+            set(modifier) { value -> applyModifier(value) }
+        },
+    ) {
+        content()
+    }
+}

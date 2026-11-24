@@ -81,17 +81,17 @@ Dark surfaces (`background` / `card` / `secondary` / `accent`), with `lift = tun
 and `pull` the dominant-lightness shift:
 
 - `background` L `0.145 + lift + pull × 0.6`
-- `card` L `0.205 + lift × 0.9 + pull × 0.7`
-- `secondary`/`muted` L `0.269 + lift × 1.1 + pull × 0.8`
+- `card` L `0.225 + lift × 0.9 + pull × 0.7` (≈ 0.08 above `background`; was 0.205, merged with the window)
+- `secondary`/`muted` L `0.31 + lift × 1.1 + pull × 0.8`
 - `accent` L `0.371 + lift × 1.3 + pull` — shadcn's hover wash, one step above `secondary`
 - `foreground` L `0.985`, `mutedForeground` L `0.708`, `ring` L `0.556`, `primary` L `0.705`
 
 Light mode:
 
-- `background` L `0.975 − lift × 0.6`, chroma `neutral × 0.80` — the window is tinted too; a pure
+- `background` L `0.935 − lift × 0.6`, chroma `neutral × 0.80` — the window is tinted too; a pure
   white window next to a coloured panel is what makes a light theme feel bolted onto its wallpaper
 - `card` L `0.998 − lift × 0.25`, chroma `neutral × 0.45`
-- `secondary`/`muted` L `0.945 − lift × 0.9`, `accent` L `0.915 − lift × 0.5`
+- `secondary`/`muted` L `0.905 − lift × 0.9`, `accent` L `0.865 − lift × 0.5` (ramp steps ≈ 0.07 / 0.04 / 0.03)
 - `primary` L `0.55`: the dark theme's `0.705` is unreadable on white
 - `foreground` L `0.205`, `mutedForeground` L `0.50`, `ring` L `0.55`
 
@@ -99,7 +99,7 @@ Other rules:
 
 - In the dark theme `border`/`input` are translucent, **tinted** hairlines (L `0.62`/`0.68`,
   alpha `0.22`/`0.28`), so the wallpaper shows through the shell's edges and the edge belongs to
-  the same colour family. In the light theme they are solid.
+  the same colour family. In the light theme they are solid, L `0.84`.
 - `destructive` is red, but not a fixed red: its hue starts at `25°` and follows the wallpaper by
   `0.35` of the way, clamped to `±12°`, and only for warm wallpapers (`|Δh| ≤ 90°`). A cold
   wallpaper cannot drag an error colour to teal, and a warm one gets a red that belongs.

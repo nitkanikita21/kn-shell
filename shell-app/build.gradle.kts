@@ -1,41 +1,50 @@
+import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBinary
+import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.DEBUG
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
 }
 
-// Gobley writes palette-core's static archive into the crate's own `target/` (same
-// layout it uses for rust-core). Link it into the executable below.
 val paletteArchiveFile =
     rootProject.file(
         "palette-core/target/x86_64-unknown-linux-gnu/debug/libpalette_core.a",
     )
 
+// ATLAS: спільні linker-опції для обох виконуваних файлів (app і atlas),
+// щоб Rust/palette архіви та glibc-прапорець не дублювати.
+fun NativeBinary.applyNativeLinking() {
+    linkerOpts("--allow-shlib-undefined")
+    linkerOpts(paletteArchiveFile.absolutePath)
+}
+
 kotlin {
     linuxX64 {
-        compilations["main"].cinterops {
-            // Bind palette-core's hand-written C ABI (`palette_core.h`) into Kotlin.
-            // cinterop does not add the `.def` directory to the header search path, so
-            // point it at the crate root explicitly via `-I`. The native archive is
-            // linked by the executable (see `binaries` below) because cinterop itself
-            // does not accept `linkerOpts`.
+        val main = compilations["main"]
+
+        main.cinterops {
             create("palette") {
                 definitionFile = rootProject.file("palette-core/palette.def")
                 compilerOpts("-I${rootProject.file("palette-core").absolutePath}")
             }
         }
 
+        val atlas = compilations.create("atlas") {
+            associateWith(main)
+        }
+
         binaries {
             executable {
                 entryPoint = "main"
-                // GTK 4.22 from the host needs newer glibc symbols than Kotlin/Native's
-                // bundled sysroot. Allow undefined symbols in shared libraries: they are
-                // resolved at runtime against the system glibc (see README).
-                linkerOpts("--allow-shlib-undefined")
-                // Link palette-core's self-contained static archive into the executable.
-                // (Its Rust dependencies are bundled into the `.a` by the staticlib
-                // crate-type, so no extra native libs are needed here.)
-                linkerOpts(paletteArchiveFile.absolutePath)
+                applyNativeLinking()
+            }
+
+            // Таска: linkAtlasDebugExecutableLinuxX64
+            executable("atlas", listOf(DEBUG)) {
+                compilation = atlas
+                entryPoint = "atlas.main"
+                applyNativeLinking()
             }
         }
     }
@@ -54,29 +63,36 @@ kotlin {
                 implementation(libs.koin.core)
             }
         }
+
+        // ATLAS: залежності лише для сторіс. Каталог: src/linuxX64Atlas/kotlin
+        getByName("linuxX64Atlas") {
+            dependencies {
+                implementation(project(":atlas-core"))
+            }
+        }
     }
 }
 
-// `./gradlew run` — the single entry point promised by the specification:
-// it compiles Rust (release), generates the UniFFI bindings, links the
-// Kotlin/Native executable and launches the shell.
 tasks.register("run") {
     group = "application"
     description = "Builds the shell (Rust + UniFFI + Kotlin/Native) and launches it."
     dependsOn("runReleaseExecutableLinuxX64")
 }
 
-// The executable must be relinked whenever a Rust static library changes; link tasks do
-// not model that dependency on their own (see rust-core/build.gradle.kts and below).
+tasks.register("runAtlas") {
+    group = "application"
+    description = "Builds and launches the Atlas component catalog (debug)."
+    dependsOn("runAtlasDebugExecutableLinuxX64")
+}
+
 val rustArchive =
     rootProject.layout.projectDirectory.file(
         "rust-core/target/x86_64-unknown-linux-gnu/debug/libkn_shell_core.a",
     )
-tasks.matching { it.name.startsWith("linkDebug") || it.name.startsWith("linkRelease") }.configureEach {
-    if (this is Task) {
-        inputs.file(rustArchive).optional()
-        inputs.file(paletteArchiveFile).optional()
-        // Ensure the palette-core archive exists before linking the executable.
-        dependsOn(project(":palette-core").tasks.matching { it.name.startsWith("cargoBuild") })
-    }
+
+// Умова ширша за "linkDebug", бо `linkAtlasDebugExecutableLinuxX64` з нього не починається.
+tasks.matching { it.name.startsWith("link") && it.name.contains("Executable") }.configureEach {
+    inputs.file(rustArchive).optional()
+    inputs.file(paletteArchiveFile).optional()
+    dependsOn(project(":palette-core").tasks.matching { it.name.startsWith("cargoBuild") })
 }

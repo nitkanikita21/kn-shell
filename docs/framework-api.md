@@ -28,7 +28,7 @@ is a separate Gradle module and Kotlin has no friend-module visibility.
 | Symbol | Purpose |
 | --- | --- |
 | `Row`, `Column`, `Box`, `CenterBox`, `Stack`, `Overlay`, `Slider`, `Label`, `Markup`, `Button` | layout and leaf widgets |
-| `Modifier` + extensions | layout (`size`, `padding`, `margin`, `align`, `hExpand`, `fillWidth`, `minSize`, `maxWidth`), styling (`background`, `gradient`, `glow`, `radius`, `textColor`, `fontSize`, …), interaction (`onClick`, `onHover`, `cursor`, `pointerCursor`), animation (`transition`, `gradientStops`), `rawStyle`, `clipOverflow` |
+| `Modifier` + extensions | layout (`size`, `padding`, `margin`, `align`, `hExpand`, `fillWidth`, `minSize`, `maxWidth`), styling (`background`, `gradient`, `glow`, `radius`, `textColor`, `fontSize`, …), interaction (`onClick`, `onHover`, `cursor`, `pointerCursor`, `inputRegion`), animation (`transition`, `gradientStops`), `rawStyle`, `clipOverflow` |
 | `Align`, `AnimatedAxis`, `Corner`, `Color` | supporting types |
 | `animatedWidth`, `animatedHeight`, `animatedSize` (Modifier extensions) | Compose-owned size animation (AnimationSpec + GTK frame clock; passive native layout manager) |
 | `Canvas`, `ShaderCanvas` | cairo / OpenGL drawing |

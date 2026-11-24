@@ -18,8 +18,12 @@ import kotlinx.cinterop.staticCFunction
 import kn.gtk.GtkBox
 import kn.gtk.GtkButton
 import kn.gtk.GtkDrawingArea
+import kn.gtk.GtkFlowBox
 import kn.gtk.GtkLabel
 import kn.gtk.GtkOrientation
+import kn.gtk.GtkPolicyType
+import kn.gtk.GtkScrolledWindow
+import kn.gtk.GtkSelectionMode
 import kn.gtk.GtkWidget
 import kn.gtk.PangoEllipsizeMode
 import kn.gtk.cairo_t
@@ -35,6 +39,13 @@ import kn.gtk.gtk_drawing_area_new
 import kn.gtk.gtk_drawing_area_set_content_height
 import kn.gtk.gtk_drawing_area_set_content_width
 import kn.gtk.gtk_drawing_area_set_draw_func
+import kn.gtk.gtk_flow_box_append
+import kn.gtk.gtk_flow_box_new
+import kn.gtk.gtk_flow_box_remove
+import kn.gtk.gtk_flow_box_set_column_spacing
+import kn.gtk.gtk_flow_box_set_max_children_per_line
+import kn.gtk.gtk_flow_box_set_row_spacing
+import kn.gtk.gtk_flow_box_set_selection_mode
 import kn.gtk.gtk_label_new
 import kn.gtk.gtk_label_set_ellipsize
 import kn.gtk.gtk_label_set_label
@@ -45,6 +56,9 @@ import kn.gtk.gtk_label_set_wrap
 import kn.gtk.gtk_label_set_xalign
 import kn.gtk.gtk_range_set_value
 import kn.gtk.gtk_scale_new_with_range
+import kn.gtk.gtk_scrolled_window_new
+import kn.gtk.gtk_scrolled_window_set_child
+import kn.gtk.gtk_scrolled_window_set_policy
 import kn.gtk.gtk_widget_queue_draw
 
 internal class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
@@ -236,5 +250,55 @@ internal class GtkCanvasNode(width: Int, height: Int) : GtkNode(gtk_drawing_area
 
     fun requestRedraw() {
         gtk_widget_queue_draw(widget)
+    }
+}
+
+/**
+ * Scrollable viewport over a single child. GTK's scrolled window holds exactly one child,
+ * so several widgets must be wrapped in a Column.
+ */
+internal class GtkScrollNode : GtkNode(gtk_scrolled_window_new()!!) {
+    private var hasChild = false
+
+    fun configurePolicy(horizontal: Boolean, vertical: Boolean) {
+        gtk_scrolled_window_set_policy(
+            widget.reinterpret<GtkScrolledWindow>(),
+            if (horizontal) GtkPolicyType.GTK_POLICY_AUTOMATIC else GtkPolicyType.GTK_POLICY_NEVER,
+            if (vertical) GtkPolicyType.GTK_POLICY_AUTOMATIC else GtkPolicyType.GTK_POLICY_NEVER,
+        )
+    }
+
+    override fun attachChild(child: CPointer<GtkWidget>) {
+        check(!hasChild) { "Scroll accepts a single child; wrap several in a Column" }
+        hasChild = true
+        gtk_scrolled_window_set_child(widget.reinterpret<GtkScrolledWindow>(), child)
+    }
+
+    override fun detachChild(child: CPointer<GtkWidget>) {
+        hasChild = false
+        gtk_scrolled_window_set_child(widget.reinterpret<GtkScrolledWindow>(), null)
+    }
+}
+
+/** Wrapping container: children flow left to right and wrap onto new lines. */
+internal class GtkFlowNode : GtkNode(gtk_flow_box_new()!!) {
+    init {
+        // Plain layout, not a selectable list: no highlight on click.
+        gtk_flow_box_set_selection_mode(widget.reinterpret<GtkFlowBox>(), GtkSelectionMode.GTK_SELECTION_NONE)
+    }
+
+    fun configure(spacing: Int, maxPerLine: Int) {
+        val box = widget.reinterpret<GtkFlowBox>()
+        gtk_flow_box_set_column_spacing(box, spacing.toUInt())
+        gtk_flow_box_set_row_spacing(box, spacing.toUInt())
+        gtk_flow_box_set_max_children_per_line(box, maxPerLine.toUInt())
+    }
+
+    override fun attachChild(child: CPointer<GtkWidget>) {
+        gtk_flow_box_append(widget.reinterpret<GtkFlowBox>(), child)
+    }
+
+    override fun detachChild(child: CPointer<GtkWidget>) {
+        gtk_flow_box_remove(widget.reinterpret<GtkFlowBox>(), child)
     }
 }

@@ -79,7 +79,9 @@ object ThemeScale {
         val lift = tuning.lift
 
         val background = tint.color(0.145f + lift + pull * 0.6f, tint.neutral)
-        val card = tint.color(0.205f + lift * 0.9f + pull * 0.7f, tint.neutral)
+        // Raised surface steps ~0.08 L above the window: at the old ~0.06 the card merged with
+        // `background` on any tinted wallpaper.
+        val card = tint.color(0.225f + lift * 0.9f + pull * 0.7f, tint.neutral)
         val foreground = tint.color(0.985f, 0.004f + tint.neutral * 0.3f, second = true)
         return ThemeTokens(
             background = background,
@@ -90,9 +92,9 @@ object ThemeScale {
             popoverForeground = foreground,
             primary = tint.color(0.705f, tint.brand),
             primaryForeground = background,
-            secondary = tint.color(0.269f + lift * 1.1f + pull * 0.8f, tint.second, second = true),
+            secondary = tint.color(0.31f + lift * 1.1f + pull * 0.8f, tint.second, second = true),
             secondaryForeground = foreground,
-            muted = tint.color(0.269f + lift * 1.1f + pull * 0.8f, tint.second, second = true),
+            muted = tint.color(0.31f + lift * 1.1f + pull * 0.8f, tint.second, second = true),
             mutedForeground = tint.color(0.708f, minOf(tint.tint, MUTED_FOREGROUND_MAX_CHROMA), second = true),
             // shadcn's `accent` is the hover wash, one step above `secondary` — not the brand.
             accent = tint.color(0.371f + lift * 1.3f + pull, tint.tint),
@@ -116,7 +118,9 @@ object ThemeScale {
 
         // The window itself is tinted too: a pure white background next to a coloured panel is
         // what makes a light theme feel bolted on to its wallpaper.
-        val background = tint.color(0.975f - lift * 0.6f + pull * 0.12f, tint.neutral * 0.80f)
+        // Pulled down from 0.975 so `card` (0.998) is a visible step above the window, and the
+        // secondary/accent ramp below keeps its order.
+        val background = tint.color(0.935f - lift * 0.6f + pull * 0.12f, tint.neutral * 0.80f)
         val card = tint.color(0.998f - lift * 0.25f, tint.neutral * 0.45f)
         val foreground = tint.color(0.205f + pull * 0.3f, maxOf(tint.neutral * 0.5f, 0.004f))
         return ThemeTokens(
@@ -129,16 +133,16 @@ object ThemeScale {
             // Darker than the dark theme's brand: on white, lightness 0.55 is what stays legible.
             primary = tint.color(0.55f, tint.brand),
             primaryForeground = background,
-            secondary = tint.color(0.945f - lift * 0.9f + pull * 0.15f, maxOf(tint.second * 1.05f, 0.006f), second = true),
+            secondary = tint.color(0.905f - lift * 0.9f + pull * 0.15f, maxOf(tint.second * 1.05f, 0.006f), second = true),
             secondaryForeground = foreground,
-            muted = tint.color(0.945f - lift * 0.9f + pull * 0.15f, maxOf(tint.second * 1.05f, 0.006f), second = true),
+            muted = tint.color(0.905f - lift * 0.9f + pull * 0.15f, maxOf(tint.second * 1.05f, 0.006f), second = true),
             mutedForeground = tint.color(0.50f, minOf(tint.tint, MUTED_FOREGROUND_MAX_CHROMA), second = true),
-            accent = tint.color(0.915f - lift * 0.5f, tint.tint * 0.95f),
+            accent = tint.color(0.865f - lift * 0.5f, tint.tint * 0.95f),
             accentForeground = foreground,
             destructive = tint.color(0.577f, minOf(maxOf(tint.chroma * 1.6f, 0.17f), 0.245f), hue = tint.destructiveHue),
             destructiveForeground = tint.color(0.985f, 0.004f),
-            border = tint.color(0.885f, maxOf(tint.neutral, 0.006f)),
-            input = tint.color(0.885f, maxOf(tint.neutral, 0.006f)),
+            border = tint.color(0.84f, maxOf(tint.neutral, 0.006f)),
+            input = tint.color(0.84f, maxOf(tint.neutral, 0.006f)),
             ring = tint.color(0.55f, minOf(tint.tint * RING_GAIN, RING_MAX_CHROMA), second = true),
             isDark = false,
         )

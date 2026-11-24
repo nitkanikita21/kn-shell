@@ -1,5 +1,5 @@
 // Internal record for one window mounted on `ShellRuntime`: id, title, GTK window, composition,
-// `StableRef` and closed flag.
+// `StableRef`, closed flag and — for bar surfaces — the input-region tracker.
 
 @file:OptIn(ExperimentalForeignApi::class)
 
@@ -21,4 +21,7 @@ internal class RuntimeWindow(
 ) {
     var selfRef: StableRef<RuntimeWindow>? = null
     var closed: Boolean = false
+
+    /** Shapes the surface's pointer input to the `Modifier.inputRegion()` widgets; bars only. */
+    var inputRegion: InputRegion? = null
 }

@@ -12,7 +12,7 @@ package dev.knshell.compose
  * Label("72%", modifier = Modifier.textColor(Catppuccin.Green))
  * ```
  */
-fun Modifier.textColor(color: Color, transitionMs: Int = 0): Modifier = with(TextColorElement(color, transitionMs))
+fun Modifier.textColor(color: Color, transitionMs: Int = 200): Modifier = with(TextColorElement(color, transitionMs))
 
 /** Font size in CSS pixels (`font-size`). */
 fun Modifier.fontSize(px: Int): Modifier = with(FontSizeElement(px))

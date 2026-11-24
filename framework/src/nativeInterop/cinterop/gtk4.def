@@ -7,7 +7,14 @@
  *
  * Packages used by this project: gtk4, gtk4-layer-shell 1.x (GtkLayerShell-1.0.gir is
  * generated from the same headers installed by the distro package).
+ *
+ * `gdk/wayland/gdkwayland.h` + `wayland-client.h` are here for one reason: wlr-layer-shell
+ * has no input-region API, so a bar that is mostly transparent has to punch its own shape
+ * with `wl_surface_set_input_region` (see `dev.knshell.shell.InputRegion.kt`).
  */
 package = kn.gtk
-headers = gtk/gtk.h gtk4-layer-shell.h
-linkerOpts = -L/usr/lib -L/usr/lib64 -L/lib64 -lgtk-4 -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -lgdk_pixbuf-2.0 -lcairo-gobject -lcairo -lvulkan -lgraphene-1.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lgtk4-layer-shell
+# `-I/usr/include` is not in Kotlin/Native's bundled sysroot, and both gdkwayland.h and the
+# wl_surface prototypes below need `wayland-client.h` from the distro.
+compilerOpts = -I/usr/include
+headers = gtk/gtk.h gtk4-layer-shell.h gdk/wayland/gdkwayland.h wayland-client.h
+linkerOpts = -L/usr/lib -L/usr/lib64 -L/lib64 -lgtk-4 -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -lgdk_pixbuf-2.0 -lcairo-gobject -lcairo -lvulkan -lgraphene-1.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lgtk4-layer-shell -lwayland-client

@@ -81,6 +81,39 @@ GNOME/Mutter `gtk_layer_is_supported()` is false and the window degrades to a no
 Bars are transparent by default (`window.kn-window.kn-bar`); the kit pills paint the
 background.
 
+### One bar, several islands
+
+A bar is ONE layer-shell surface spanning the output, so several islands go into one window
+placed by `CenterBox` — not into several `barWindow` calls, which would each claim their own
+exclusive zone and stack on top of each other:
+
+```kotlin
+barWindow(BarWindowSpec(width = -1, height = -1, anchors = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right))) {
+    CenterBox(
+        modifier = Modifier.fillWidth(),
+        start = { Island(Modifier.inputRegion()) { Workspaces() } },
+        center = { Island(Modifier.inputRegion()) { Clock() } },
+        end = { Island(Modifier.inputRegion()) { Status() } },
+    )
+}
+```
+
+### Input region
+
+Wayland delivers pointer input to the whole **surface rectangle**, transparent pixels included,
+so the gaps between islands would swallow every click meant for the window behind the bar.
+wlr-layer-shell has no input-region API, so the runtime shapes the surface itself
+(`dev.knshell.shell.InputRegion`): the clickable area is the union of the bounds of the widgets
+tagged `Modifier.inputRegion()`.
+
+- Tag each island, not the bar root — the tag is not inherited.
+- No tagged widget in a bar = the default full-surface region (a bar that does not opt in
+  behaves exactly as before).
+- The union is re-read every 250 ms and pushed to the compositor only when it changed, so
+  reshaping lags a geometry change by at most that much (a permanent frame tick would make the
+  bar render at 60 fps forever).
+- Wayland only: on X11 the region code is a no-op.
+
 ## Reactive services
 
 `Services` (`dev.knshell.services.Services`) is the framework-style entry point: each
@@ -165,7 +198,7 @@ remove boilerplate:
 | Utility | What it is |
 | --- | --- |
 | `Space(width, height)`, `HSpace(w)`, `VSpace(h)`, `Spacer(modifier)` | empty boxes for spacing |
-| `Text(text, modifier, size = 13, color = null, transitionMs = 0, ellipsize = false, maxWidthChars = -1)` | plain label |
+| `Text(text, modifier, size = 13, color = null, transitionMs = 200, ellipsize = false, maxWidthChars = -1)` | plain label |
 
 Layout: `Row`, `Column`, `Box`, `CenterBox`, `Stack`, `Overlay` from `dev.knshell.compose`.
 `Box` is the **block-flow** container (the "div": children one under another), not Compose's
@@ -173,7 +206,7 @@ Layout: `Row`, `Column`, `Box`, `CenterBox`, `Stack`, `Overlay` from `dev.knshel
 overlay must not affect the measured size, with `Overlay`.
 Colours: the `Catppuccin` palette object (`dev.knshell.compose`); build any other palette
 with the Modifier DSL. Icons are not a font glyph: `Icon` lives in `:icons:core`
-(`dev.knshell.compose.Icon(icon: IconRef, modifier, size = 24, color = null, transitionMs = 0, strokeWidth = null)`)
+(`dev.knshell.compose.Icon(icon: IconRef, modifier, size = 24, color = null, transitionMs = 200, strokeWidth = null)`)
 and renders the pack's SVG through librsvg — see [`icons.md`](icons.md).
 
 ```kotlin
@@ -284,7 +317,7 @@ The reset is installed once after `gtk_init()`, by both `Shell.run` and the lega
 | `focusRing(color, width = 2, offset = 0)` | keyboard focus outline for `:focus-visible` |
 | `minWidth(px)` / `minHeight(px)` / `minSize(w, h)` | CSS minimums after the plain reset removed the theme's |
 | `maxWidth(px)` / `maxHeight(px)` / `maxSize(w, h)` | ceiling on the size this widget may be given: it clamps an explicit `width()/height()/size()` request **and**, inside a `Row`/`Column`/`Box` (a `KnBoxLayout` container), the size the manager hands the child — natural content included. GTK has no max-size API, so the second half is an emulation by the layout manager; outside one, only an explicit request is capped. The ceiling stops at the child's own minimum (`min` beats `max`, as in CSS), so give the child a way to shrink — `ellipsize`/`wrap` on a `Label` |
-| `textColor(color, transitionMs = 0)` / `fontSize(px)` / `fontFamily(name)` / `bold()` | CSS text declarations; `transitionMs` animates the text colour |
+| `textColor(color, transitionMs = 200)` / `fontSize(px)` / `fontFamily(name)` / `bold()` | CSS text declarations; `transitionMs` animates the text colour |
 | `transition(ms)` | native GTK transition for colour-like props (color/background/border/shadow/opacity) |
 | `gradient(colors…, angleDeg)` / `radialGradient(colors…)` | CSS gradient background |
 | `glow(color, blur, spread)` | coloured box-shadow glow |

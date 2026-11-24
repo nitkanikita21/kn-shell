@@ -225,7 +225,12 @@ internal class ShellRuntime private constructor() {
             // Apply the bar size as late as possible: layer-shell computes the surface size
             // when the window is mapped.
         }
-        gtk_window_present(window)
+        if (bar != null) {
+        // Shape the pointer input to the islands: a bar is a full-width transparent surface, and
+        // without this every gap between islands would eat clicks meant for the windows below.
+        record.inputRegion = InputRegion(window).also { it.start() }
+    }
+    gtk_window_present(window)
         println(
             "[shell-runtime] window #${record.id} \"$title\" " +
                 (if (bar != null) "(layer-shell bar, namespace=${bar.namespace})" else "(plain)") +
@@ -268,6 +273,8 @@ internal class ShellRuntime private constructor() {
         record.closed = true
         val root = gtk_window_get_child(record.window)
         if (root != null) frameClock.unregisterRoot(root.reinterpret())
+        record.inputRegion?.stop()
+        record.inputRegion = null
         record.composition.dispose()
         windows.remove(record)
         println(

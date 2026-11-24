@@ -1,19 +1,27 @@
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import dev.knshell.app.di.initKoin
+import dev.knshell.app.theme.ThemeMode
 import dev.knshell.app.theme.ThemeService
 import dev.knshell.app.ui.bar.Workspaces
-import dev.knshell.app.ui.common.Island
+import dev.knshell.app.ui.bar.Island
 import dev.knshell.app.ui.TestUi
 import dev.knshell.app.ui.helpers.injectDi
+import dev.knshell.compose.CenterBox
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.Row
+import dev.knshell.compose.centerV
+import dev.knshell.compose.fillWidth
+import dev.knshell.compose.inputRegion
 import dev.knshell.compose.radius
 import dev.knshell.services.ShellService
 import dev.knshell.shell.BarAnchor
 import dev.knshell.shell.BarWindowSpec
 import dev.knshell.shell.ExclusiveZone
+import dev.knshell.shell.Margins
 import dev.knshell.shell.Shell
 import dev.knshell.shell.WindowSpec
+import dev.knshell.ui.primitives.Spacer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.coroutines.delay
 import org.koin.mp.KoinPlatform
@@ -39,44 +47,33 @@ fun main() {
     // plain (non-suspend) function, so `main` must not be suspend — see AppRoot below for
     // where the suspend `ThemeService.reloadTheme()` is driven.
     Shell.run {
+        // ONE bar surface, three islands. Three separate bar windows would each claim their own
+        // exclusive zone, so the compositor stacks them — one under another instead of
+        // left / center / right. `CenterBox` places the islands on one surface instead.
         barWindow(
             BarWindowSpec(
                 width = -1,
                 height = -1,
-                anchors = setOf(BarAnchor.Top),
+                anchors = setOf(BarAnchor.Top, BarAnchor.Left, BarAnchor.Right),
+                margins = Margins(0, 0, 0, 4),
                 exclusiveZone = ExclusiveZone.Auto
             )
         ) {
             // Exactly one surface drives the theme: three bars polling in parallel would
             // extract the wallpaper three times a tick.
             WallpaperThemeDriver()
-            Island(Modifier.radius(0, 0, null, 0)) {
-                Workspaces()
-            }
-        }
-        barWindow(
-            BarWindowSpec(
-                width = -1,
-                height = -1,
-                anchors = setOf(BarAnchor.Top),
-                exclusiveZone = ExclusiveZone.Auto
+            CenterBox(
+                modifier = Modifier.fillWidth(),
+                start = { Spacer() },
+                center = {
+                    Island(Modifier.inputRegion().radius(0, 0, null, null)) {
+                        Row(4, modifier = Modifier.centerV()) {
+                            Workspaces()
+                        }
+                    }
+                },
+                end = { Spacer() },
             )
-        ) {
-            Island(Modifier.radius(0, 0, null, null)) {
-                Workspaces()
-            }
-        }
-        barWindow(
-            BarWindowSpec(
-                width = -1,
-                height = -1,
-                anchors = setOf(BarAnchor.Top),
-                exclusiveZone = ExclusiveZone.Auto
-            )
-        ) {
-            Island(Modifier.radius(0, 0, 0, null)) {
-                Workspaces()
-            }
         }
         if (demo) {
             window(WindowSpec(title = "KN Shell — theme", width = 900, height = 620)) {
@@ -101,6 +98,7 @@ fun main() {
 private fun WallpaperThemeDriver() {
     val themeService by injectDi<ThemeService>()
     LaunchedEffect(themeService) {
+        themeService.setMode(ThemeMode.Dark)
         while (true) {
             themeService.reloadTheme()
             delay(WALLPAPER_POLL_MS)

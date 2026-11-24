@@ -16,7 +16,9 @@ import kn.gtk.GtkOverflow
 import kn.gtk.GtkWidget
 import kn.gtk.GTK_ALIGN_FILL
 import kn.gtk.GTK_ALIGN_START
+import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_set_halign
+import kn.gtk.gtk_widget_remove_css_class
 import kn.gtk.gtk_widget_set_hexpand
 import kn.gtk.gtk_widget_set_margin_bottom
 import kn.gtk.gtk_widget_set_margin_end
@@ -48,6 +50,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var hoverExit: (() -> Unit)? = null
     var cursorName: String? = null
     var valign: UInt? = null
+    var inputRegion = false
     val rules = mutableListOf<Pair<String, String>>()
 
     for (element in modifier.elements) {
@@ -231,6 +234,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             }
 
             is CursorElement -> cursorName = element.name
+            is InputRegionElement -> inputRegion = true
 
             is AnimatedSizeElement -> applyAnimatedSizeModifier(widget, element)
 
@@ -313,4 +317,12 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
 
     inlineStyle.setRules(rules)
     inlineStyle.interaction.bind(clickHandler, hoverEnter, hoverExit, cursorName)
+
+    // Marks the widget for the window's input-region shaping (`dev.knshell.shell.InputRegion`).
+    // Like every other field here, a chain that no longer mentions it has to clear it.
+    if (inputRegion) {
+        gtk_widget_add_css_class(widget, INPUT_REGION_CLASS)
+    } else {
+        gtk_widget_remove_css_class(widget, INPUT_REGION_CLASS)
+    }
 }

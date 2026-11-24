@@ -23,7 +23,7 @@ fun Modifier.background(
     shadow: Boolean = false,
     borderWidth: Int = 0,
     borderColor: Color? = null,
-    transitionMs: Int = 0,
+    transitionMs: Int = 200,
 ): Modifier = with(BackgroundElement(color, radius, shadow, borderWidth, borderColor, transitionMs))
 
 /** Background while the pointer is over the widget (`:hover`), replacing the base fill. */

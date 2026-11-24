@@ -133,3 +133,31 @@ fun Modifier.cursor(name: String): Modifier = with(CursorElement(name))
 
 /** Hand cursor (`"pointer"`) — typical for clickable elements. */
 fun Modifier.pointerCursor(): Modifier = cursor("pointer")
+
+/**
+ * CSS class the shell runtime looks for when it shapes a bar surface's Wayland input region
+ * (`dev.knshell.shell.InputRegion`): a widget carrying `kn-input` is part of the clickable area.
+ */
+internal const val INPUT_REGION_CLASS: String = "kn-input"
+
+/** `Modifier.inputRegion(…)` — the widget (and therefore this rectangle) accepts pointer input. */
+internal data object InputRegionElement : ModifierElement
+
+/**
+ * Marks the widget as part of the host surface's clickable area.
+ *
+ * A layer-shell bar is one surface as wide as the output, so the transparent gaps between its
+ * islands would otherwise swallow every click meant for the window behind the bar. The shell
+ * runtime punches the surface's input region down to the union of the marked widgets' bounds, so
+ * decorating an island with `inputRegion()` is what makes it — and only it — clickable:
+ *
+ * ```
+ * CenterBox(modifier = Modifier.fillWidth(), start = {
+ *     Island(Modifier.inputRegion()) { Workspaces() }
+ * }, …)
+ * ```
+ *
+ * The mark is inherited by nothing: mark each island (or its container), not the bar root, or the
+ * whole bar becomes interactive again. In a plain (non-bar) window it is a no-op.
+ */
+fun Modifier.inputRegion(): Modifier = with(InputRegionElement)

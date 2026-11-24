@@ -20,7 +20,7 @@ fun Text(
     modifier: Modifier = Modifier,
     size: Int = 13,
     color: Color? = null,
-    transitionMs: Int = 0,
+    transitionMs: Int = 200,
     ellipsize: Boolean = false,
     maxWidthChars: Int = -1,
 ) {

@@ -49,7 +49,7 @@ fun Icon(
     modifier: Modifier = Modifier,
     size: Int = 24,
     color: Color? = null,
-    transitionMs: Int = 0,
+    transitionMs: Int = 200,
     strokeWidth: Double? = null,
 ) {
     var node: IconNode? = null
