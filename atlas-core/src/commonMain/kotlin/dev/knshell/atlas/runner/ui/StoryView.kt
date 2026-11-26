@@ -1,37 +1,38 @@
-package atlas
+package dev.knshell.atlas.runner.ui
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-import dev.knshell.atlas.core.StoryGroup
-import dev.knshell.atlas.core.arg.LiveArgs
-import dev.knshell.atlas.core.entry.StoryEntry
+import dev.knshell.atlas.core.arg.ArgValues
+import dev.knshell.atlas.core.entry.Story
 import dev.knshell.compose.Align
 import dev.knshell.compose.Box
-import dev.knshell.compose.Color
 import dev.knshell.compose.Column
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.Row
 import dev.knshell.compose.align
 import dev.knshell.compose.background
+import dev.knshell.compose.expand
 import dev.knshell.compose.hExpand
-import dev.knshell.compose.minHeight
-import dev.knshell.compose.vExpand
+import dev.knshell.compose.weight
 
+/**
+ * Preview of one [Story] on the stage: the story is centred horizontally and vertically at its
+ * natural size. Controls are not here (they live in ArgsPanel).
+ */
 @Composable
-fun StoryView(group: StoryGroup, story: StoryEntry) {
-    val live = remember(group, story) { LiveArgs(group.args) }
-
+fun StoryView(story: Story, args: ArgValues, modifier: Modifier = Modifier) {
     Column(
-        modifier = Modifier.hExpand()
+        modifier = modifier.expand().background(AtlasTheme.stage, transitionMs = 0),
     ) {
-        Box(
-            modifier = Modifier.hExpand().vExpand().align(Align.Center)
-        ) {
-            story.render(live)
+        // Equal spacers above and below share the surplus height, so the row sits in the middle.
+        Box(Modifier.weight())
+        Row(modifier = Modifier.hExpand()) {
+            // Equal spacers left and right share the surplus width.
+            Box(Modifier.weight())
+            Box(Modifier.align(Align.Center)) {
+                story.render(args)
+            }
+            Box(Modifier.weight())
         }
-        Column(
-            modifier = Modifier.hExpand().background(Color.hex(0x111111)).minHeight(100)
-        ) {
-
-        }
+        Box(Modifier.weight())
     }
 }

@@ -61,3 +61,8 @@
 - Модулі: core/ui-kit — один модуль з двома пакетами чи два Gradle-модулі.
 - Розміщення runner-а: **окремий модуль-споживач** (як `shell-app`), залежить від `framework`. Не всередині `framework`: framework — бібліотека для зовнішніх розробників, Atlas — інструмент, окремий від неї.
 - Фази: A — runner одного компонента (`Shell.run`), B — каталог з controls.
+
+**Прийняті рішення (чинні, уточнюють пункти вище):**
+- Процес — in-process; out-of-process через Wayland-surface відкладено.
+- Модуль `atlas-core` (DSL, модель args, runner, UI) окремо від `framework`; `framework` не знає про Atlas.
+- Runner — compilation `linuxX64Atlas` у `shell-app` (`shell-app/src/linuxX64Atlas`), а не окремий модуль; executable `atlas` (debug) з точкою входу `atlas.main`.

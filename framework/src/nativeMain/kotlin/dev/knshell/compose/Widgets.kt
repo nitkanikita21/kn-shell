@@ -1,9 +1,9 @@
 // ---------------------------------------------------------------------------
 // The composable DSL — `Column` / `Row` / `Box` / `Stack` / `Overlay` /
 // `CenterBox` and the content widgets (`Label`, `Markup`, `Button`, `Canvas`,
-// `Slider`). Every call emits a node through `ComposeNode`, and `GtkApplier`
-// turns nodes into GTK widgets. Node classes live in ComposeNodes.kt and
-// ComposeBasicNodes.kt.
+// `Slider`) and the input widgets (`Entry`, `Switch`, `DropDown`). Every call emits
+// a node through `ComposeNode`, and `GtkApplier` turns nodes into GTK widgets.
+// Node classes live in ComposeNodes.kt, ComposeBasicNodes.kt and ComposeInputNodes.kt.
 // ---------------------------------------------------------------------------
 
 @file:OptIn(ExperimentalForeignApi::class)
@@ -312,6 +312,86 @@ fun Slider(
         update = {
             set(value) { newValue -> setValue(newValue) }
             set(onValueChange) { fn -> onChange = fn }
+            set(modifier) { m -> applyModifier(m) }
+        },
+    )
+}
+
+/**
+ * Single-line text field (`GtkEntry`) showing [value]; [onValueChange] receives the full text after
+ * every user edit. [value] is written back only when it differs from the field's text, so typing does
+ * not move the cursor. [placeholder] is shown while the field is empty.
+ *
+ * ```kotlin
+ * Entry(value = query, placeholder = "Search", onValueChange = { query = it },
+ *     modifier = Modifier.width(200))
+ * ```
+ */
+@Composable
+fun Entry(
+    value: String,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    onValueChange: (String) -> Unit,
+) {
+    ComposeNode<GtkEntryNode, GtkApplier>(
+        factory = { GtkEntryNode().plain() },
+        update = {
+            set(value) { text -> setText(text) }
+            set(placeholder) { hint -> setPlaceholder(hint) }
+            set(onValueChange) { fn -> onChange = fn }
+            set(modifier) { m -> applyModifier(m) }
+        },
+    )
+}
+
+/**
+ * On/off switch (`GtkSwitch`) showing [checked]; [onCheckedChange] fires on user toggles only
+ * (programmatic updates from [checked] do not loop back).
+ *
+ * ```kotlin
+ * Switch(checked = enabled, onCheckedChange = { enabled = it })
+ * ```
+ */
+@Composable
+fun Switch(
+    checked: Boolean,
+    modifier: Modifier = Modifier,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    ComposeNode<GtkSwitchNode, GtkApplier>(
+        factory = { GtkSwitchNode().plain() },
+        update = {
+            set(checked) { value -> setChecked(value) }
+            set(onCheckedChange) { fn -> onChange = fn }
+            set(modifier) { m -> applyModifier(m) }
+        },
+    )
+}
+
+/**
+ * Drop-down selector (`GtkDropDown`) over [items], with the item at index [selected] shown.
+ * [onSelect] receives the index of the item the user picked; programmatic updates do not fire it.
+ * Changing [items] keeps the selection given by [selected].
+ *
+ * ```kotlin
+ * DropDown(items = listOf("Dark", "Light"), selected = mode, onSelect = { mode = it })
+ * ```
+ */
+@Composable
+fun DropDown(
+    items: List<String>,
+    selected: Int,
+    modifier: Modifier = Modifier,
+    onSelect: (Int) -> Unit,
+) {
+    ComposeNode<GtkDropDownNode, GtkApplier>(
+        factory = { GtkDropDownNode().plain() },
+        update = {
+            // Items first: replacing the list resets the selection, so `selected` is applied after it.
+            set(items) { list -> setItems(list) }
+            set(selected) { index -> setSelected(index) }
+            set(onSelect) { fn -> onChange = fn }
             set(modifier) { m -> applyModifier(m) }
         },
     )

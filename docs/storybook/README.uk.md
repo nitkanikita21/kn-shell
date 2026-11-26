@@ -1,129 +1,180 @@
-# Atlas — галерея компонентов UI kit (kn-shell)
+# Atlas — каталог компонентів (kn-shell)
 
-Статус: проєкт (design). Реалізації Atlas ще немає; спайк out-of-process (child → host) завершено, див. `RESEARCH.md`. Мокапи: `docs/storybook/mockups/`.
+Atlas — робочий каталог для перегляду й перевірки компонентів `framework`: кожна story показує
+компонент з актуальними значеннями контролів, а матриця variants — усі комбінації осей одразу.
+Аналог `@Preview` у Compose Android або Storybook.
 
-## Мета і контекст
+Мокапи (лише дизайн, CSS-імітація, не GTK): `docs/storybook/mockups/`.
+Дослідження і прийняті рішення: `RESEARCH.md`.
 
-- `framework` — бібліотека, яку споживає зовнішній розробник. UI kit і Atlas є її частинами.
-- `shell-app` — **приклад (PoC)** споживача. Його сервіси (`ThemeService`, `ThemeScale`, палітра з шпалер, `rust-core`) не є частиною фреймворку.
-- Atlas — інструмент для перегляду і тестування компонентів (варіації, стани, контроли, тема), аналог `@Preview` у Compose Android або Storybook.
-
-## Шари
-
-```
-core            ← GtkApplier, ComposeNodes, Modifier*, Layout,
-                  Box/Row/Column/Stack/Overlay/Canvas, Image/Text/Spacer
-ui kit          ← Button/Label/Slider з варіантами; DesignTokens, ThemeTokens,
-                  ThemeMode, LocalKnTheme, KnTheme                  (пізніше)
-atlas       ← галерея; власні chrome, тема і стилі; залежить лише від core
-споживачі       ← shell-app (PoC), інші застосунки
-```
-
-Залежності односпрямовані: `core` ← `ui kit` ← споживачі; `core` ← `atlas`.
-
-- **Atlas повністю ізольований від ui kit.** Має власну систему тем і стилів (i3/TUI з мокапів). Нічого з тем ui kit не імпортує.
-- **Тема stories** задається ззовні через декоратор, який передає споживач:
-  ```kotlin
-  atlas(decorator = { content -> KnTheme(tokens = myTokens) { content() } }) {
-      story("Button/Primary") { Button(...) }
-  }
-  ```
-  Галерея не знає про `DesignTokens`. Перемикач Light/Dark у галереї викликає лямбду споживача.
-- Коли ui kit з'явиться, його stories ідуть через той самий декоратор без змін у галереї.
-- Chrome може будуватися на `core` або на сирому GTK-applier. `core` краще лишити: це шар layout-а, а не тема чи UI kit.
-
-## Збірка і runner-и
-
-- **KN-бібліотеки** замість executable: `shell-kn` (експорт `kn_shell_run()`) і `atlas-kn` (експорт `kn_atlas_run(argc, argv)`). Entry-точки через `@CName`.
-- **Rust-runner-и тонкі:** `runners/shell` (`main()` → `kn_shell_run()`), `runners/atlas` (CLI, watch, relink, restart → `kn_atlas_run()`).
-- `atlas-kn` **не тягне `rust-core`** і `services/`, тож подвійного UniFFI немає.
-- `shell-kn` тягне `rust-core` як rlib у Rust-runner-і.
-- Збірка: Gradle будує KN-бібліотеки → `cargo build -p shell-runner -p atlas-runner` з окремим `target/`. Оркестрація через скрипт у `scripts/`, а не через `build.rs`.
-- Linker-опції GTK беруться через `pkg-config` у Rust `build.rs`, а не з дубльованого списку.
-- Hot reload = перезапуск процесу. Rust-runner скорочує цикл (watch → relink → restart з тією самою story через `--story button/primary`), але relink Kotlin/Native лишається повільним.
-
-## Сервіси, теми і контейнери
-
-- **Правило:** `Services.*` використовують лише контейнери з бізнес-логікою (`shell-app`). UI kit і `core` сервісів не імпортують.
-- **Компоненти приймають дані параметрами**, а дані, що однакові для всього дерева (тема, токени, щільність), — через `CompositionLocal` (`LocalKnTheme`), а не параметром.
-- `KnTheme(tokens) { ... }` ставиться в корінь **кожного** вікна і попапу: `CompositionLocal` не проходить через межу окремо змонтованих композицій (див. коментар у `shell-app/.../ui/helpers/injectDi.kt`). Бажано винести це в спільну функцію монтування.
-- **Мок-сервіси** потрібні лише контейнерам і живуть у споживача (`shell-app/linuxX64Mock`). Фреймворк дає механізм, але не знає про Hyprland, MPRIS чи інші конкретні сервіси.
-- **Токени (`DesignTokens`, `ThemeTokens`, `ThemeMode`, шкали)** переїжджають у ui kit: це модель, яку споживає UI. Дефолт (`DesignTokens.default()`) — статичний нейтральний набір у ui kit, без алгоритму.
-- **Лишаються в `shell-app`:** `ThemeScale`, `ThemeTuning`, `WallpaperPalette`, `palette/*`, `ThemeService`, `AwwwWallpaperSource`. Це приклад, а не контракт.
-- Контракти (інтерфейси сервісів) окремим модулем **не виносимо**: їх немає сенсу тримати окремо, коли контейнери і моки живуть у споживача.
-
-## DX: як визначати варіації
-
-Структура:
+## Модулі
 
 ```
-ui-kit/
-  Button.kt          // компонент
-  Button.story.kt    // stories поруч
+framework     GTK4-міст, Compose DSL, UI-віджети                     ← бібліотека
+atlas-core    DSL stories, модель args, runner, UI каталогу           ← залежить від framework
+shell-app     compilation linuxX64Atlas: stories і точка входу        ← застосунок
 ```
 
-Приклад:
+- **`atlas-core`** (`atlas-core/`) — `group`/`story`/`variants`, типи args (`Arg`), `LiveArgs`,
+  `CellArgs`, `AtlasHostService`, `resolveStory`, `parseStorySpec`, `atlasMain`, UI каталогу
+  (`runner/ui`). Пакет `dev.knshell.atlas`.
+- **Stories** живуть у `shell-app`, у compilation `linuxX64Atlas` (`shell-app/src/linuxX64Atlas/kotlin/atlas/`).
+  Compilation залежить від `:atlas-core`, тож звичайний `main` (шелл) stories не містить.
+  Точка входу — `fun main(args: Array<String>)` у `atlas/main.kt`, вона викликає `atlasMain(...)`.
+- Runner — не окремий модуль і не Rust-процес: Atlas — звичайний Kotlin/Native executable
+  (`atlas`, debug), in-process.
+
+## DSL
+
+Story описується в групі. Аргументи оголошуються як делеговані властивості; їх значення
+передаються в render як `v[arg]`.
 
 ```kotlin
-val buttonStories = storyGroup("Button") {
+package atlas
 
-    story("Primary") {
-        Button(text = args.text, enabled = args.enabled, size = args.size, onClick = {})
+import dev.knshell.atlas.dsl.group
+import dev.knshell.compose.Button
+import dev.knshell.compose.Color
+import dev.knshell.compose.Label
+import dev.knshell.compose.Modifier
+import dev.knshell.compose.background
+import dev.knshell.compose.padding
+import dev.knshell.compose.radius
+
+enum class ButtonSize(val scale: Double) { Small(0.3), Medium(0.6), Large(1.0) }
+
+val buttonStories = group("Button") {
+    val text by string("Save")                 // Arg.Text
+    val enabled by boolean(true)               // Arg.Flag
+    val size by enum(ButtonSize.Medium)        // Arg.Choice<ButtonSize>
+    val tone by choice(listOf("ok", "warn"), "ok")   // Arg.Choice<String>
+    val radius by int(16, 0..32)               // Arg.IntNum, контроль Slider
+    val alpha by float(1f, 0f..1f)             // Arg.FloatNum, контроль Slider
+
+    // render за замовчуванням для всіх story і variants групи
+    render { v ->
+        Button(
+            modifier = Modifier
+                .background(if (v[enabled]) Color.hex(0x00FF00) else Color.hex(0xFF0000))
+                .padding((32 * v[size].scale).toInt(), (16 * v[size].scale).toInt())
+                .radius(v[radius]),
+            onClick = {},
+        ) {
+            Label(text = "${v[text]} ${v[tone]}")
+        }
     }
 
-    variants("Matrix") {
-        axis("size", ButtonSize.entries)
-        axis("enabled", listOf(true, false))
-        render { Button(text = "Save", size = it.size, enabled = it.enabled) {} }
-    }
-}
+    story("Primary")                           // використовує render групи
+    story("Icon") { v -> /* власний render */ }
 
-private val args = argsOf {
-    string("text", default = "Save")
-    boolean("enabled", default = true)
-    enum("size", ButtonSize.entries, default = ButtonSize.Medium)
+    variants("Size X State") {                 // матриця
+        axis(size)                             // Arg.Choice: усі options
+        axis(enabled)                          // Arg.Flag: true, false
+        exclude { it[size] == ButtonSize.Large && !it[enabled] }
+    }
 }
 ```
 
-Що бачить розробник у галереї:
+Методи `GroupBuilder`:
 
-- **Сайдбар:** дерево груп і stories (`Button / Primary`, `Button / Matrix`).
-- **Контроли:** текст для `string`, перемикач для `boolean`, dropdown для `enum`, слайдер для чисел. Будуються з `args`.
-- **Тема:** перемикач Light/Dark через декоратор споживача.
-- **Матриця:** сітка всіх комбінацій `axis`.
-- **Kotlin-сніпет** оновлюється разом з контролами.
+| Метод | Тип arg | Примітка |
+| --- | --- | --- |
+| `string(default)` | `Arg.Text` | текст у контролі `Entry` |
+| `boolean(default)` | `Arg.Flag` | `Switch` |
+| `choice(options, default)` | `Arg.Choice<E>` | `DropDown` |
+| `enum(default)` | `Arg.Choice<E>` | те саме, опції — всі значення enum |
+| `int(default, range: IntRange)` | `Arg.IntNum` | `Slider` з діапазоном |
+| `float(default, range: ClosedFloatingPointRange<Float>)` | `Arg.FloatNum` | `Slider` з діапазоном |
+| `render { v -> }` | — | render групи за замовчуванням |
+| `story(name, render?)` | — | одна story |
+| `variants(name, render?) { … }` | — | матриця |
 
-Ті самі stories можна прогнати в `nativeTest`: для кожної комбінації побудувати дерево `GtkApplier` і перевірити node-дамп.
+Усередині `variants { }`:
 
-## Мокапи
+- `axis(arg: Arg.Choice<E>)` — усі options; `axis(arg: Arg.Flag)` — `true`/`false`;
+  `axis(arg, values: List<T>)` — явний список значень.
+- `exclude { snapshot -> Boolean }` — викидає комбінації. Предикат отримує `ArgSnapshot`.
 
-- `mockups/overview.html` — канвас з панорамуванням і зумом, фрейми варіантів, групування (компонент / стан / розмір / без групування), пошук, сайдбар.
-- `mockups/stories/button.html`, `slider.html`, `label.html` — матриці варіацій по компоненту, панель args, сніпет.
-- Спільна навігація і глобальна панель налаштувань (тема, accent, density) на кожній сторінці.
-- Мокапи — лише дизайн, CSS-імітація, не реальний GTK.
+Порядок комбінацій: перша axis змінюється найповільніше.
+
+Помилки (кидаються не пізніше завершення `group { }`):
+
+- `IllegalStateException`: дубль назви arg; дубль назви story або variants у групі (без урахування
+  регістру); axis, якого немає серед args групи; story або variants без render (ні свого, ні групи).
+- `IllegalArgumentException`: default поза `range`; більше 500 комбінацій у матриці.
+
+## UI
+
+- **Сайдбар** — групи і їхні stories/variants; активний пункт підсвічено.
+- **Превʼю** — story по центру.
+- **Матриця** — для `variants`: сітка всіх комбінацій axis (`Flow`); кожна комірка — render з
+  її комбінацією, підпис комірки — значення axis.
+- **Панель args** праворуч — контрол для кожного arg: `Entry` для тексту, `Switch` для flag,
+  `DropDown` для choice, `Slider` із значенням для int/float. У матриці панель показує лише
+  не-axis args: вони діють на всі комірки, axis задає сама комбінація.
+- **Reset** у панелі повертає всі args story до default.
+- **Значення памʼятаються окремо для кожної story** до закриття атласу: перемикання між stories
+  не скидає контроли. Значення живуть у `LiveArgs`, які `AtlasHostService` кешує за story.
+- Старт: відкривається перша story; порожній каталог показує порожній стан.
+
+## Запуск
+
+```bash
+./gradlew :shell-app:runAtlas
+```
+
+Обрати story при старті:
+
+```bash
+# через Gradle
+./gradlew :shell-app:runAtlas -Pstory="Button/Primary"
+# або те саме через змінну середовища
+KN_ATLAS_STORY="Button/Primary" ./gradlew :shell-app:runAtlas
+# бінарник
+shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "Button/Size X State"
+# або змінна середовища
+KN_ATLAS_STORY="Button/Primary" shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
+```
+
+- `--story Group/Entry` або `--story=Group/Entry` має пріоритет над `KN_ATLAS_STORY`.
+- `Group/Entry` — без урахування регістру, поділ по першому `/`.
+- Невідома назва — попередження зі списком доступних story і відкривається перша story.
+
+## Тести
+
+```bash
+./gradlew :atlas-core:linuxX64Test
+```
+
+Тести покривають лише логіку, без GTK-вікна: побудову груп і матриці (`GroupBuilderTest`),
+`LiveArgs` (`LiveArgsTest`), `AtlasHostService` (збереження args за story), `resolveStory` і
+`parseStorySpec` (`StorySelectionTest`).
+
+## Відкладено
+
+Це рішення для майбутніх етапів, у коді їх немає.
+
+- **Rust-runner і KN-бібліотеки.** Ідея: `shell-kn` / `atlas-kn` як KN-бібліотеки з `@CName`,
+  тонкий Rust-runner з CLI, watch і relink. Причина відкладання: поточний Kotlin/Native
+  executable достатній; hot reload = перезапуск процесу, і цього досить.
+- **Декоратор теми.** Ідея: тема stories задається ззовні лямбдою (`KnTheme` споживача), а
+  Atlas не знає про токени ui kit. Перемикач Light/Dark — через цю лямбду.
+- **Пошук** по stories у сайдбарі.
+- **Kotlin-сніпет** під контролами, що оновлюється разом із значеннями.
+- **Pan/zoom** канвас (як у `mockups/overview.html`) і групування варіантів.
+- **UI kit** (`Button`/`Label`/`Slider` з варіантами) і переведення stories на нього.
+- **KSP** для генерації args; **golden PNG** для критичних компонентів.
+- **Node-тести** на основі stories (дамп дерева GTK для кожної комбінації).
+
+Зберігаємо з дизайну: Atlas ізольований від ui kit і його тем, stories не тягнуть сервіси
+споживача, а `core` не імпортує `services/`.
 
 ## Обмеження
 
-- **Немає reflection** у Kotlin/Native: `argsOf { ... }` пишеться вручну або генерується через KSP (пізніше).
-- **Дрейф контролів:** ручні `args` можуть розійтися з сигнатурою компонента. Компілятор ловить більшість розбіжностей, бо story викликає компонент напряму.
-- **Компоненти мають експонувати параметри** (`enabled`, `size`, `variant`). Зараз `Button(text, modifier, onClick)` їх не має. Це зміна ui kit-у.
-- **Hot reload = перезапуск процесу.**
-
-## Порядок робіт
-
-1. **Spike (1–2 дні):** `atlas-kn` з одним `@CName` експортом і Rust-runner з одним вікном.
-2. **Розділення `core` і ui kit:** `Services.*` з компонентів винести в контейнери; перевірити, що `core` не імпортує `services/`.
-3. **Фаза A:** галерея з сайдбаром і однією story, без контролів.
-4. **Фаза B:** `argsOf`, контроли, декоратор теми.
-5. **Фаза C:** `variants`/матриця, node-тести на основі stories.
-6. **Фаза D:** KSP для `args`, golden PNG для критичних компонентів.
-7. **Пізніше:** ui kit (компоненти з варіантами), переведення stories на нього.
-
-## Відкриті питання
-
-- `core` і ui kit: окремі Gradle-модулі (`framework-core`, `framework-uikit`) чи один модуль з двома пакетами?
-- Скільки займає relink `atlas-kn` (визначає комфорт циклу).
-- Чи Gobley дозволяє зібрати KN-бібліотеку без вбудованого `rust-core`.
-- Мінімальна CI-схема для GTK-display (Xvfb або `GDK_BACKEND=broadway`).
-- `argsOf`: ручний DSL чи KSP з самого початку.
-- Винесення `Services.*` з компонентів: скільки місць це зачіпає.
+- **Немає reflection** в Kotlin/Native: args оголошуються вручну в DSL.
+- **Дрейф контролів:** `int`/`float`/`enum` можуть розійтися з сигнатурою компонента. Компілятор
+  ловить більшість розбіжностей, бо story викликає компонент напряму.
+- **Компоненти мають експонувати параметри** (`enabled`, `size`, `radius`), інакше контролювати
+  нічого. Наприклад, `Button(text, modifier, onClick)` не має `enabled`/`size`, тому stories
+  задають стиль через `Modifier`.
+- **Hot reload = перезапуск процесу.** Зміна коду вимагає повторного link Kotlin/Native.

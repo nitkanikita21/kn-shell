@@ -1,6 +1,7 @@
 package dev.knshell.atlas.runner
 
 import dev.knshell.atlas.core.StoryGroup
+import dev.knshell.atlas.core.arg.LiveArgs
 import dev.knshell.atlas.core.entry.StoryEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -9,14 +10,16 @@ import kotlinx.coroutines.flow.asStateFlow
 class AtlasHostService(
     val groups: List<StoryGroup>
 ) {
-    private var _activeStory: MutableStateFlow<StoryEntry?> = MutableStateFlow(null)
-    val activeStory: StateFlow<StoryEntry?> get() = _activeStory.asStateFlow()
+    private val _selection = MutableStateFlow<Selection?>(null)
+    val selection: StateFlow<Selection?> = _selection.asStateFlow()
 
-    private var _activeGroup: MutableStateFlow<StoryGroup?> = MutableStateFlow(null)
-    val activeGroup: StateFlow<StoryGroup?> get() = _activeGroup.asStateFlow()
+    // живі значення args памʼятаються окремо для кожної story до закриття атласу
+    private val argsByEntry = mutableMapOf<StoryEntry, LiveArgs>()
 
     fun select(group: StoryGroup, entry: StoryEntry) {
-        _activeStory.value = entry
-        _activeGroup.value = group
+        _selection.value = Selection(group, entry)
     }
+
+    fun argsFor(selection: Selection): LiveArgs =
+        argsByEntry.getOrPut(selection.entry) { LiveArgs(selection.group.args) }
 }

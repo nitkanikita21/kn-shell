@@ -9,4 +9,6 @@ class LiveArgs(args: List<Arg<*>>) : ArgValues {
     override fun <T> get(arg: Arg<T>): T = states.getValue(arg).value as T
     @Suppress("UNCHECKED_CAST")
     fun <T> set(arg: Arg<T>, v: T) { (states.getValue(arg)).value = v }
+    // повертає всі args до default
+    fun reset() { states.forEach { (arg, state) -> state.value = arg.default } }
 }

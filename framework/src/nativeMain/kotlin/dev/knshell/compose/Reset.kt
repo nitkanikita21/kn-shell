@@ -41,7 +41,8 @@ internal const val PLAIN_PRIORITY: UInt = 650u
  * Because GTK themes style interactive states *and* pseudo-classes with the same or
  * higher specificity than a single class, the button/scale rules repeat the reset for
  * `:hover`, `:active`, `:checked`, `:focus`, `:focus-visible`, `:disabled` and
- * `:backdrop`, plus the internal scale sub-nodes (`trough`, `highlight`, `slider`).
+ * `:backdrop`, plus the internal scale sub-nodes (`trough`, `highlight`, `slider`). The input
+ * widgets (`entry`, `switch`, `dropdown`) get the same treatment for their own sub-nodes.
  */
 const val PLAIN_CSS: String = """
 /* --- base: every DSL widget ------------------------------------------------ */
@@ -197,6 +198,218 @@ scale.kn-plain:disabled slider {
     min-height: 0;
     text-shadow: none;
     transition: none;
+}
+
+/* --- entries (text fields): the field and its internal text node ------------- */
+entry.kn-plain,
+entry.kn-plain:hover,
+entry.kn-plain:focus,
+entry.kn-plain:focus-within,
+entry.kn-plain:disabled,
+entry.kn-plain:backdrop {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    border-style: none;
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline-color: transparent;
+    outline-style: none;
+    outline-width: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    text-shadow: none;
+    transition: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    font-style: inherit;
+    font-weight: inherit;
+}
+
+entry.kn-plain > text,
+entry.kn-plain > text:hover,
+entry.kn-plain > text:focus,
+entry.kn-plain > text:disabled {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    border-style: none;
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline-style: none;
+    outline-width: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    text-shadow: none;
+    transition: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    font-style: inherit;
+    font-weight: inherit;
+}
+
+/* --- switches: the track and the knob (`slider`) ------------------------------ */
+switch.kn-plain,
+switch.kn-plain:hover,
+switch.kn-plain:active,
+switch.kn-plain:checked,
+switch.kn-plain:checked:hover,
+switch.kn-plain:focus,
+switch.kn-plain:focus-visible,
+switch.kn-plain:disabled,
+switch.kn-plain:backdrop {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    border-style: none;
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline-color: transparent;
+    outline-style: none;
+    outline-width: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    text-shadow: none;
+    transition: none;
+    color: inherit;
+}
+
+switch.kn-plain slider,
+switch.kn-plain slider:hover,
+switch.kn-plain slider:active,
+switch.kn-plain:checked slider,
+switch.kn-plain:checked slider:hover,
+switch.kn-plain:focus slider,
+switch.kn-plain:disabled slider,
+switch.kn-plain:backdrop slider {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    border-style: none;
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline-color: transparent;
+    outline-style: none;
+    outline-width: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    text-shadow: none;
+    transition: none;
+}
+
+/* --- drop-downs: the field button, the popover and its list rows ------------- */
+dropdown.kn-plain,
+dropdown.kn-plain:hover,
+dropdown.kn-plain:focus,
+dropdown.kn-plain:focus-visible,
+dropdown.kn-plain:disabled,
+dropdown.kn-plain:backdrop {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    border-style: none;
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline-color: transparent;
+    outline-style: none;
+    outline-width: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    text-shadow: none;
+    transition: none;
+    color: inherit;
+}
+
+dropdown.kn-plain > button,
+dropdown.kn-plain > button:hover,
+dropdown.kn-plain > button:active,
+dropdown.kn-plain > button:checked,
+dropdown.kn-plain > button:focus,
+dropdown.kn-plain > button:focus-visible,
+dropdown.kn-plain > button:disabled,
+dropdown.kn-plain > button:backdrop {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    border-style: none;
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline-color: transparent;
+    outline-style: none;
+    outline-width: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    text-shadow: none;
+    transition: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
+    font-style: inherit;
+    font-weight: inherit;
+}
+
+dropdown.kn-plain popover,
+dropdown.kn-plain popover > contents,
+dropdown.kn-plain popover > arrow {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    border-style: none;
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline-style: none;
+    outline-width: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    text-shadow: none;
+    transition: none;
+    color: inherit;
+}
+
+dropdown.kn-plain popover listview,
+dropdown.kn-plain popover row,
+dropdown.kn-plain popover row:hover,
+dropdown.kn-plain popover row:selected,
+dropdown.kn-plain popover row:selected:hover {
+    background-color: transparent;
+    background-image: none;
+    border-color: transparent;
+    border-style: none;
+    border-width: 0;
+    border-radius: 0;
+    box-shadow: none;
+    outline-style: none;
+    outline-width: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+    min-height: 0;
+    text-shadow: none;
+    transition: none;
+    color: inherit;
 }
 """
 

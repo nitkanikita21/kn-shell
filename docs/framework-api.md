@@ -28,6 +28,7 @@ is a separate Gradle module and Kotlin has no friend-module visibility.
 | Symbol | Purpose |
 | --- | --- |
 | `Row`, `Column`, `Box`, `CenterBox`, `Stack`, `Overlay`, `Slider`, `Label`, `Markup`, `Button` | layout and leaf widgets |
+| `Entry`, `Switch`, `DropDown` | input widgets (see [Input widgets](#input-widgets)) |
 | `Modifier` + extensions | layout (`size`, `padding`, `margin`, `align`, `hExpand`, `fillWidth`, `minSize`, `maxWidth`), styling (`background`, `gradient`, `glow`, `radius`, `textColor`, `fontSize`, …), interaction (`onClick`, `onHover`, `cursor`, `pointerCursor`, `inputRegion`), animation (`transition`, `gradientStops`), `rawStyle`, `clipOverflow` |
 | `Align`, `AnimatedAxis`, `Corner`, `Color` | supporting types |
 | `animatedWidth`, `animatedHeight`, `animatedSize` (Modifier extensions) | Compose-owned size animation (AnimationSpec + GTK frame clock; passive native layout manager) |
@@ -35,6 +36,46 @@ is a separate Gradle module and Kotlin has no friend-module visibility.
 
 Layout semantics — who measures, what `size`/`minSize`/`maxSize`/`weight` really mean, which
 container to pick, and what GTK cannot express — are in [`docs/layout-model.md`](layout-model.md).
+
+### Input widgets
+
+| Composable | GTK widget | Callback | Notes |
+| --- | --- | --- | --- |
+| `Entry(value, modifier, placeholder, onValueChange)` | `GtkEntry` | `(String) -> Unit`, after every user edit | `value` is written back only when it differs from the field text, so the cursor does not jump |
+| `Switch(checked, modifier, onCheckedChange)` | `GtkSwitch` | `(Boolean) -> Unit`, user toggles only | programmatic `checked` does not fire it |
+| `DropDown(items, selected, modifier, onSelect)` | `GtkDropDown` over a `GtkStringList` | `(Int) -> Unit`, index of the picked item | `selected` is an index; it is re-applied after `items` changes |
+
+```kotlin
+var query by remember { mutableStateOf("") }
+var enabled by remember { mutableStateOf(true) }
+var mode by remember { mutableStateOf(0) }
+
+Entry(value = query, placeholder = "Search", onValueChange = { query = it },
+    modifier = Modifier.width(200))
+Switch(checked = enabled, onCheckedChange = { enabled = it })
+DropDown(items = listOf("Dark", "Light"), selected = mode, onSelect = { mode = it })
+```
+
+The three widgets belong to the same plain-widget family as the rest of the DSL, so the reset
+(`PLAIN_CSS`, see `compose/Reset.kt`) strips their GTK paint. Until they are styled they look bare:
+the switch track and knob, the drop-down button and popover, and the trough and knob of `Slider`
+have no background or border. Style them with the typed `Modifier.slider(...)` or with
+`Modifier.rawStyle(selector, declarations)`: one selector per call (no comma lists), appended to the
+widget's own class, so `""` is the widget, `":checked"` a state and `" slider"` a sub-node:
+
+```kotlin
+Slider(value = volume, modifier = Modifier.width(120).slider(
+    troughColor = Color.hex(0x242a2b), highlightColor = Color.hex(0x7fd6a2), knobColor = Color.hex(0xc8d2ce)))
+
+Switch(checked = on, modifier = Modifier.rawStyle(" slider", "background-color: #7fd6a2;"),
+    onCheckedChange = { on = it })
+```
+
+Sub-node styling works because of how `InlineStyle` (the per-widget style layer behind every
+modifier) handles it. Rules with a combinator (`" slider"`, `" trough"`) target a child CSS node, and
+GTK only reaches those from a display-wide provider. That provider stays private to the widget: it
+is scoped by the widget's generated class (`.knm-N`) and removed when the widget is finalized, so a
+sub-node rule never leaks to other widgets and does not outlive its widget.
 
 ### Animated size (Compose-owned)
 

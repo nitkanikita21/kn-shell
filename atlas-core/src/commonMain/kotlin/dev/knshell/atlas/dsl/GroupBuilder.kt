@@ -33,6 +33,14 @@ class GroupBuilder internal constructor(private val title: String) {
     fun boolean(default: Boolean) = declare { Arg.Flag(it, default) }
     fun <E> choice(options: List<E>, default: E) = declare { Arg.Choice(it, options, default) }
     inline fun <reified E : Enum<E>> enum(default: E) = choice(enumEntries<E>(), default)
+    fun int(default: Int, range: IntRange) = declare {
+        require(default in range) { "[$title] '$it' default $default is outside $range" }
+        Arg.IntNum(it, default, range)
+    }
+    fun float(default: Float, range: ClosedFloatingPointRange<Float>) = declare {
+        require(default in range) { "[$title] '$it' default $default is outside $range" }
+        Arg.FloatNum(it, default, range)
+    }
 
     // --- рендер ---
     fun render(block: Render) { defaultRender = block }
@@ -45,12 +53,18 @@ class GroupBuilder internal constructor(private val title: String) {
         val vb = VariantsBuilder().apply(build)
         pending += {
             vb.axes.forEach { check(it.arg in args) { "[$title/$name] axis '${it.arg.name}' is not a group arg" } }
-            Variants(name, vb.combos(), render ?: needDefault(name))
+            Variants(name, vb.combos(), vb.axes.map { it.arg }, render ?: needDefault(name))
         }
     }
 
     private fun needDefault(entry: String): Render =
         defaultRender ?: error("[$title/$entry] no render: pass one or call render { } in the group")
 
-    internal fun build() = StoryGroup(title, args.toList(), pending.map { it() })
+    internal fun build(): StoryGroup {
+        val entries = pending.map { it() }
+        entries.groupBy { it.name.lowercase() }.values.forEach { dups ->
+            check(dups.size == 1) { "[$title] duplicate story '${dups[0].name}' (names are case-insensitive)" }
+        }
+        return StoryGroup(title, args.toList(), entries)
+    }
 }

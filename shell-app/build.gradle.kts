@@ -85,6 +85,11 @@ tasks.register("runAtlas") {
     dependsOn("runAtlasDebugExecutableLinuxX64")
 }
 
+// `-Pstory=Group/Entry` відкриває потрібну story (KMP run-таска не має `--args`).
+tasks.withType<Exec>().matching { it.name == "runAtlasDebugExecutableLinuxX64" }.configureEach {
+    providers.gradleProperty("story").orNull?.let { args("--story", it) }
+}
+
 val rustArchive =
     rootProject.layout.projectDirectory.file(
         "rust-core/target/x86_64-unknown-linux-gnu/debug/libkn_shell_core.a",

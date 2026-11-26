@@ -10,17 +10,24 @@
 
 package dev.knshell.compose
 
+import kotlinx.cinterop.COpaquePointer
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.reinterpret
+import kotlinx.cinterop.staticCFunction
 import kn.gtk.GObject
 import kn.gtk.GtkCssProvider
 import kn.gtk.GtkWidget
 import kn.gtk.g_object_get_data
 import kn.gtk.g_object_set_data
+import kn.gtk.g_object_unref
+import kn.gtk.g_object_weak_ref
+import kn.gtk.gdk_display_get_default
 import kn.gtk.gtk_css_provider_load_from_string
 import kn.gtk.gtk_css_provider_new
 import kn.gtk.gtk_style_context_add_provider
+import kn.gtk.gtk_style_context_add_provider_for_display
+import kn.gtk.gtk_style_context_remove_provider_for_display
 import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_get_style_context
 
@@ -28,10 +35,23 @@ private object InlineStyleId {
     var next = 0
 }
 
+/** 700 = GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 100: above the app stylesheet and the reset. */
+private const val INLINE_PRIORITY: UInt = 700u
+
+/** A selector with a combinator (`" trough"`, `" popover > contents"`) targets another CSS node. */
+private fun targetsSubNode(selector: String): Boolean = selector.any { it.isWhitespace() || it == '>' || it == '~' || it == '+' }
+
 /**
- * Applies CSS declarations to a single widget through a private style provider and a
+ * Applies CSS declarations to a single widget through private style providers and a
  * generated class. This is what makes modifier-based styling possible: each widget gets
  * exactly the CSS its modifiers describe, without touching a global stylesheet.
+ *
+ * GTK 4 takes two routes here. A provider added to a widget's style context only styles that
+ * widget's own CSS node, so it carries the widget rules and its states (`:hover`). Sub-node
+ * rules (`scale trough`) are only reachable from a display-wide provider; it stays private to
+ * this widget through the generated class and is removed when the widget is finalized.
+ * Changing a display provider restyles the whole display, hence it exists only for widgets
+ * that actually have sub-node rules.
  */
 internal class InlineStyle(private val widget: CPointer<GtkWidget>) {
 
@@ -39,25 +59,43 @@ internal class InlineStyle(private val widget: CPointer<GtkWidget>) {
     internal val interaction = InteractionState(widget)
 
     private var provider: CPointer<GtkCssProvider>? = null
+    private var sharedProvider: CPointer<GtkCssProvider>? = null
     private var className: String? = null
     private var lastCss: String? = null
+    private var lastSharedCss: String = ""
 
 
     fun setRules(rules: List<Pair<String, String>>) {
-        if (rules.isEmpty()) return
-
-        val base = rules.filter { it.first.isEmpty() }.joinToString(separator = " ") { it.second }
-        val scoped = rules.filter { it.first.isNotEmpty() }
+        if (rules.isEmpty() && className == null) return
 
         val cls = ensureClass()
-        val css = buildString {
+        val (shared, own) = rules.partition { targetsSubNode(it.first) }
+        setOwnCss(cssFor(cls, own))
+        setSharedCss(cssFor(cls, shared))
+    }
+
+    private fun cssFor(cls: String, rules: List<Pair<String, String>>): String {
+        val base = rules.filter { it.first.isEmpty() }.joinToString(separator = " ") { it.second }
+        return buildString {
             if (base.isNotBlank()) append(".$cls { $base }\n")
-            scoped.forEach { (selector, declarations) -> append(".$cls$selector { $declarations }\n") }
+            rules.filter { it.first.isNotEmpty() }
+                .forEach { (selector, declarations) -> append(".$cls$selector { $declarations }\n") }
         }
+    }
+
+    private fun setOwnCss(css: String) {
         if (css == lastCss) return
         lastCss = css
 
         val cssProvider = ensureProvider() ?: return
+        gtk_css_provider_load_from_string(cssProvider, css)
+    }
+
+    private fun setSharedCss(css: String) {
+        if (css == lastSharedCss) return
+        lastSharedCss = css
+
+        val cssProvider = ensureSharedProvider() ?: return
         gtk_css_provider_load_from_string(cssProvider, css)
     }
 
@@ -74,12 +112,42 @@ internal class InlineStyle(private val widget: CPointer<GtkWidget>) {
         val cssProvider = gtk_css_provider_new() ?: return null
         val context = gtk_widget_get_style_context(widget)
         if (context != null) {
-            // 700 = GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 100 (above the app stylesheet)
-            gtk_style_context_add_provider(context, cssProvider.reinterpret(), 700u)
+            gtk_style_context_add_provider(context, cssProvider.reinterpret(), INLINE_PRIORITY)
         }
         provider = cssProvider
         return cssProvider
     }
+
+    private fun ensureSharedProvider(): CPointer<GtkCssProvider>? {
+        sharedProvider?.let { return it }
+        val display = gdk_display_get_default() ?: return null
+        val cssProvider = gtk_css_provider_new() ?: return null
+        gtk_style_context_add_provider_for_display(display, cssProvider.reinterpret(), INLINE_PRIORITY)
+        // The display would keep the provider for the life of the process: release it with the
+        // widget. The provider itself is the callback data, so nothing here retains the widget.
+        g_object_weak_ref(
+            widget.reinterpret<GObject>(),
+            staticCFunction { data: COpaquePointer?, _: CPointer<GObject>? -> releaseSharedProvider(data) },
+            cssProvider,
+        )
+        sharedProviderCount++
+        sharedProvider = cssProvider
+        return cssProvider
+    }
+
+    internal companion object {
+        /** Display-wide providers currently installed; lets tests see that none leak. */
+        var sharedProviderCount: Int = 0
+    }
+}
+
+private fun releaseSharedProvider(data: COpaquePointer?) {
+    val provider = data ?: return
+    gdk_display_get_default()?.let { display ->
+        gtk_style_context_remove_provider_for_display(display, provider.reinterpret())
+    }
+    g_object_unref(provider)
+    InlineStyle.sharedProviderCount--
 }
 
 // Which layout fields a `Modifier` chain has written on a widget, kept as GLib data on the widget

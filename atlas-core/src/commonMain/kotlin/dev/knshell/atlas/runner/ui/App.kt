@@ -3,127 +3,65 @@ package dev.knshell.atlas.runner.ui
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import atlas.StoryView
-import dev.knshell.atlas.core.StoryGroup
+import androidx.compose.runtime.key
+import dev.knshell.atlas.core.arg.Arg
 import dev.knshell.atlas.core.entry.Story
 import dev.knshell.atlas.core.entry.Variants
 import dev.knshell.atlas.runner.LocalAtlasHostService
-import dev.knshell.compose.Align
-import dev.knshell.compose.Color
-import dev.knshell.compose.Column
-import dev.knshell.compose.Icon
+import dev.knshell.atlas.runner.Selection
+import dev.knshell.compose.Box
 import dev.knshell.compose.Label
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.Row
-import dev.knshell.compose.Scroll
-import dev.knshell.compose.align
 import dev.knshell.compose.background
-import dev.knshell.compose.extraBold
-import dev.knshell.compose.hExpand
-import dev.knshell.compose.hoverBackground
-import dev.knshell.compose.onClick
-import dev.knshell.compose.padding
-import dev.knshell.compose.pointerCursor
+import dev.knshell.compose.centerBoth
+import dev.knshell.compose.fillAll
+import dev.knshell.compose.textColor
 import dev.knshell.compose.vExpand
 import dev.knshell.compose.weight
 import dev.knshell.compose.width
-import dev.knshell.icons.lucide.Lucide
-import dev.knshell.ui.primitives.Space
 
 @Composable
 fun App() {
     val service = LocalAtlasHostService.current
-    val activeStory by service.activeStory.collectAsState()
-    val activeGroup by service.activeGroup.collectAsState()
+    val selection by service.selection.collectAsState()
+    val current: Selection? = selection
 
-    Row {
-        Scroll(Modifier.width(300).vExpand().background(Color.hex(0x111111))) {
-            Column(modifier = Modifier.align(Align.Start).hExpand()) {
-                service.groups.forEach { StoryGroupRow(it) }
+    Row(modifier = Modifier.fillAll().background(AtlasTheme.bg, transitionMs = 0)) {
+        Sidebar(
+            groups = service.groups,
+            selection = current,
+            onSelect = { group, entry -> service.select(group, entry) },
+            modifier = Modifier.width(240).vExpand(),
+        )
+
+        if (current == null) {
+            Box(modifier = Modifier.weight().fillAll()) {
+                Label(
+                    "No stories",
+                    modifier = Modifier.centerBoth().textColor(AtlasTheme.dim, transitionMs = 0),
+                )
             }
-        }
-        if(activeGroup != null && activeStory != null) {
-            when(activeStory) {
-                is Story -> StoryView(activeGroup!!, activeStory!!)
-            }
-        }
-    }
-}
+        } else {
+            key(current.entry) {
+                val live = service.argsFor(current)
+                val panelArgs: List<Arg<*>> = when (val entry = current.entry) {
+                    is Variants -> current.group.args.filterNot { it in entry.axisArgs }
+                    else -> current.group.args
+                }
 
-@Composable
-fun StoryGroupRow(group: StoryGroup) {
-    var isCollapsed by remember { mutableStateOf(false) }
-
-    Row(
-        modifier = Modifier,
-        spacing = 8
-    ) {
-        Column(
-            modifier = Modifier.align(Align.Start).onClick { isCollapsed = !isCollapsed }
-        ) {
-            Icon(
-                if (isCollapsed) Lucide.ChevronRight else Lucide.ChevronDown,
-                size = 16,
-                color = Color.hex(0xffffff, 0.8f)
-            )
-        }
-
-        Column(
-            spacing = 0, modifier = Modifier.hExpand()
-        ) {
-            Row(spacing = 8, modifier = Modifier.hExpand().onClick { isCollapsed = !isCollapsed }) {
-                Icon(Lucide.Book, color = Color.hex(0xa7e650), size = 16)
-                Label(group.title, modifier = Modifier.extraBold())
-            }
-            if (!isCollapsed) {
-                group.entries.forEach {
-                    Row(spacing = 0, modifier = Modifier.hExpand()) {
-                        Space(16)
-                        when (it) {
-                            is Story -> StoryRow(group, it)
-                            is Variants -> VariantsRow(group, it)
-                        }
+                Box(modifier = Modifier.weight().fillAll()) {
+                    when (val entry = current.entry) {
+                        is Story -> StoryView(entry, live, Modifier.fillAll())
+                        is Variants -> MatrixView(entry, live, Modifier.fillAll())
                     }
                 }
+                ArgsPanel(
+                    args = panelArgs,
+                    live = live,
+                    modifier = Modifier.width(280).vExpand(),
+                )
             }
         }
-
-    }
-}
-
-@Composable
-fun VariantsRow(group: StoryGroup, variants: Variants) {
-    val service = LocalAtlasHostService.current
-
-    Row(
-        spacing = 8,
-        modifier = Modifier
-            .pointerCursor()
-            .hoverBackground(Color.hex(0xffffff, 0.1f))
-            .padding(0, 4)
-            .onClick { service.select(group, variants) }
-    ) {
-        Icon(Lucide.Grid2X2, color = Color.hex(0x6e4be3), size = 16)
-        Label(variants.name)
-    }
-}
-
-@Composable
-fun StoryRow(group: StoryGroup, story: Story) {
-    val service = LocalAtlasHostService.current
-
-    Row(
-        spacing = 8,
-        modifier = Modifier
-            .pointerCursor()
-            .hoverBackground(Color.hex(0xffffff, 0.1f))
-            .padding(0, 4)
-            .onClick { service.select(group, story) }
-    ) {
-        Icon(Lucide.Bookmark, color = Color.hex(0x4babe3), size = 16)
-        Label(story.name)
     }
 }
