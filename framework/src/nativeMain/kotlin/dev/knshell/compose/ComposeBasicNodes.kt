@@ -19,6 +19,7 @@ import kn.gtk.GtkBox
 import kn.gtk.GtkButton
 import kn.gtk.GtkDrawingArea
 import kn.gtk.GtkFlowBox
+import kn.gtk.GtkGrid
 import kn.gtk.GtkLabel
 import kn.gtk.GtkOrientation
 import kn.gtk.GtkPolicyType
@@ -29,6 +30,7 @@ import kn.gtk.PangoEllipsizeMode
 import kn.gtk.cairo_t
 import kn.gtk.g_signal_connect_data
 import kn.gtk.gtk_box_append
+import kn.gtk.gtk_box_insert_child_after
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 import kn.gtk.gtk_button_new
@@ -40,12 +42,23 @@ import kn.gtk.gtk_drawing_area_set_content_height
 import kn.gtk.gtk_drawing_area_set_content_width
 import kn.gtk.gtk_drawing_area_set_draw_func
 import kn.gtk.gtk_flow_box_append
+import kn.gtk.gtk_flow_box_insert
 import kn.gtk.gtk_flow_box_new
 import kn.gtk.gtk_flow_box_remove
 import kn.gtk.gtk_flow_box_set_column_spacing
 import kn.gtk.gtk_flow_box_set_max_children_per_line
 import kn.gtk.gtk_flow_box_set_row_spacing
 import kn.gtk.gtk_flow_box_set_selection_mode
+import kn.gtk.gtk_grid_attach
+import kn.gtk.gtk_grid_new
+import kn.gtk.gtk_grid_remove
+import kn.gtk.gtk_grid_set_column_spacing
+import kn.gtk.gtk_grid_set_row_spacing
+import kn.gtk.gtk_grid_layout_child_set_column
+import kn.gtk.gtk_grid_layout_child_set_row
+import kn.gtk.gtk_layout_manager_get_layout_child
+import kn.gtk.gtk_widget_get_layout_manager
+import kn.gtk.gtk_widget_get_parent
 import kn.gtk.gtk_label_new
 import kn.gtk.gtk_label_set_ellipsize
 import kn.gtk.gtk_label_set_label
@@ -176,6 +189,11 @@ internal class GtkButtonContainerNode : GtkNode(gtk_button_new()!!) {
         )
     }
 
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
+        val previous = children.getOrNull(index - 1)?.widget
+        gtk_box_insert_child_after(contentBox.reinterpret<GtkBox>(), child, previous)
+    }
+
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_box_append(contentBox.reinterpret<GtkBox>(), child)
     }
@@ -294,11 +312,58 @@ internal class GtkFlowNode : GtkNode(gtk_flow_box_new()!!) {
         gtk_flow_box_set_max_children_per_line(box, maxPerLine.toUInt())
     }
 
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
+        gtk_flow_box_insert(widget.reinterpret<GtkFlowBox>(), child, index)
+    }
+
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_flow_box_append(widget.reinterpret<GtkFlowBox>(), child)
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {
         gtk_flow_box_remove(widget.reinterpret<GtkFlowBox>(), child)
+    }
+}
+
+/**
+ * Table container (`GtkGrid`): children fill the cells row by row, [configure] says how many make a
+ * row. Every column is as wide as its widest cell and every row as tall as its tallest one.
+ */
+internal class GtkGridNode : GtkNode(gtk_grid_new()!!) {
+    private var columns = 1
+
+    fun configure(columns: Int, spacing: Int) {
+        this.columns = columns.coerceAtLeast(1)
+        val grid = widget.reinterpret<GtkGrid>()
+        gtk_grid_set_column_spacing(grid, spacing.coerceAtLeast(0).toUInt())
+        gtk_grid_set_row_spacing(grid, spacing.coerceAtLeast(0).toUInt())
+        place()
+    }
+
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) = attachChild(child)
+
+    override fun attachChild(child: CPointer<GtkWidget>) {
+        gtk_grid_attach(widget.reinterpret<GtkGrid>(), child, 0, 0, 1, 1)
+        place()
+    }
+
+    override fun detachChild(child: CPointer<GtkWidget>) {
+        gtk_grid_remove(widget.reinterpret<GtkGrid>(), child)
+        place()
+    }
+
+    /** Cells are positions, not a sibling order: a move only changes where each child sits. */
+    override fun rebuildOrder() = place()
+
+    /** Puts every attached child into the cell its index in [children] stands for. */
+    private fun place() {
+        val manager = gtk_widget_get_layout_manager(widget) ?: return
+        children.forEachIndexed { index, node ->
+            // A child still being inserted, or just removed, has no cell yet.
+            if (gtk_widget_get_parent(node.widget) != widget) return@forEachIndexed
+            val cell = gtk_layout_manager_get_layout_child(manager, node.widget) ?: return@forEachIndexed
+            gtk_grid_layout_child_set_column(cell.reinterpret(), index % columns)
+            gtk_grid_layout_child_set_row(cell.reinterpret(), index / columns)
+        }
     }
 }

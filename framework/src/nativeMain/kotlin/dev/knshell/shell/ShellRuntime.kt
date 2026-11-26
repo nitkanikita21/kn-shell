@@ -9,6 +9,7 @@ package dev.knshell.shell
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.snapshots.Snapshot
 import dev.knshell.compose.Color
 import dev.knshell.compose.DEFAULT_CSS
 import dev.knshell.compose.GLibDispatcher
@@ -27,7 +28,9 @@ import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kn.gtk.gtk_widget_queue_resize
 import kn.gtk.GMainLoop
 import kn.gtk.GdkDisplay
@@ -190,13 +193,15 @@ internal class ShellRuntime private constructor() {
         }
         gtk_window_set_child(window, rootWidget)
 
-        val composition = Composition(applier = GtkApplier(GtkBoxNode(rootWidget)), parent = recomposer)
+        val rootNode = GtkBoxNode(rootWidget)
+        val composition = Composition(applier = GtkApplier(rootNode), parent = recomposer)
         val record = RuntimeWindow(
             runtime = this,
             id = nextWindowId++,
             window = window,
             title = title,
             composition = composition,
+            root = rootNode,
         )
         // The close-request handler receives this StableRef as user_data; it is kept in the
         // record so the pointer stays valid until the window is destroyed.
@@ -244,6 +249,35 @@ internal class ShellRuntime private constructor() {
             resizeAction = { w, h -> resizeWindow(window, w, h) },
             marginAction = { left, top -> setLayerMargin(window, left, top) },
         )
+    }
+
+    /** Root node of the first mounted window, or `null` while no window is mounted (inspector entry point). */
+    internal fun firstWindowRoot(): GtkNode? = windows.firstOrNull()?.root
+
+    /**
+     * Waits until the runtime has settled after a change: pending snapshot writes are applied, the
+     * [recomposer] has no work left, and GTK has had a few frames to lay out and paint the result.
+     *
+     * Bounded by [IDLE_TIMEOUT_MS]: an endless animation keeps the recomposer busy, and the caller
+     * then gets the state as it is rather than waiting forever. Runs on the GLib dispatcher.
+     */
+    internal suspend fun awaitIdle() {
+        val settled = withTimeoutOrNull(IDLE_TIMEOUT_MS) {
+            while (true) {
+                Snapshot.sendApplyNotifications()
+                val state = recomposer.currentState.value
+                if (state != Recomposer.State.PendingWork && state != Recomposer.State.InactivePendingWork) break
+                delay(IDLE_STEP_MS)
+            }
+            repeat(IDLE_FRAMES) {
+                delay(IDLE_STEP_MS)
+                Snapshot.sendApplyNotifications()
+            }
+            true
+        }
+        if (settled == null) {
+            println("[shell-runtime] awaitIdle: still busy after $IDLE_TIMEOUT_MS ms, returning anyway")
+        }
     }
 
     /** Blocks in the GLib main loop until the last window is closed. */
@@ -315,6 +349,15 @@ internal class ShellRuntime private constructor() {
 
         /** The process-wide runtime; created lazily on first use. */
         fun instance(): ShellRuntime = instance ?: ShellRuntime().also { instance = it }
+
+        /** Upper bound of [awaitIdle] in milliseconds. */
+        private const val IDLE_TIMEOUT_MS = 2000L
+
+        /** Pause between idle checks, and between the frames given to GTK after the recomposer settled. */
+        private const val IDLE_STEP_MS = 20L
+
+        /** Frames granted to GTK after the recomposer settled (about 60 ms in total). */
+        private const val IDLE_FRAMES = 3
     }
 
     /**

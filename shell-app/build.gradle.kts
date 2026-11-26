@@ -1,23 +1,17 @@
-import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBinary
-import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType.DEBUG
+import org.jetbrains.kotlin.gradle.plugin.mpp.Executable
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    // Каталог компонентів: сторіс у src/linuxX64Atlas/kotlin, таска runAtlas.
+    id("dev.knshell.atlas")
 }
 
 val paletteArchiveFile =
     rootProject.file(
         "palette-core/target/x86_64-unknown-linux-gnu/debug/libpalette_core.a",
     )
-
-// ATLAS: спільні linker-опції для обох виконуваних файлів (app і atlas),
-// щоб Rust/palette архіви та glibc-прапорець не дублювати.
-fun NativeBinary.applyNativeLinking() {
-    linkerOpts("--allow-shlib-undefined")
-    linkerOpts(paletteArchiveFile.absolutePath)
-}
 
 kotlin {
     linuxX64 {
@@ -30,21 +24,16 @@ kotlin {
             }
         }
 
-        val atlas = compilations.create("atlas") {
-            associateWith(main)
-        }
-
         binaries {
             executable {
                 entryPoint = "main"
-                applyNativeLinking()
             }
 
-            // Таска: linkAtlasDebugExecutableLinuxX64
-            executable("atlas", listOf(DEBUG)) {
-                compilation = atlas
-                entryPoint = "atlas.main"
-                applyNativeLinking()
+            // Спільне для всіх executable модуля, зокрема atlas від плагіна:
+            // Rust/palette архів і glibc-прапорець.
+            withType<Executable>().configureEach {
+                linkerOpts("--allow-shlib-undefined")
+                linkerOpts(paletteArchiveFile.absolutePath)
             }
         }
     }
@@ -63,13 +52,6 @@ kotlin {
                 implementation(libs.koin.core)
             }
         }
-
-        // ATLAS: залежності лише для сторіс. Каталог: src/linuxX64Atlas/kotlin
-        getByName("linuxX64Atlas") {
-            dependencies {
-                implementation(project(":atlas-core"))
-            }
-        }
     }
 }
 
@@ -77,17 +59,6 @@ tasks.register("run") {
     group = "application"
     description = "Builds the shell (Rust + UniFFI + Kotlin/Native) and launches it."
     dependsOn("runReleaseExecutableLinuxX64")
-}
-
-tasks.register("runAtlas") {
-    group = "application"
-    description = "Builds and launches the Atlas component catalog (debug)."
-    dependsOn("runAtlasDebugExecutableLinuxX64")
-}
-
-// `-Pstory=Group/Entry` відкриває потрібну story (KMP run-таска не має `--args`).
-tasks.withType<Exec>().matching { it.name == "runAtlasDebugExecutableLinuxX64" }.configureEach {
-    providers.gradleProperty("story").orNull?.let { args("--story", it) }
 }
 
 val rustArchive =

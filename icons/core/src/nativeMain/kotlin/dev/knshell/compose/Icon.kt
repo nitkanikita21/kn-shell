@@ -5,6 +5,7 @@ package dev.knshell.compose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import dev.knshell.animation.Easing
 import dev.knshell.animation.eased
@@ -52,38 +53,38 @@ fun Icon(
     transitionMs: Int = 200,
     strokeWidth: Double? = null,
 ) {
-    var node: IconNode? = null
+    // The factory runs once, so a plain local would be `null` on every recomposition: the node the
+    // effect below drives has to be remembered. The updates reach it as their receiver.
+    val created = remember { arrayOfNulls<IconNode>(1) }
     ComposeNode<IconNode, GtkApplier>(
         factory = {
-            IconNode(icon, size).plain().also { node = it }
+            IconNode(icon, size).plain().also { created[0] = it }
         },
         update = {
-            set(modifier) { value -> node?.applyModifier(value) }
+            set(modifier) { value -> applyModifier(value) }
             set(icon) { value ->
-                node?.let { n ->
-                    if (n.ref != value) {
-                        n.ref = value
-                        // A new icon starts its own color transition from scratch.
-                        n.transitionStartNs = 0L
-                        n.transitionTargetHex = null
-                        n.requestRedraw()
-                    }
+                if (ref != value) {
+                    ref = value
+                    // A new icon starts its own color transition from scratch.
+                    transitionStartNs = 0L
+                    transitionTargetHex = null
+                    requestRedraw()
                 }
             }
-            set(size) { value -> node?.resize(value) }
+            set(size) { value -> resize(value) }
             set(strokeWidth) { value ->
-                node?.let { n ->
-                    if (n.strokeWidth != value) {
-                        n.strokeWidth = value
-                        n.requestRedraw()
-                    }
+                if (strokeWidth != value) {
+                    this.strokeWidth = value
+                    requestRedraw()
                 }
             }
-            // Immediate assignment; the frame loop below overwrites it per frame
-            // when a transition is requested. transitionMs==0 lands here as the
-            // final value and repaints synchronously.
+            // Immediate assignment, unless the colour is to fade from the one painted now: then
+            // the frame loop below owns it.
             set(color) { value ->
-                node?.let { n -> n.colorHex = value?.let { colorToHex(it) } ; n.requestRedraw() }
+                if (transitionMs <= 0 || colorHex == null || value == null) {
+                    colorHex = value?.let { colorToHex(it) }
+                    requestRedraw()
+                }
             }
         },
     )
@@ -92,7 +93,7 @@ fun Icon(
     // the pattern ShaderCanvas uses for per-frame GL uniforms. Ends as soon as
     // the transition completes or the color/params change again (effect restarts).
     LaunchedEffect(icon, color, transitionMs, size) {
-        val n = node ?: return@LaunchedEffect
+        val n = created[0] ?: return@LaunchedEffect
         val target = color ?: return@LaunchedEffect
         if (transitionMs <= 0) {
             n.transitionStartNs = 0L
@@ -110,7 +111,7 @@ fun Icon(
             val now = withFrameNanos { it }
             val elapsed = now - start
             if (n.transitionTargetHex != targetHex) break // superseded by newer input
-            if (elapsed >= n.transitionDurationNs) break // final value already assigned above
+            if (elapsed >= n.transitionDurationNs) break // the final value is assigned below
             val t = (elapsed.toFloat() / n.transitionDurationNs.toFloat()).coerceIn(0f, 1f)
             val easedT = Easing.OutCubic.eased(t)
             n.colorHex = colorToHex(lerpColor(from, target, easedT))

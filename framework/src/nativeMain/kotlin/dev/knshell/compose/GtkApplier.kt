@@ -9,6 +9,8 @@ import dev.knshell.core.setBoxChildMax
 import dev.knshell.core.setBoxChildRatio
 import dev.knshell.core.setBoxChildWeight
 import kn.gtk.GtkWidget
+import kn.gtk.g_object_ref
+import kn.gtk.g_object_unref
 import kn.gtk.gtk_widget_get_layout_manager
 import kn.gtk.gtk_widget_get_parent
 
@@ -20,6 +22,9 @@ import kn.gtk.gtk_widget_get_parent
  * subclasses implement with `gtk_box_append` / `gtk_box_remove`.
  */
 open class GtkNode(val widget: CPointer<GtkWidget>) {
+    /** Stable id the inspector addresses this node by; assigned at construction (main thread only). */
+    internal val id: Int = GtkNodeIds.next()
+
     internal val children = mutableListOf<GtkNode>()
 
     /** Per-widget style provider used by modifier-based styling. */
@@ -100,13 +105,18 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
         children.forEach { it.cancelAnimations() }
     }
 
+    /**
+     * `Applier.move`: [to] counts positions as they are *before* the move, so moving forward lands
+     * [count] places earlier than [to] once the moved children are taken out (`A B C D` with
+     * `move(0, 2, 1)` gives `B A C D`).
+     */
     open fun moveChild(from: Int, to: Int, count: Int) {
         val moved = mutableListOf<GtkNode>()
         repeat(count) {
             if (from < children.size) moved.add(children.removeAt(from))
         }
-        val safeTo = to.coerceIn(0, children.size)
-        children.addAll(safeTo, moved)
+        val destination = if (from > to) to else to - count
+        children.addAll(destination.coerceIn(0, children.size), moved)
         rebuildOrder()
     }
 
@@ -132,9 +142,20 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
 
     /** Re-appends children in list order (used after `move`). */
     protected open fun rebuildOrder() {
+        // Detaching drops the container's reference, usually the only one: without our own, GTK
+        // destroys the widget and what gets attached again is a dead pointer.
+        children.forEach { g_object_ref(it.widget) }
         children.forEach { detachChild(it.widget) }
         children.forEach { attachChild(it.widget) }
+        children.forEach { g_object_unref(it.widget) }
     }
+}
+
+/** Source of [GtkNode.id]: a plain counter, so ids are only ever created on the GTK main thread. */
+private object GtkNodeIds {
+    private var last = 0
+
+    fun next(): Int = ++last
 }
 
 /**

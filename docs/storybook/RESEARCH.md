@@ -64,5 +64,31 @@
 
 **Прийняті рішення (чинні, уточнюють пункти вище):**
 - Процес — in-process; out-of-process через Wayland-surface відкладено.
-- Модуль `atlas-core` (DSL, модель args, runner, UI) окремо від `framework`; `framework` не знає про Atlas.
+- Модуль `atlas:core` (каталог `atlas/core`) (DSL, модель args, runner, UI) окремо від `framework`; `framework` не знає про Atlas.
 - Runner — compilation `linuxX64Atlas` у `shell-app` (`shell-app/src/linuxX64Atlas`), а не окремий модуль; executable `atlas` (debug) з точкою входу `atlas.main`.
+
+## 8. Headless-дисплей для MCP-демона (прийнято)
+
+Контекст: `atlas/mcp` має керувати атласом невидимо, без вікна на робочому столі і без input-пристроїв.
+
+- **Власний мінімальний композитор на Rust** (`atlas/mcp/src/compositor.rs`, протокольні биндинги
+  `wayland-server`). Прийнято. Він дає лише handshake, `configure` і `wl_callback.done`; нічого не малює,
+  а `wl_seat` без клавіатури й миші. Input іде через інспектор.
+- **GPU через `linux-dmabuf`** (`src/compositor/dmabuf.rs`). З одним лише `wl_shm` GTK не міг показати кадр
+  з GPU (`GskVulkanRenderer`: «Queue family does not support surface», GL падав на llvmpipe). Досить
+  оголосити протокол v4 з render node у feedback: буфери приймаються й одразу звільняються без імпорту,
+  графічні бібліотеки композитору не потрібні. Перевірено на NVIDIA (RTX 4060): `GskVulkanRenderer`,
+  100 циклів «зміна → скріншот» без помилок.
+- **KWin відхилено** як важку залежність: тягне весь desktop-стек заради headless-режиму.
+- **Broadway відхилено** для цієї задачі: `gtk4-broadwayd` заморожував frame clock без браузерного клієнта,
+  тож перекомпозиція і layout не відбувалися. Пункт 3 вище описує ту саму залежність від клієнта.
+- Деталі демона, інструменти й обмеження: `docs/storybook/README.uk.md`, розділ «MCP».
+
+## 9. MCP-тулза без привʼязки до проєкту (прийнято)
+
+- Проєкт нічого не конфігурує для тулзи: вона питає Gradle власним init-скриптом, які модулі мають
+  таску `runAtlas…Executable…`. Конфіг-файл і вгадування за структурою тек відхилені.
+- Створення цієї таски винесено в плагін `dev.knshell.atlas` (`atlas/plugin`).
+- Плагін компілюється `kotlin("jvm")`, а не `kotlin-dsl`: вбудований у Gradle 8.10 Kotlin старіший за
+  метадані Kotlin Gradle plugin 2.x.
+- Відкладено: publishing `framework` і `atlas:core`, без якого інший репозиторій не отримає бібліотеки.

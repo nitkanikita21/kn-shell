@@ -16,5 +16,5 @@ package = kn.gtk
 # `-I/usr/include` is not in Kotlin/Native's bundled sysroot, and both gdkwayland.h and the
 # wl_surface prototypes below need `wayland-client.h` from the distro.
 compilerOpts = -I/usr/include
-headers = gtk/gtk.h gtk4-layer-shell.h gdk/wayland/gdkwayland.h wayland-client.h
+headers = gtk/gtk.h gio/gunixsocketaddress.h gtk4-layer-shell.h gdk/wayland/gdkwayland.h wayland-client.h
 linkerOpts = -L/usr/lib -L/usr/lib64 -L/lib64 -lgtk-4 -lpangocairo-1.0 -lpango-1.0 -lharfbuzz -lgdk_pixbuf-2.0 -lcairo-gobject -lcairo -lvulkan -lgraphene-1.0 -lgio-2.0 -lgobject-2.0 -lglib-2.0 -lgtk4-layer-shell -lwayland-client

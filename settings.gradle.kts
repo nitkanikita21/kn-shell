@@ -1,5 +1,6 @@
 pluginManagement {
     includeBuild("icons-plugin")
+    includeBuild("atlas/plugin")
     repositories {
         gradlePluginPortal()
         mavenCentral()
@@ -23,4 +24,4 @@ include(":framework")
 include(":icons:core")
 include(":icons-packs:lucide")
 include(":shell-app")
-include(":atlas-core")
+include(":atlas:core")

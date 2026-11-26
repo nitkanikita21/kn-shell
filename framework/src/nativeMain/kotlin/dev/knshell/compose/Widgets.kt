@@ -421,6 +421,34 @@ fun Scroll(
     }
 }
 
+/**
+ * Table of [columns] columns (`GtkGrid`): children fill it row by row, so a header row is simply the
+ * first [columns] children. Columns are as wide as their widest cell, which is what [Row]s stacked
+ * in a [Column] cannot guarantee.
+ *
+ * ```kotlin
+ * Grid(columns = 2, spacing = 8) { Label("cpu"); Label("42%"); Label("memory"); Label("7.1 GB") }
+ * ```
+ */
+@Composable
+fun Grid(
+    columns: Int,
+    spacing: Int = 8,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    ComposeNode<GtkGridNode, GtkApplier>(
+        factory = { GtkGridNode().plain().also { it.configure(columns, spacing) } },
+        update = {
+            set(columns) { value -> configure(value, spacing) }
+            set(spacing) { value -> configure(columns, value) }
+            set(modifier) { value -> applyModifier(value) }
+        },
+    ) {
+        content()
+    }
+}
+
 /** Wrapping flow container (`GtkFlowBox`): children keep their natural size and wrap by width. */
 @Composable
 fun Flow(

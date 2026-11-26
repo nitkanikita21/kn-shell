@@ -5,6 +5,7 @@ package dev.knshell.compose
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import kotlinx.cinterop.*
 import kn.gl.epoxy_glAttachShader
@@ -334,13 +335,15 @@ fun ShaderCanvas(
     animated: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
-    var node: GtkShaderCanvasNode? = null
+    // Remembered, not a plain local: the factory runs once, and a restarted effect must still
+    // find the node.
+    val created = remember { arrayOfNulls<GtkShaderCanvasNode>(1) }
     ComposeNode<GtkShaderCanvasNode, GtkApplier>(
         factory = {
             GtkShaderCanvasNode(width, height, fragmentSource)
                 .also { it.setRadius(radius) }
                 .plain()
-                .also { node = it }
+                .also { created[0] = it }
         },
         update = {
             set(modifier) { value -> applyModifier(value) }
@@ -350,11 +353,11 @@ fun ShaderCanvas(
 
     LaunchedEffect(animated, fragmentSource) {
         if (!animated) {
-            node?.queueRender()
+            created[0]?.queueRender()
             return@LaunchedEffect
         }
         while (true) {
-            withFrameNanos { nanos -> node?.frame(nanos) }
+            withFrameNanos { nanos -> created[0]?.frame(nanos) }
         }
     }
 }

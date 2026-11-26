@@ -8,7 +8,7 @@ plugins {
 // archived `gtk-kn` project (see README "Deviations"): include paths come from
 // pkg-config, linker options live in the .def file.
 val gtkCflags: List<String> = providers.exec {
-    commandLine("pkg-config", "--cflags", "gtk4", "gtk4-layer-shell-0")
+    commandLine("pkg-config", "--cflags", "gtk4", "gtk4-layer-shell-0", "gio-unix-2.0")
 }.standardOutput.asText.get().trim().split(Regex("\\s+")).filter { it.isNotBlank() }
 
 val epoxyCflags: List<String> = providers.exec {

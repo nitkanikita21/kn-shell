@@ -143,3 +143,6 @@ data class Corner(val horizontal: Int, val vertical: Int = horizontal)
 
 /** Standalone corner radius declarations (independent of a background). */
 internal data class RadiusElement(val declarations: String) : ModifierElement
+
+/** Name the widget is addressed by from outside (`Modifier.testTag`); changes nothing visually. */
+internal data class TestTagElement(val name: String) : ModifierElement

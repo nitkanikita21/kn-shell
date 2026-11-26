@@ -59,6 +59,14 @@ internal class InteractionState(private val widget: CPointer<GtkWidget>) {
         bindCursor(cursor)
     }
 
+    /** Whether a `Modifier.onClick` handler is bound; the inspector checks it before a click. */
+    internal val hasClickHandler: Boolean get() = clickHandler != null
+
+    /** Runs the `Modifier.onClick` handler the way a user click on the widget would. */
+    internal fun invokeClick() {
+        clickHandler?.invoke()
+    }
+
     private fun ensureClickGesture() {
         if (clickGesture != null) return
         val gesture = gtk_gesture_click_new() ?: return

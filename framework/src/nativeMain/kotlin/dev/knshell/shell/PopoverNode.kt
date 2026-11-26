@@ -29,6 +29,7 @@ import kn.gtk.g_source_remove
 import kn.gtk.g_signal_connect_data
 import kn.gtk.g_timeout_add
 import kn.gtk.gtk_box_append
+import kn.gtk.gtk_box_insert_child_after
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 import kn.gtk.gtk_event_controller_motion_new
@@ -140,6 +141,11 @@ internal class GtkHoverPopoverNode(
         if (getenv("KN_POPOVER_DEBUG")?.toKString() == "1") {
             showSource = g_timeout_add(2000u, showCallback, selfRef.asCPointer())
         }
+    }
+
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
+        val previous = children.getOrNull(index - 1)?.widget
+        gtk_box_insert_child_after(widget.reinterpret<GtkBox>(), child, previous)
     }
 
     override fun attachChild(child: CPointer<GtkWidget>) {

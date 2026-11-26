@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composition
 import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.StableRef
+import dev.knshell.compose.GtkNode
 import kn.gtk.GtkWindow
 
 /** A window mounted on the runtime; tracked until its close-request fires. */
@@ -18,6 +19,8 @@ internal class RuntimeWindow(
     val window: CPointer<GtkWindow>,
     val title: String,
     val composition: Composition,
+    /** Root node of [composition]: the box the window's content is packed into (inspector entry point). */
+    val root: GtkNode,
 ) {
     var selfRef: StableRef<RuntimeWindow>? = null
     var closed: Boolean = false

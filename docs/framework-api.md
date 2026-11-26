@@ -28,8 +28,9 @@ is a separate Gradle module and Kotlin has no friend-module visibility.
 | Symbol | Purpose |
 | --- | --- |
 | `Row`, `Column`, `Box`, `CenterBox`, `Stack`, `Overlay`, `Slider`, `Label`, `Markup`, `Button` | layout and leaf widgets |
+| `Grid(columns, spacing)` | table (`GtkGrid`): children fill it row by row, columns align |
 | `Entry`, `Switch`, `DropDown` | input widgets (see [Input widgets](#input-widgets)) |
-| `Modifier` + extensions | layout (`size`, `padding`, `margin`, `align`, `hExpand`, `fillWidth`, `minSize`, `maxWidth`), styling (`background`, `gradient`, `glow`, `radius`, `textColor`, `fontSize`, …), interaction (`onClick`, `onHover`, `cursor`, `pointerCursor`, `inputRegion`), animation (`transition`, `gradientStops`), `rawStyle`, `clipOverflow` |
+| `Modifier` + extensions | layout (`size`, `padding`, `margin`, `align`, `hExpand`, `fillWidth`, `minSize`, `maxWidth`), styling (`background`, `gradient`, `glow`, `radius`, `textColor`, `fontSize`, …), interaction (`onClick`, `onHover`, `cursor`, `pointerCursor`, `inputRegion`), animation (`transition`, `gradientStops`), `rawStyle`, `clipOverflow`, `testTag` (inspector name, see the Inspector section below) |
 | `Align`, `AnimatedAxis`, `Corner`, `Color` | supporting types |
 | `animatedWidth`, `animatedHeight`, `animatedSize` (Modifier extensions) | Compose-owned size animation (AnimationSpec + GTK frame clock; passive native layout manager) |
 | `Canvas`, `ShaderCanvas` | cairo / OpenGL drawing |
@@ -150,6 +151,55 @@ Benchmark: `scripts/anim-bench.sh` (`--help`).
 `primitives`: `Space`, `HSpace`, `VSpace`, `Spacer`, `Text`, `Image` (`Icon` lives in `:icons:core`, `dev.knshell.compose`); `Format`: `Float.format`,
 `percent`, `whole`, `floorInt`, `ceilInt`, `formatBytesPerSec`; `bucketLevels` for spectrum
 visualisers.
+
+### `dev.knshell.inspect` — inspector
+
+Lets an outside tool read the widget tree of a window, act on it and take screenshots. The Atlas
+MCP daemon (`atlas/mcp`) is its main user. The API is plain Kotlin; there is no JSON in it.
+
+| Symbol | Purpose |
+| --- | --- |
+| `Modifier.testTag(name)` (`dev.knshell.compose`) | Names a node so `Inspector.find` can address it. No visual effect. Tags are not checked for uniqueness; a lookup by a shared tag throws. |
+| `windowInspector()` | Inspector of the first window of `ShellRuntime`. GTK is not touched until the first call on the result. |
+| `Inspector` | Reads, acts and renders one window (see below). Its constructor is internal; get it from `windowInspector()`. |
+| `InspectNode` | One node of the tree: `id`, `type`, `testTag`, `bounds` (`NodeBounds`, relative to the composition root), `cssClasses`, `text`, `checked`, `value`, `selected`, `options`, `visible`, `sensitive`, `children`. |
+| `InteractionState` | `Hover`, `Pressed`, `Focus`: the states `setState` can force. |
+| `InspectException` | Every refused request: unknown or ambiguous target, wrong node type, hidden or insensitive node, value out of range. |
+| `LineSocketServer(path, handler)` | Newline-delimited request/response server on a unix socket (mode `0600`), served by the GLib main loop. `start(): Boolean` binds (and returns `false` with a log line on failure); `stop()` closes everything and removes the socket file. The framework does not know the payload; the handler decides what a line means. |
+
+`Inspector` methods:
+
+| Method | Behaviour |
+| --- | --- |
+| `tree(): InspectNode` | Whole composition, depth first, with ids and testTags. |
+| `find(target: String): InspectNode` | Node named by a decimal id or a testTag. Throws when nothing or several nodes match. |
+| `click(id)` | Clicks a `Button` (emits `clicked`), or runs the `Modifier.onClick` handler of another node. Throws if the node has no click handler. |
+| `setText(id, text)` | Replaces the text of an `Entry`; its `onValueChange` fires. |
+| `setChecked(id, checked)` | Toggles a `Switch`; its `onCheckedChange` fires. |
+| `setValue(id, value)` | Moves a `Slider`. Values outside its range, or NaN, are rejected. |
+| `select(id, index)` | Selects an item of a `DropDown`. Indices outside its options are rejected. |
+| `setState(id, state, on)` | Sets or clears GTK state flags: hover (prelight), pressed (active), focus (focused, focus-visible). `onHover` callbacks are not fired. |
+| `screenshot(id: Int? = null): ByteArray` | PNG of the composition root, or of a node's rectangle. The area is cropped from the whole window's render, so neighbouring backgrounds are included. Popups and popovers are separate surfaces and are not in it. |
+| `suspend awaitIdle()` | Waits until pending recomposition and layout are done. |
+
+Actions go through the same GTK signals a user input would emit, so Compose callbacks fire. A node
+must be visible and sensitive to take an action; otherwise `InspectException`. Actions must run on the
+GTK main thread: `LineSocketServer` handlers already do.
+
+```kotlin
+val inspector = windowInspector()
+val send = inspector.find("send")          // by testTag; a numeric id works too
+inspector.click(send.id)
+inspector.awaitIdle()
+val png: ByteArray = inspector.screenshot()
+```
+
+The socket protocol that wraps this for Atlas is documented in
+[`docs/storybook/README.uk.md`](storybook/README.uk.md) (section "Інспектор: `--inspect`").
+
+`disableUiTransitions()` turns GTK CSS transitions off for the process. An inspected application
+should call it: `awaitIdle` does not wait for a transition, so a screenshot taken right after a
+change would otherwise catch it half way. Compose-driven animations are not affected.
 
 ## Visibility rules
 

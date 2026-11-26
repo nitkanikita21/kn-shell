@@ -30,6 +30,7 @@ kotlin {
         }
         nativeTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.kotlinx.coroutines.core)
         }
     }
 }

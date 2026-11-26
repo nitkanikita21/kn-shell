@@ -10,19 +10,62 @@ Atlas — робочий каталог для перегляду й перев�
 ## Модулі
 
 ```
-framework     GTK4-міст, Compose DSL, UI-віджети                     ← бібліотека
-atlas-core    DSL stories, модель args, runner, UI каталогу           ← залежить від framework
+framework     GTK4-міст, Compose DSL, UI-віджети, інспектор            ← бібліотека
+atlas/core    DSL stories, модель args, runner, UI каталогу, команди   ← залежить від framework
+atlas/plugin  Gradle-плагін dev.knshell.atlas: compilation і таски      ← included build
+atlas/mcp     Rust-демон atlas-mcp (MCP) і headless-композитор        ← cargo, не Gradle
 shell-app     compilation linuxX64Atlas: stories і точка входу        ← застосунок
 ```
 
-- **`atlas-core`** (`atlas-core/`) — `group`/`story`/`variants`, типи args (`Arg`), `LiveArgs`,
+- **`atlas:core`** (`atlas/core/`) — `group`/`story`/`variants`, типи args (`Arg`), `LiveArgs`,
   `CellArgs`, `AtlasHostService`, `resolveStory`, `parseStorySpec`, `atlasMain`, UI каталогу
   (`runner/ui`). Пакет `dev.knshell.atlas`.
 - **Stories** живуть у `shell-app`, у compilation `linuxX64Atlas` (`shell-app/src/linuxX64Atlas/kotlin/atlas/`).
-  Compilation залежить від `:atlas-core`, тож звичайний `main` (шелл) stories не містить.
+  Compilation і таски додає плагін `dev.knshell.atlas`. Вона залежить від `:atlas:core`, тож звичайний `main` (шелл) stories не містить.
   Точка входу — `fun main(args: Array<String>)` у `atlas/main.kt`, вона викликає `atlasMain(...)`.
 - Runner — не окремий модуль і не Rust-процес: Atlas — звичайний Kotlin/Native executable
-  (`atlas`, debug), in-process.
+  (`atlas`, debug), in-process. Rust-демон `atlas/mcp` тільки керує цим executable з боку MCP;
+  він не рендерить і не є runner-ом.
+- **`atlas/mcp`** — демон `atlas-mcp` і приватний headless-композитор. Окремий cargo-крейт, у
+  `settings.gradle.kts` його немає. Деталі в розділі «MCP» нижче.
+
+## Підключення атласу до модуля
+
+Gradle-плагін `dev.knshell.atlas` (`atlas/plugin`) додає атлас до Kotlin Multiplatform модуля з
+таргетом `linuxX64`:
+
+```kotlin
+// settings.gradle.kts
+pluginManagement { includeBuild("atlas/plugin") }
+
+// build.gradle.kts (кореневий): спільний classloader із Kotlin plugin
+plugins { id("dev.knshell.atlas") apply false }
+
+// build.gradle.kts модуля
+plugins {
+    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.compose)
+    id("dev.knshell.atlas")
+}
+
+atlas {                                  // обидва поля необовʼязкові
+    entryPoint = "atlas.main"            // типово
+    core = project(":atlas:core")        // типово, якщо такий проєкт є
+}
+```
+
+Плагін створює:
+
+- compilation `atlas` (код у `src/linuxX64Atlas/kotlin`), яка бачить internal-и `main`, тож stories не
+  потрапляють у бінарник застосунку;
+- debug-executable `atlas` і таски `linkAtlasDebugExecutableLinuxX64`, `runAtlasDebugExecutableLinuxX64`;
+- таску `runAtlas`; `-Pstory=Group/Entry` відкриває потрібну story.
+
+Власні linker-опції модуля задавайте для всіх executable
+(`binaries.withType<Executable>().configureEach { … }`), тоді їх отримає й атлас.
+
+Бібліотеки `framework` і `atlas:core` поки ніде не публікуються: поза цим репозиторієм їх треба
+підключити самому (publishing відкладено).
 
 ## DSL
 
@@ -87,7 +130,7 @@ val buttonStories = group("Button") {
 | `float(default, range: ClosedFloatingPointRange<Float>)` | `Arg.FloatNum` | `Slider` з діапазоном |
 | `render { v -> }` | — | render групи за замовчуванням |
 | `story(name, render?)` | — | одна story |
-| `variants(name, render?) { … }` | — | матриця |
+| `variants(name, render?, view?) { … }` | — | матриця; `view` — вигляд, з яким вона відкривається |
 
 Усередині `variants { }`:
 
@@ -107,8 +150,13 @@ val buttonStories = group("Button") {
 
 - **Сайдбар** — групи і їхні stories/variants; активний пункт підсвічено.
 - **Превʼю** — story по центру.
-- **Матриця** — для `variants`: сітка всіх комбінацій axis (`Flow`); кожна комірка — render з
-  її комбінацією, підпис комірки — значення axis.
+- **Матриця** — для `variants`; угорі перемикач вигляду. Кожна комірка — render зі своєю комбінацією.
+  - `MatrixView.Compose` (типовий): групи за першою axis, що згортаються, з назвою над кожним превʼю.
+  - `MatrixView.Table`: перша axis — рядки, друга — колонки; лише для рівно двох axis, інакше
+    `IllegalArgumentException` під час опису story. Прибрана через `exclude` комбінація лишає «—».
+  - Типовий вигляд задається в story: `variants("Variant X Size", view = MatrixView.Table) { … }`.
+    Вибір і згорнуті групи памʼятаються для кожної матриці до закриття атласу.
+  - Значок у куті іконки матриці в сайдбарі показує поточний вигляд.
 - **Панель args** праворуч — контрол для кожного arg: `Entry` для тексту, `Switch` для flag,
   `DropDown` для choice, `Slider` із значенням для int/float. У матриці панель показує лише
   не-axis args: вони діють на всі комірки, axis задає сама комбінація.
@@ -140,15 +188,208 @@ KN_ATLAS_STORY="Button/Primary" shell-app/build/bin/linuxX64/atlasDebugExecutabl
 - `Group/Entry` — без урахування регістру, поділ по першому `/`.
 - Невідома назва — попередження зі списком доступних story і відкривається перша story.
 
+### Інспектор: `--inspect`
+
+```bash
+atlas.kexe --inspect=/run/user/1000/atlas.sock
+# або змінна середовища
+KN_ATLAS_INSPECT=/run/user/1000/atlas.sock atlas.kexe
+```
+
+- Сервер стартує **лише** з `--inspect=<шлях>` (або `--inspect <шлях>`) чи `KN_ATLAS_INSPECT`.
+  Без них сокета немає, і звичайний запуск атласу не змінюється.
+- Сокет — unix-сокет з правами `0600`, обробляється в GTK main loop (інспектор торкається віджетів
+  напряму, без потоків).
+- Протокол — один JSON-об'єкт на рядок, одна відповідь на рядок у тому ж порядку:
+
+```
+→ {"id":1,"method":"tools/list"}
+← {"id":1,"result":{"tools":[{"name","description","inputSchema"}]}}
+→ {"id":2,"method":"tools/call","params":{"name":"screenshot","arguments":{"target":"preview"}}}
+← {"id":2,"result":{"content":[{"type":"image","data":"<base64>","mimeType":"image/png"}],"isError":false}}
+← {"id":3,"error":{"message":"..."}}        # невідомий method
+```
+
+  Форма `result` повторює MCP, тому демон передає її без перетворень. Помилка інструмента (невідомий
+  інструмент, поганий аргумент, неоднозначний `target`) повертається як `result` з `isError:true`, а
+  не як `error`.
+
 ## Тести
 
 ```bash
-./gradlew :atlas-core:linuxX64Test
+./gradlew :atlas:core:linuxX64Test
+./gradlew :framework:linuxX64Test
+cargo test --manifest-path atlas/mcp/Cargo.toml
+cargo clippy --manifest-path atlas/mcp/Cargo.toml
 ```
 
-Тести покривають лише логіку, без GTK-вікна: побудову груп і матриці (`GroupBuilderTest`),
-`LiveArgs` (`LiveArgsTest`), `AtlasHostService` (збереження args за story), `resolveStory` і
-`parseStorySpec` (`StorySelectionTest`).
+Тести `atlas:core` покривають лише логіку, без GTK-вікна: побудову груп і матриці
+(`GroupBuilderTest`), `LiveArgs` (`LiveArgsTest`), `AtlasHostService` (збереження args за story),
+`resolveStory` і `parseStorySpec` (`StorySelectionTest`).
+
+`cargo test` для `atlas/mcp` перевіряє демон на фейковому атласі (`examples/fake_atlas.rs`): проксі
+`tools/call`, помилки, таймаут, перебудову, застарілість бінарника, зупинку та конфлікт імен. Запускай
+його через `cargo test`, бо тест знаходить приклад у каталозі збірки. Композитор можна підняти окремо:
+`cargo run --manifest-path atlas/mcp/Cargo.toml --example headless -- <імʼя-сокета>`.
+
+## MCP: керування атласом з Claude
+
+`atlas/mcp` — демон `atlas-mcp` (Rust, офіційний SDK `rmcp`, транспорт stdio). Він дає Claude
+інструменти, якими можна невидимо відкрити story, змінити args, зробити скріншот, прочитати дерево
+віджетів і виконати дію (клік, текст, перемикач, слайдер, dropdown, примусовий hover/pressed/focus).
+Типово вікно атласу не з'являється на робочому столі й не забирає фокус.
+
+### Архітектура
+
+```
+Claude ──MCP/stdio──> atlas-mcp (Rust) ──JSON-рядки / unix socket──> atlas.kexe --inspect=<socket>
+                        │                                              │
+                        ├─ пошук атласу, reload / status               └─ framework: дерево, дії, PNG
+                        └─ приватний headless Wayland-композитор
+                           (atlas/mcp/src/compositor.rs)
+```
+
+- Демон сам **не знає про компоненти**. Інструменти атласу описані в атласі (`tools/list`), демон
+  їх проксіює; власні інструменти демона — `list_atlases`, `use_atlas`, `set_visible`,
+  `reload`, `status`, `logs`, `stop`.
+- Атлас запускається з `WAYLAND_DISPLAY=atlas-mcp-<pid>` і `GDK_BACKEND=wayland`. Так він рендериться
+  на приватний сокет демона, а не на твій Hyprland-дисплей.
+
+### Чому приватний headless-композитор
+
+- **Невидимість.** Атлас підключається лише до приватного сокета `WAYLAND_DISPLAY`, тож на твоєму
+  робочому столі вікна немає і фокус не змінюється. Що `hyprctl clients` його не бачить, — перевіряється
+  в наскрізному тесті, а не в коді.
+- **Без системних залежностей.** Не потрібні KWin, weston, cage, broadway, браузер чи sudo. Композитор
+  — невеликий Rust-код у `atlas/mcp/src/compositor.rs`, без рендерингу: він дає handshake, `configure` і
+  потік `wl_callback.done`, без яких GTK 4 перестає перекомпонувати.
+- **Немає пристроїв введення.** Композитор не оголошує `wl_seat` з клавіатурою чи мишею. Дії
+  виконує інспектор (`dev.knshell.inspect.Inspector`), він викликає ті самі GTK-сигнали, що й
+  користувач, тож `Modifier.onClick`, `onValueChange` і `onCheckedChange` спрацьовують.
+- Скріншоти малює сам клієнт (GTK-рендерер атласу), композитор нічого не малює.
+
+### Встановлення і підключення
+
+Один раз на машину:
+
+```bash
+cargo install --path atlas/mcp                       # → ~/.cargo/bin/atlas-mcp
+claude mcp add --scope user atlas -- atlas-mcp       # для всіх проєктів
+```
+
+Після змін у `atlas/mcp` повторіть `cargo install`. Тулза нічого не знає про конкретний проєкт, тож у
+репозиторії для неї немає ні конфігу, ні `.mcp.json`.
+
+### Як тулза знаходить атлас
+
+- **Корінь** — найближча тека від робочої директорії вгору, де є `settings.gradle(.kts)`; або `--root`.
+- **Атласи** — демон запускає Gradle проєкту з власним init-скриптом (`-I`, вшитий у бінарник), який
+  перелічує модулі з таскою `runAtlas…ExecutableLinux…` і віддає link-таску, шлях до executable, робочу
+  директорію та теки джерел. Змін у проєкті не потрібно: годиться і плагін, і вручну описаний executable
+  з назвою `atlas`.
+- **Кеш** — відповідь зберігається в `$XDG_CACHE_HOME/atlas-mcp/`, доки не зміниться якийсь build-скрипт.
+- **Проєкти без атласу** — якщо жоден build-файл не згадує «atlas», Gradle на старті не запускається;
+  доступні лише власні інструменти демона (`list_atlases` спитає Gradle примусово).
+- **Кілька атласів** — треба обрати модуль через `use_atlas`.
+
+### Інструменти демона
+
+| Інструмент | Аргументи | Що робить |
+| --- | --- | --- |
+| `set_visible` | `visible` | Показує вікно атласу на робочому столі або знову ховає (типово сховане). Атлас перезапускається, тож story й args повертаються до початкових. Закрите вікно повертає невидимий режим. |
+| `list_atlases` | — | Заново питає Gradle і перелічує модулі з атласом; активний позначено `*`. |
+| `use_atlas` | `module` (Gradle path, напр. `:app`) | Перемикає на атлас іншого модуля. |
+| `reload` | — | Link-таска активного атласу, потім перезапуск. При помилці компіляції відповідь містить рядки `e:`, а старий атлас лишається запущеним. Після успіху прилітає `tools/list_changed`. |
+| `status` | — | Корінь проєкту, знайдені атласи, модуль, pid, шляхи, остання помилка запуску і попередження про застарілість. |
+| `logs` | `lines?` (ціле ≥ 1, типово 50) | Останні рядки stdout і stderr атласу. |
+| `stop` | — | Зупиняє атлас; наступний виклик запустить його знову. |
+
+Якщо атлас має інструмент з такою самою назвою, як у демона, демон його ховає (лог-рядок у stderr).
+
+### Видимий режим
+
+Типово атлас невидимий. `set_visible {visible: true}` перезапускає його у звичайному вікні поточної
+графічної сесії, щоб людина бачила те саме, чим керує Claude. Памʼятайте:
+
+- вікно отримує фокус, і твої натискання клавіш та кліки змінюють той самий стан, що й інструменти;
+- якщо закрити вікно, наступний виклик запустить атлас невидимим і повідомить про це;
+- скріншоти працюють і тоді, коли вікно на прихованому workspace (перевірено на Hyprland 0.57).
+
+### Інструменти атласу
+
+Список збирає атлас і віддає демон; назви та аргументи:
+
+| Інструмент | Аргументи | Примітка |
+| --- | --- | --- |
+| `list_stories` | — | Усі story у форматі `Group/Entry`. |
+| `select_story` | `story: "Group/Entry"` | Відкриває story; args кешуються за story. |
+| `get_args` | — | Поточні значення args story. |
+| `set_args` | `values: {name: value}` | Усе або нічого: тип, enum за назвою і діапазон перевіряються до застосування. |
+| `reset_args` | — | Повертає args story до default. |
+| `set_view` | `view`: `compose` \| `table` | Вигляд вибраної матриці; `list_stories` показує поточний і доступні. |
+| `tree` | `target?`, `depth?` | Дерево віджетів (id, тип, testTag, bounds, CSS-класи, текст, стан) від кореня або від `target`. |
+| `screenshot` | `target?` | PNG вікна або прямокутника ноди (з фоном сусідів); без `target` — корінь композиції. |
+| `click` | `target` | Кнопка або `Modifier.onClick`. |
+| `set_text` | `target`, `text` | `Entry`; викликає `onValueChange`. |
+| `set_checked` | `target`, `checked` | `Switch`; викликає `onCheckedChange`. |
+| `set_value` | `target`, `value` | `Slider`; значення поза діапазоном відхиляється. |
+| `select` | `target`, `index` | `DropDown`; індекс поза опціями відхиляється. |
+| `set_state` | `target`, `state: "hover" \| "pressed" \| "focus"`, `on` | Примусовий стан GTK; див. обмеження. |
+
+Дії, що змінюють UI, чекають, поки атлас стабілізується (перекомпозиція і layout), перш ніж
+відповісти; так само `screenshot` і `tree`.
+
+### Цілі (`target`)
+
+- **Число** — id ноди з `tree`.
+- **Рядок** — testTag, його ставить `Modifier.testTag("name")` (див. `docs/framework-api.md`).
+  Якщо tag відсутній або його мають кілька нод, відповідь `isError` з поясненням: використай id.
+
+Вбудовані testTag атласу:
+
+| testTag | Що це |
+| --- | --- |
+| `sidebar` | Сайдбар каталогу |
+| `story:<Group>/<Entry>` | Пункт сайдбару конкретної story |
+| `preview` | Превʼю поточної story |
+| `cell:<підпис>` | Комірка матриці з таким підписом |
+| `args-panel` | Панель args |
+| `arg:<name>` | Контрол конкретного arg |
+| `reset` | Кнопка Reset |
+| `view:compose`, `view:table` | Кнопки перемикача вигляду матриці |
+| `group:<значення>` | Заголовок групи в Compose-вигляді |
+
+### Запуск і застарілість
+
+- **Автостарт.** Атлас стартує, коли Claude Code запитує список інструментів (під час підключення), або
+  при першому виклику інструмента. Сам демон бінарник не збирає: якщо його ще немає, викличте `reload`.
+  Готовим атлас вважається, коли сокет відповідає на `tools/list`; на це є 20 с. Якщо процес помер до
+  цього, відповідь містить хвіст логу.
+- **Смерть атласу.** Наступний виклик запускає його знову (повідомлення в stderr демона).
+- **Таймаут.** Один запит триває не довше 60 с. Якщо атлас завис, його вбивають, і наступний виклик
+  стартує новий.
+- **Застарілість.** Якщо файл у `src` якогось модуля чи build-скрипт новіший за max(mtime бінарника,
+  початок останнього `reload`), до відповіді атласу додається попередження `call reload to rebuild`.
+  Воно є і в `status`.
+- **Вихід.** На EOF stdin, SIGTERM чи SIGINT демон убиває атлас, зупиняє композитор, прибирає сокет
+  і лог. Атлас отримує `PR_SET_PDEATHSIG` від демона, тож не лишиться висіти, якщо демон упав.
+
+### Обмеження
+
+- **Popup-и і popover-и — окремі поверхні.** Відкритий список `DropDown` і вміст `HoverPopover`
+  (окрема Compose-композиція) не потрапляють на скріншот і в `tree`. Опції `DropDown` видно в полі
+  `options` його ноди.
+- **`set_state` не викликає `Modifier.onHover`.** Він лише виставляє GTK state flags. Hover-callback-и
+  йдуть з GTK motion controller, а його не чіпає.
+- **Без CSS-переходів.** Під інспектором GTK-переходи вимкнені, щоб знімок показував кінцевий стан;
+  Compose-анімації не зачіпаються.
+- **GPU.** Композитор оголошує `linux-dmabuf` і перший render node (`/dev/dri/renderD128+`), тож GTK
+  рендерить на GPU тим самим шляхом, що й на робочому столі (перевірено: `GskVulkanRenderer` на NVIDIA).
+  Без render node клієнт переходить на програмний рендер через `wl_shm`. Інші драйвери та машини з
+  кількома GPU не перевірялись; шейдери окремо теж.
+- **Немає реального вводу.** Клавіатура і миша до атласу не доходять. Фокус і фокусовані стани
+  лише ставляться примусово (`set_state focus`).
+- **Golden-скріншотів немає.** MCP-скріншоти для перегляду й перевірки, а не для порівняння пікселів.
 
 ## Відкладено
 

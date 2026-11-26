@@ -239,6 +239,9 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is AnimatedSizeElement -> applyAnimatedSizeModifier(widget, element)
 
             is RawStyleElement -> rules += element.selector to element.declarations
+
+            // Read by the inspector from the chain (`Modifier.testTagName`); nothing to paint.
+            is TestTagElement -> Unit
         }
     }
 

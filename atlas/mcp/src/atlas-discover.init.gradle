@@ -1,0 +1,28 @@
+// Part of atlas-mcp, handed to Gradle with `-I`: the project itself needs no change.
+//
+// An atlas is a module with a Kotlin/Native run task for an executable named `atlas`
+// (`runAtlas<BuildType>Executable<Target>`), however that executable was declared.
+// Each one is reported as a `KN_ATLAS {json}` line.
+import groovy.json.JsonOutput
+
+allprojects {
+    tasks.register('knAtlasDescribe') {
+        def owner = project
+        doLast {
+            owner.tasks.matching { it.name ==~ /runAtlas\w*ExecutableLinux\w+/ }.each { run ->
+                def link = run.taskDependencies.getDependencies(run).find { it.name.startsWith('link') }
+                if (link == null) return
+                def modules = owner.rootProject.allprojects
+                println 'KN_ATLAS ' + JsonOutput.toJson([
+                    module     : owner.path,
+                    linkTask   : link.path,
+                    executable : run.executable,
+                    workingDir : run.workingDir.absolutePath,
+                    // What the binary may be built from: every module's sources and build scripts.
+                    sourceDirs : modules.collect { new File(it.projectDir, 'src') }.findAll { it.isDirectory() }*.absolutePath,
+                    projectDirs: modules*.projectDir*.absolutePath,
+                ])
+            }
+        }
+    }
+}

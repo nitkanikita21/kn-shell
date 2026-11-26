@@ -143,8 +143,9 @@ internal class GtkDropDownNode : GtkNode(gtk_drop_down_new(null, null)!!) {
 
     private var programmaticUpdate = false
 
-    /** Number of items in the list currently set on the dropdown. */
-    private var itemCount = 0
+    /** Items of the list currently set on the dropdown, in order; read by the inspector. */
+    internal var items: List<String> = emptyList()
+        private set
 
     /** The last index requested by the composition; re-applied after [setItems]. */
     private var requestedSelected = 0
@@ -183,7 +184,7 @@ internal class GtkDropDownNode : GtkNode(gtk_drop_down_new(null, null)!!) {
         // gtk_drop_down_set_model takes its own reference; release ours so the dropdown
         // is the only owner of the model.
         g_object_unref(list.reinterpret())
-        itemCount = items.size
+        this.items = items
         applySelected(requestedSelected)
         programmaticUpdate = false
     }
@@ -196,7 +197,7 @@ internal class GtkDropDownNode : GtkNode(gtk_drop_down_new(null, null)!!) {
     }
 
     private fun applySelected(index: Int) {
-        if (index < 0 || index >= itemCount) return
+        if (index < 0 || index >= items.size) return
         gtk_drop_down_set_selected(widget.reinterpret<GtkDropDown>(), index.toUInt())
     }
 }
