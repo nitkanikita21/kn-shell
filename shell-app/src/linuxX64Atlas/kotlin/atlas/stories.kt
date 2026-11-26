@@ -49,7 +49,7 @@ val buttonStories = group("Button") {
                 .radius(16),
             onClick = {}
         ) {
-            Icon(Lucide.Check, size = (24*(v[size].scale+0.2)).toInt())
+            Icon(Lucide.Check, size = (24*(v[size].scale)).toInt())
             Space(8)
             Label(
                 text = "${v[text]} ${v[enabled]} ${v[size]}",
