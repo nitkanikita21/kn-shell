@@ -1,0 +1,12 @@
+[package]
+name = "headless-compositor"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "A headless Wayland compositor with just enough protocol for a GTK 4 client to run without a screen"
+
+[dependencies]
+# Protocol bindings only, no rendering stack.
+wayland-server = "0.31"
+wayland-protocols = { version = "0.32", features = ["server"] }
+libc = "0.2.191"

@@ -56,3 +56,6 @@ kotlin {
         }
     }
 }
+
+// `linuxX64Test` without a display, `linuxX64GraphicsTest` with one.
+apply(from = rootProject.file("gradle/graphics-tests.gradle.kts"))

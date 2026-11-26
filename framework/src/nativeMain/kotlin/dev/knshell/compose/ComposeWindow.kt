@@ -41,10 +41,13 @@ internal class GLibDispatcher : CoroutineDispatcher() {
     }
 }
 
+/** Text colour of a bare window, the one [resetStyles] starts over with. */
+internal const val DEFAULT_FOREGROUND: String = "#e8e8ee"
+
 const val DEFAULT_CSS: String = """
 window {
     background-color: rgba(18, 18, 24, 0.72);
-    color: #e8e8ee;
+    color: $DEFAULT_FOREGROUND;
 }
 window.kn-bar {
     background-color: rgba(14, 14, 20, 0.78);

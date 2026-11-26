@@ -2,6 +2,7 @@ package dev.knshell.atlas.runner.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -11,6 +12,9 @@ import dev.knshell.atlas.core.entry.Story
 import dev.knshell.atlas.core.entry.StoryEntry
 import dev.knshell.atlas.core.entry.Variants
 import dev.knshell.atlas.runner.Selection
+import dev.knshell.atlas.runner.golden.CaseStatus
+import dev.knshell.atlas.runner.golden.GoldenController
+import dev.knshell.atlas.runner.golden.storyStatuses
 import dev.knshell.compose.Align
 import dev.knshell.compose.Box
 import dev.knshell.compose.Column
@@ -29,7 +33,7 @@ import dev.knshell.compose.hoverBackground
 import dev.knshell.compose.onClick
 import dev.knshell.compose.padding
 import dev.knshell.compose.pointerCursor
-import dev.knshell.compose.rawStyle
+import dev.knshell.compose.BorderSide
 import dev.knshell.compose.testTag
 import dev.knshell.compose.textColor
 import dev.knshell.compose.weight
@@ -43,21 +47,31 @@ fun Sidebar(
     selection: Selection?,
     onSelect: (StoryGroup, StoryEntry) -> Unit,
     viewOf: (Variants) -> MatrixView,
+    golden: GoldenController,
     modifier: Modifier = Modifier,
 ) {
+    val statuses = golden.report?.let(::storyStatuses).orEmpty()
+    // Without anything differing the filter would empty the tree, with no switch left to turn it off.
+    val onlyChanged = golden.onlyChanged && statuses.isNotEmpty()
     val frame = with(AtlasTheme) {
         modifier
             .testTag("sidebar")
             .background(panel, transitionMs = 0)
-            .rawStyle("", "border-right: 1px solid ${line.toCss()};")
+            .hairline(setOf(BorderSide.Right))
             .themedText()
     }
 
     Column(modifier = frame) {
+        GoldenPanel(golden)
         Scroll(modifier = Modifier.weight()) {
             Column(modifier = Modifier.hExpand()) {
                 groups.forEach { group ->
-                    StoryGroupRow(group, selection, onSelect, viewOf)
+                    val entries = group.entries.filter { !onlyChanged || "${group.title}/${it.name}" in statuses }
+                    if (entries.isNotEmpty()) {
+                        key(group.title) {
+                            StoryGroupRow(group, entries, statuses, selection, onSelect, viewOf)
+                        }
+                    }
                 }
             }
         }
@@ -67,6 +81,8 @@ fun Sidebar(
 @Composable
 private fun StoryGroupRow(
     group: StoryGroup,
+    entries: List<StoryEntry>,
+    statuses: Map<String, CaseStatus>,
     selection: Selection?,
     onSelect: (StoryGroup, StoryEntry) -> Unit,
     viewOf: (Variants) -> MatrixView,
@@ -92,13 +108,16 @@ private fun StoryGroupRow(
         }
 
         if (!isCollapsed) {
-            group.entries.forEach { entry ->
-                val active = selection != null &&
-                    selection.group === group &&
-                    selection.entry === entry
-                when (entry) {
-                    is Story -> StoryRow(group, entry, active, onSelect)
-                    is Variants -> VariantsRow(group, entry, viewOf(entry), active, onSelect)
+            entries.forEach { entry ->
+                key(entry.name) {
+                    val active = selection != null &&
+                        selection.group === group &&
+                        selection.entry === entry
+                    val status = statuses["${group.title}/${entry.name}"]
+                    when (entry) {
+                        is Story -> StoryRow(group, entry, status, active, onSelect)
+                        is Variants -> VariantsRow(group, entry, viewOf(entry), status, active, onSelect)
+                    }
                 }
             }
         }
@@ -110,12 +129,14 @@ private fun VariantsRow(
     group: StoryGroup,
     variants: Variants,
     view: MatrixView,
+    status: CaseStatus?,
     active: Boolean,
     onSelect: (StoryGroup, StoryEntry) -> Unit,
 ) {
     EntryRow(
         name = variants.name,
         tag = "story:${group.title}/${variants.name}",
+        status = status,
         active = active,
         onClick = { onSelect(group, variants) },
     ) {
@@ -127,12 +148,14 @@ private fun VariantsRow(
 private fun StoryRow(
     group: StoryGroup,
     story: Story,
+    status: CaseStatus?,
     active: Boolean,
     onSelect: (StoryGroup, StoryEntry) -> Unit,
 ) {
     EntryRow(
         name = story.name,
         tag = "story:${group.title}/${story.name}",
+        status = status,
         active = active,
         onClick = { onSelect(group, story) },
     ) {
@@ -160,6 +183,7 @@ private fun MatrixIcon(view: MatrixView) {
 private fun EntryRow(
     name: String,
     tag: String,
+    status: CaseStatus?,
     active: Boolean,
     onClick: () -> Unit,
     icon: @Composable () -> Unit,
@@ -174,6 +198,15 @@ private fun EntryRow(
                 transitionMs = 0,
             ),
         )
+        if (status != null) {
+            val (mark, color) = status.badge()
+            Label(
+                mark,
+                align = 1f,
+                modifier = Modifier.weight().textColor(color, transitionMs = 0)
+                    .testTag("badge:${tag.removePrefix("story:")}"),
+            )
+        }
     }
 }
 

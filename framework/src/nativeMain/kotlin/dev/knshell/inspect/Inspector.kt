@@ -9,6 +9,15 @@
 
 package dev.knshell.inspect
 
+import kn.gtk.cairo_version_string
+import kn.gtk.g_type_name_from_instance
+import kn.gtk.gtk_get_major_version
+import kn.gtk.gtk_get_micro_version
+import kn.gtk.gtk_get_minor_version
+import kn.gtk.gtk_native_get_renderer
+import kn.gtk.gtk_widget_get_native
+import kn.gtk.pango_version_string
+import kotlinx.cinterop.toKString
 import dev.knshell.compose.GtkButtonNode
 import dev.knshell.compose.GtkButtonContainerNode
 import dev.knshell.compose.GtkDropDownNode
@@ -163,6 +172,23 @@ class Inspector internal constructor(
             throw InspectException("node #${target.id} has an empty size (${area.width}x${area.height})")
         }
         return renderPng(window, width, height, area)
+    }
+
+    /**
+     * What draws the window: the GTK, Pango and cairo versions and the GSK renderer. Pictures from
+     * two different sets are not comparable pixel by pixel.
+     */
+    fun renderEnvironment(): List<Pair<String, String>> {
+        val window = gtk_widget_get_root(requireRoot().widget)?.reinterpret<GtkWidget>()
+            ?: throw InspectException("the composition root is not inside a window")
+        val renderer = gtk_widget_get_native(window)?.let { gtk_native_get_renderer(it) }
+            ?: throw InspectException("the window has no renderer yet")
+        return listOf(
+            "gtk" to "${gtk_get_major_version()}.${gtk_get_minor_version()}.${gtk_get_micro_version()}",
+            "pango" to pango_version_string()?.toKString().orEmpty(),
+            "cairo" to cairo_version_string()?.toKString().orEmpty(),
+            "renderer" to g_type_name_from_instance(renderer.reinterpret())?.toKString().orEmpty(),
+        )
     }
 
     /** Waits until the runtime has settled after an action (pending recomposition, layout, a few frames). */

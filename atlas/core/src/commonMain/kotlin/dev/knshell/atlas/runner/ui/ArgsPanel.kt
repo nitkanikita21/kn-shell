@@ -28,7 +28,7 @@ import dev.knshell.compose.fillWidth
 import dev.knshell.compose.hExpand
 import dev.knshell.compose.minWidth
 import dev.knshell.compose.padding
-import dev.knshell.compose.rawStyle
+import dev.knshell.compose.BorderSide
 import dev.knshell.compose.testTag
 import dev.knshell.compose.textColor
 import dev.knshell.compose.weight
@@ -44,7 +44,7 @@ fun ArgsPanel(args: List<Arg<*>>, live: LiveArgs, modifier: Modifier = Modifier)
                 .testTag("args-panel")
                 .background(panel, transitionMs = 0)
                 .padding(all = 10)
-                .rawStyle("", "border-left: 1px solid ${line.toCss()};"),
+                .hairline(setOf(BorderSide.Left)),
         ) {
             Label("args", align = 0f, modifier = Modifier.themedText().bold())
             if (args.isEmpty()) {

@@ -104,7 +104,7 @@ fn encode_table(pairs: &[(u32, u64)]) -> Vec<u8> {
 
 fn memory_file(bytes: &[u8]) -> io::Result<File> {
     // SAFETY: the name is a NUL-terminated literal and the returned descriptor is checked.
-    let fd = unsafe { libc::memfd_create(c"atlas-dmabuf-formats".as_ptr(), libc::MFD_CLOEXEC) };
+    let fd = unsafe { libc::memfd_create(c"headless-dmabuf-formats".as_ptr(), libc::MFD_CLOEXEC) };
     if fd < 0 {
         return Err(io::Error::last_os_error());
     }

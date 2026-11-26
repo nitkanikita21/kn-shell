@@ -524,7 +524,7 @@ impl GlobalDispatch<WlOutput, ()> for State {
             508,
             286,
             wl_output::Subpixel::Unknown,
-            "atlas".to_owned(),
+            "headless-compositor".to_owned(),
             "headless".to_owned(),
             wl_output::Transform::Normal,
         );

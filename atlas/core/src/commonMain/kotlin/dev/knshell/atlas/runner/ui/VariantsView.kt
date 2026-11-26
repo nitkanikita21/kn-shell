@@ -1,5 +1,6 @@
 package dev.knshell.atlas.runner.ui
 
+import dev.knshell.compose.StyleReset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -32,7 +33,7 @@ import dev.knshell.compose.hExpand
 import dev.knshell.compose.onClick
 import dev.knshell.compose.padding
 import dev.knshell.compose.pointerCursor
-import dev.knshell.compose.rawStyle
+import dev.knshell.compose.BorderSide
 import dev.knshell.compose.testTag
 import dev.knshell.compose.textColor
 import dev.knshell.compose.weight
@@ -73,7 +74,7 @@ private fun MatrixToolbar(variants: Variants, current: MatrixView) {
             modifier = Modifier
                 .hExpand()
                 .background(panel, transitionMs = 0)
-                .rawStyle("", "border-bottom: 1px solid ${line.toCss()};")
+                .hairline(setOf(BorderSide.Bottom))
                 .padding(horizontal = 12, vertical = 6),
         ) {
             Label(variants.name, modifier = text(fg).extraBold())
@@ -114,7 +115,7 @@ private fun ComposeLayout(variants: Variants, args: ArgValues, modifier: Modifie
                                 spacing = 8,
                                 modifier = Modifier
                                     .hExpand()
-                                    .rawStyle("", "border-bottom: 1px solid ${line.toCss()};")
+                                    .hairline(setOf(BorderSide.Bottom))
                                     .padding(horizontal = 0, vertical = 4)
                                     .pointerCursor()
                                     .onClick { service.toggleGroup(variants, title) }
@@ -190,7 +191,7 @@ private fun Preview(variants: Variants, combo: ArgSnapshot, args: ArgValues) {
         ) {
             // a table cell is as tall as its row: the weight claims that height, so the story can
             // sit in the middle of it
-            Box(Modifier.weight().align(Align.Center)) {
+            StyleReset(Modifier.weight().align(Align.Center)) {
                 variants.render(cellArgs)
             }
         }

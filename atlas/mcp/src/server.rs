@@ -111,8 +111,8 @@ pub fn own_tools() -> Vec<Tool> {
     vec![
         Tool::new(
             "reload",
-            "Build the atlas with Gradle and restart it. On a compile error the reply lists the e: lines and the \
-             running atlas stays up.",
+            "Build the atlas with Gradle and restart it. The story, matrix view and arg values are reopened in the \
+             new atlas. On a compile error the reply lists the e: lines and the running atlas stays up.",
             schema(json!({ "type": "object", "properties": {} })),
         ),
         Tool::new(
@@ -136,8 +136,8 @@ pub fn own_tools() -> Vec<Tool> {
         ),
         Tool::new(
             "set_visible",
-            "Show the atlas window on the user's desktop, or hide it again (the default). Restarts the atlas, so \
-             stories and args go back to their defaults. Show it only when the user asks to see it.",
+            "Show the atlas window on the user's desktop, or hide it again (the default). Restarts the atlas; its \
+             story, matrix view and arg values are reopened in it. Show it only when the user asks to see it.",
             schema(json!({
                 "type": "object",
                 "properties": { "visible": { "type": "boolean", "description": "true to show the window" } },

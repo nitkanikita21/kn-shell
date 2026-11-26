@@ -77,12 +77,16 @@ pub fn parse_output(lines: &[String]) -> Vec<AtlasTarget> {
         .collect()
 }
 
-/// Whether any build script of the project talks about an atlas. This keeps the tool, when it is
+/// The id of the Gradle plugin that makes a module an atlas. A build script that does not name it
+/// has no atlas, as far as the daemon is concerned.
+pub const PLUGIN_ID: &str = "dev.knshell.atlas";
+
+/// Whether any build script of the project applies the atlas plugin. This keeps the tool, when it is
 /// registered for every project, from running Gradle in projects that have nothing to do with it.
 pub fn mentions_atlas(root: &Path) -> bool {
     build_files(root, SCAN_DEPTH)
         .iter()
-        .any(|file| fs::read_to_string(file).is_ok_and(|text| text.to_lowercase().contains("atlas")))
+        .any(|file| fs::read_to_string(file).is_ok_and(|text| text.contains(PLUGIN_ID)))
 }
 
 /// The cached answer, unless a build script changed since it was written.

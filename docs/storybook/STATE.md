@@ -16,22 +16,29 @@ claude mcp add --scope user atlas -- atlas-mcp             # один раз н�
 Після реєстрації перезапустити Claude Code у корені репозиторію. Перший пошук атласу йде через Gradle;
 якщо бінарника атласу ще немає, спершу викликати інструмент `reload`.
 
-Потрібно: GTK 4 з `gio-unix-2.0`, gtk4-layer-shell, librsvg, fontconfig, libepoxy, Rust (cargo),
+Перевірити машину: `atlas-mcp doctor` (бібліотеки, JDK 21, render-вузол, сесія). Потрібно: GTK 4 з `gio-unix-2.0`, gtk4-layer-shell, librsvg, fontconfig, libepoxy, Rust (cargo),
 JDK 21, `pkg-config`. `local.properties` не комітиться (машинний шлях до konan).
 
-**Перевірити на ноуті окремо:** MCP-тулза бере перший `/dev/dri/renderD*`. На машині з двома GPU це не
-тестувалось; перевірялась лише одна NVIDIA. Ознака проблеми — `reload`/`screenshot` не працюють або в
-`logs` є помилки Vulkan/EGL.
+**Ноутбук перевірено (2026-11-27):** дві GPU (`renderD128` amdgpu, `renderD129` nvidia), композитор
+бере першу. Під `headless-compositor` проходять GTK-тести, атлас рендериться на GPU й віддає
+скріншоти. Через сам `atlas-mcp` (`reload`, `screenshot`) не перевірялось. Якщо там щось не працює,
+у `logs` будуть помилки Vulkan/EGL.
 
 ## Тести
 
 ```bash
-./gradlew :framework:linuxX64Test :atlas:core:linuxX64Test :icons:core:linuxX64Test
-cargo test --manifest-path atlas/mcp/Cargo.toml
+./gradlew :framework:linuxX64Test :atlas:core:linuxX64Test :icons:core:linuxX64Test   # без дисплея
+./gradlew :framework:linuxX64GraphicsTest :icons:core:linuxX64GraphicsTest            # GTK-тести
+./gradlew :atlas:mcp:check :headless-compositor:check                                 # cargo test
+./gradlew :shell-app:atlasGoldenCheck                                                 # вигляд stories
 ```
 
-На момент коміту: `framework` 148, `atlas:core` 93, `icons:core` 22, демон 21; без падінь. Тести
-`framework` та `icons:core` потребують графічної сесії.
+GTK-тести йдуть у графічній сесії, якщо вона є, а без неї самі запускаються під `headless-compositor`.
+Примусово без екрана: `env -u WAYLAND_DISPLAY -u DISPLAY ./gradlew …`. Будь-який інший клієнт можна
+запустити так: `headless-compositor -- <команда>`.
+
+На 2026-11-27: `framework` 39 без дисплея і 124 графічні, `atlas:core` 114, `icons:core` 20 і 2,
+демон 23, композитор 4; без падінь.
 
 ## Що зроблено
 
@@ -39,12 +46,17 @@ cargo test --manifest-path atlas/mcp/Cargo.toml
   story, Reset, темна тема, `--story`.
 - **Матриці:** вигляди `Compose` (групи, що згортаються) і `Table`, перемикач, типовий вигляд у DSL
   (`variants("…", view = MatrixView.Table)`), значок вигляду в сайдбарі.
-- **MCP (`atlas/mcp`):** Rust-демон із власним headless Wayland-композитором (рендер на GPU через
-  `linux-dmabuf`). Атласи знаходить через Gradle init-скрипт за таскою `runAtlas…Executable…`, без
-  конфігу в проєкті. Інструменти демона: `list_atlases`, `use_atlas`, `set_visible`, `reload`, `status`,
+- **MCP (`atlas/mcp`):** Rust-демон; приватний дисплей — з модуля `headless-compositor` (рендер на
+  GPU через `linux-dmabuf`). Атласи знаходить через Gradle init-скрипт у модулях із плагіном
+  `dev.knshell.atlas`, за таскою `runAtlas…Executable…`.
+  Інструменти демона: `list_atlases`, `use_atlas`, `set_visible`, `reload`, `status`,
   `logs`, `stop`; решту віддає сам атлас.
+- **Golden:** прогін усіх stories без екрана з порівнянням пікселів, «Перевірити» й «Прийняти» у
+  вікні атласу, шрифти проєкту в `golden-fonts/`. Еталони демо-stories лежать у кореневій
+  `atlas-goldens/` (`goldens=atlas-goldens` у `gradle.properties`). Записані на ноутбуці, на ПК збіг
+  ще не перевірявся.
 - **Gradle-плагін (`atlas/plugin`):** `id("dev.knshell.atlas")` створює compilation, executable і таски.
-- **Структура:** `atlas/core`, `atlas/mcp`, `atlas/plugin`.
+- **Структура:** `atlas/core`, `atlas/mcp`, `atlas/plugin`; окремо `headless-compositor`.
 - **Framework:** `Entry`, `Switch`, `DropDown`, `Grid`, інспектор (`dev.knshell.inspect`),
   `Modifier.testTag`.
 
@@ -74,8 +86,7 @@ cargo test --manifest-path atlas/mcp/Cargo.toml
 
 ## Відомі обмеження і неперевірене
 
-- `reload` і `set_visible` перезапускають атлас: вибрана story, args і вигляди скидаються. Відновлення
-  стану демоном обговорювалось, не робилось.
+- `reload` і `set_visible` перезапускають атлас, але вибрана story, вигляд матриці й значення args відновлюються демоном з нового атласу (`Session` у `atlas.rs`). Ті частини, яких у новій збірці немає, демон перелічує у відповіді.
 - Відкритий список `DropDown` і popover-и не потрапляють на скріншот і в `tree`; `set_state` не викликає
   `Modifier.onHover`.
 - `framework` і `atlas:core` не публікуються: інший репозиторій поки не отримає бібліотеки (відкладено).

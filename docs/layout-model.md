@@ -1,7 +1,7 @@
 # Layout model
 
 What GTK guarantees, what this framework emulates, and what you should not expect. Every
-statement below is pinned by a test in `framework/src/nativeTest/kotlin/dev/knshell/compose/LayoutProbeTest.kt`
+statement below is pinned by a test in `framework/src/nativeTest/kotlin/dev/knshell/compose/LayoutProbeGraphicsTest.kt`
 or by a comment in `rust-core/src/kn_box_layout.c`; the probe is the executable form of this page.
 
 ## Who measures
@@ -126,7 +126,7 @@ Consequences that matter in a bar:
 * A region keeps its natural width unless a child inside it expands (`fillWidth()`, `hExpand()`,
   `weight`). `weight` splits the *region's* leftover and cannot cross the region boundary.
 * Tight space squeezes the sides to their minimums first, then the centre to its own minimum. The
-  probe (`LayoutProbeTest.kt:309`, "CenterBox cannot express which side is squeezed first") pins
+  probe (`LayoutProbeGraphicsTest.kt:309`, "CenterBox cannot express which side is squeezed first") pins
   that `shrink-center-last` changes nothing for a centre that already fits its minimum: the centre
   always receives `W − start − end`.
 * Spacing between regions is GTK's `border-spacing`, not a Kotlin parameter — `CenterBox` has no
@@ -159,7 +159,7 @@ Consequences that matter in a bar:
 ## Debugging a layout
 
 * `GTK_DEBUG=layout` (GTK's own switch) prints measure/allocate for every widget in the tree.
-* `LayoutProbeTest.kt` helpers are the quickest way to ask GTK a direct question:
+* `LayoutProbeGraphicsTest.kt` helpers are the quickest way to ask GTK a direct question:
   `gtk_widget_measure`, then `allocate(widget, w, h)` (a test-only helper that sizes an unmapped
   widget) and `allocRect(child)`.
 * An `Overlay` — like any container that leaves `gtk_overlay_set_measure_overlay()` off — adds no

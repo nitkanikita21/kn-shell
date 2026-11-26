@@ -55,7 +55,7 @@ no friend-module visibility, so these stay `public` and are the framework↔sate
 
 ## Tests
 
-`src/nativeTest/kotlin/dev/knshell/` — `compose/LayoutProbeTest.kt` is the executable layout
+`src/nativeTest/kotlin/dev/knshell/` — `compose/LayoutProbeGraphicsTest.kt` is the executable layout
 contract (1564 lines, drives the native manager), `animation/*` and `services/{Format,Spectrum}Test.kt`.
 They live in the same module, so they may touch `internal` symbols.
 

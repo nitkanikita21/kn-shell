@@ -31,6 +31,16 @@ import kn.gtk.gtk_widget_set_valign
 import kn.gtk.gtk_widget_set_vexpand
 import dev.knshell.animation.applyAnimatedSizeModifier
 
+/** `border` on all four sides, or one `border-<side>` declaration per listed side. */
+internal fun borderDeclarations(width: Int, color: Color, sides: Set<BorderSide>): String {
+    val value = "${width}px solid ${color.toCss()}"
+    return if (sides == BorderSide.ALL) {
+        "border: $value;"
+    } else {
+        sides.joinToString(" ") { side -> "border-${side.name.lowercase()}: $value;" }
+    }
+}
+
 /** Applies all modifiers of [modifier] to [widget]. */
 internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inlineStyle: InlineStyle) {
     var marginHorizontal = 0
@@ -49,6 +59,8 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var hoverEnter: (() -> Unit)? = null
     var hoverExit: (() -> Unit)? = null
     var cursorName: String? = null
+    var scrollHandler: ((Double, Double) -> Unit)? = null
+    var dragHandlers: DragElement? = null
     var valign: UInt? = null
     var inputRegion = false
     val rules = mutableListOf<Pair<String, String>>()
@@ -234,11 +246,59 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             }
 
             is CursorElement -> cursorName = element.name
+            is ScrollElement -> scrollHandler = element.handler
+            is DragElement -> dragHandlers = element
             is InputRegionElement -> inputRegion = true
 
             is AnimatedSizeElement -> applyAnimatedSizeModifier(widget, element)
 
             is RawStyleElement -> rules += element.selector to element.declarations
+
+            // First, whatever its place in the chain: `all` would undo the declarations before it.
+            StyleResetElement -> rules.add(0, "" to "all: initial; color: $DEFAULT_FOREGROUND;")
+
+            is BorderElement -> if (element.sides.isNotEmpty()) {
+                rules += "" to borderDeclarations(element.width, element.color, element.sides)
+            }
+
+            is LabelStyleElement -> rules += " label" to buildString {
+                append("color: ${element.color.toCss()};")
+                element.fontFamily?.let { append(" font-family: \"$it\";") }
+                element.fontSize?.let { append(" font-size: ${it}px;") }
+            }
+
+            is EntryStyleElement -> {
+                rules += " > text" to
+                    "color: ${element.textColor.toCss()}; caret-color: ${element.caretColor.toCss()}; " +
+                    "background-color: transparent;"
+                rules += " > text > selection" to
+                    "background-color: ${element.selectionBackground.toCss()}; " +
+                    "color: ${element.selectionColor.toCss()};"
+            }
+
+            is SwitchKnobElement -> {
+                rules += " > slider" to
+                    "background-color: ${element.color.toCss()}; min-width: ${element.size}px; " +
+                    "min-height: ${element.size}px; border-radius: ${element.radius}px;"
+                rules += ":checked > slider" to "background-color: ${element.checkedColor.toCss()};"
+            }
+
+            is DropDownButtonElement -> rules += " > button" to
+                "border: ${element.borderWidth}px solid ${element.border.toCss()}; " +
+                "border-radius: ${element.radius}px; " +
+                "background-color: ${element.background.toCss()}; " +
+                "color: ${element.color.toCss()}; " +
+                "padding: ${element.paddingVertical}px ${element.paddingHorizontal}px; min-height: 0;"
+
+            is DropDownPopoverElement -> {
+                rules += " popover > contents" to
+                    "background-color: ${element.background.toCss()}; " +
+                    "border: ${element.borderWidth}px solid ${element.border.toCss()}; " +
+                    "border-radius: ${element.radius}px; color: ${element.color.toCss()};"
+                rules += " popover row" to
+                    "padding: ${element.rowPaddingVertical}px ${element.rowPaddingHorizontal}px;"
+                rules += " popover row:hover" to "background-color: ${element.rowHover.toCss()};"
+            }
 
             // Read by the inspector from the chain (`Modifier.testTagName`); nothing to paint.
             is TestTagElement -> Unit
@@ -319,7 +379,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     }
 
     inlineStyle.setRules(rules)
-    inlineStyle.interaction.bind(clickHandler, hoverEnter, hoverExit, cursorName)
+    inlineStyle.interaction.bind(clickHandler, hoverEnter, hoverExit, cursorName, scrollHandler, dragHandlers)
 
     // Marks the widget for the window's input-region shaping (`dev.knshell.shell.InputRegion`).
     // Like every other field here, a chain that no longer mentions it has to clear it.

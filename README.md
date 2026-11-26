@@ -11,13 +11,21 @@ A minimal Wayland desktop shell where:
 The shell runs on the author's Hyprland 0.56 / Wayland session and was verified phase by phase
 (see [Verification log](#verification-log)).
 
+> **Важливо: `shell-app/` — це ПРИКЛАД використання фреймворку, а не частина самого фреймворку.**
+> Усе, що лежить у `shell-app/` (бар, острови, модулі, `PlayerChip`, `CavaEqualizer`, `Palette`,
+> тема й палітра шпалер, а також каталог story `shell-app/src/linuxX64Atlas/`), призначене лише для
+> демонстрації. Цей код не є API фреймворку: його не можна вважати стабільним, його не слід
+> імпортувати з інших модулів і на нього не можна спиратися як на залежність. Згодом `shell-app/`
+> буде винесено в окремий проєкт, тож усі залежності від `framework/` мають іти в один бік
+> (`shell-app` → `framework`), а не навпаки.
+
 ---
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ shell-app (Kotlin/Native executable)                             │
+│ shell-app (ПРИКЛАД, example app)                                 │
 │   main() → startKnShell()  + example bar (TestBar, chips)         │
 └───────────────▲──────────────────────────────────────────────────┘
                 │
@@ -51,8 +59,10 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 | Module | Contents |
 |---|---|
 | `rust-core/` | Rust crate, UniFFI exports, services, Gobley cargo/uniffi plugins |
+| `headless-compositor/` | Wayland compositor without a screen (Rust): the private display of `atlas-mcp`, also usable for GTK tests |
+| `atlas/` | component catalog for `framework/`: `core`, Gradle `plugin`, and the `mcp` daemon (Rust) |
 | `framework/` | GTK4 C interop, `GtkApplier`, Compose DSL, Modifier/animation, shell runtime (`Shell.run`, layer-shell), reactive `Services`, UI primitives (`ui/primitives`) — the reusable library, no bar |
-| `shell-app/` | thin entrypoint (`main()` → `startKnShell()`) plus the example bar: `TestBar`, `PlayerChip`, `CavaEqualizer`, palette |
+| `shell-app/` | **приклад використання `framework/`** (не частина фреймворку, буде винесено в окремий проєкт): thin entrypoint (`main()` → `startKnShell()`), приклад бару, тема/палітра, story-каталог атласу |
 
 ---
 
@@ -361,6 +371,7 @@ committed.
 ```
 .
 ├── gradle/libs.versions.toml     # pinned versions (Kotlin 2.1, Gobley 0.3.7, Compose runtime 1.7.3)
+├── headless-compositor/          # Wayland compositor without a screen (Rust)
 ├── rust-core/                    # Rust crate + services (map: rust-core/README.md)
 │   ├── src/lib.rs                # facade: mod tree, UniFFI scaffolding, re-exports
 │   ├── src/api.rs                # `#[uniffi::export]` subscribe_*/action functions
@@ -383,7 +394,7 @@ committed.
 │       └── services/             # Services: windows/media/audio/workspaces/system
 ├── icons/core/                   # IconRef/IconPack/Icon + librsvg (map: icons/core/MODULE.md)
 ├── icons-plugin/                 # included build: syncIcons + generateIcons (map: icons-plugin/MODULE.md)
-├── shell-app/                    # main() + example bar
+├── shell-app/                    # ПРИКЛАД використання framework (буде винесено в окремий проєкт)
 │   └── src/nativeMain/kotlin/dev/knshell/
 │       ├── KnShell.kt           # modes: panel (layer-shell) / windowed
 │       └── ui/

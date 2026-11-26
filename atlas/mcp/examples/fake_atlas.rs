@@ -5,6 +5,7 @@
 //! - `silent`: never bind the socket
 
 use std::io::{BufRead, BufReader, Write};
+use std::sync::Mutex;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::thread;
 use std::time::Duration;
@@ -65,7 +66,131 @@ fn tools() -> Value {
         { "name": "image_tool", "description": "Returns a big PNG.", "inputSchema": empty },
         { "name": "fail_tool", "description": "Always reports an error result.", "inputSchema": empty },
         { "name": "hang", "description": "Never answers.", "inputSchema": empty },
+        { "name": "list_stories", "description": "Stories of the fake catalog.", "inputSchema": empty },
+        { "name": "select_story", "description": "Selects a story.", "inputSchema": empty },
+        { "name": "set_view", "description": "Sets the matrix view.", "inputSchema": empty },
+        { "name": "get_args", "description": "Args of the selected story.", "inputSchema": empty },
+        { "name": "set_args", "description": "Sets arg values.", "inputSchema": empty },
     ])
+}
+
+/// Stories the fake atlas knows: `(name, kind)`. Only `Matrix/Grid` has views.
+const STORIES: [(&str, &str); 2] = [("Button/Playground", "story"), ("Matrix/Grid", "variants")];
+const VIEWS: [&str; 2] = ["compose", "table"];
+
+/// What the user has open: it lives as long as this atlas process, so a restarted atlas starts empty.
+struct Session {
+    story: Option<&'static str>,
+    view: &'static str,
+    text: String,
+    radius: i64,
+}
+
+static SESSION: Mutex<Option<Session>> = Mutex::new(None);
+
+fn with_session<R>(f: impl FnOnce(&mut Session) -> R) -> R {
+    let mut guard = SESSION.lock().unwrap();
+    let session = guard.get_or_insert_with(|| Session {
+        story: None,
+        view: VIEWS[0],
+        text: "Save".to_owned(),
+        radius: 8,
+    });
+    f(session)
+}
+
+fn kind_of(story: &str) -> &'static str {
+    STORIES.iter().find(|(name, _)| *name == story).map_or("story", |(_, kind)| *kind)
+}
+
+/// The same shape as the real atlas's `get_args` answer.
+fn args_report(session: &Session) -> Value {
+    json!({
+        "selected": session.story,
+        "args": [
+            { "name": "text", "type": "string", "value": session.text },
+            { "name": "radius", "type": "int", "value": session.radius },
+        ],
+    })
+}
+
+fn stateful(name: &str, arguments: &Value) -> Result<Value, String> {
+    match name {
+        "list_stories" => with_session(|session| {
+            Ok(json!(STORIES
+                .iter()
+                .map(|(story, kind)| {
+                    let mut entry = json!({
+                        "name": story,
+                        "kind": kind,
+                        "selected": session.story == Some(*story),
+                    });
+                    if *kind == "variants" {
+                        entry["view"] = json!(session.view);
+                        entry["views"] = json!(VIEWS);
+                    }
+                    entry
+                })
+                .collect::<Vec<_>>()))
+        }),
+        "select_story" => {
+            let wanted = arguments["story"].as_str().unwrap_or_default();
+            let Some((story, _)) = STORIES.iter().find(|(name, _)| *name == wanted) else {
+                return Err(format!("unknown story \"{wanted}\""));
+            };
+            with_session(|session| {
+                session.story = Some(*story);
+                Ok(args_report(session))
+            })
+        }
+        "set_view" => {
+            let wanted = arguments["view"].as_str().unwrap_or_default();
+            with_session(|session| {
+                let Some(story) = session.story else {
+                    return Err("no story is selected".to_owned());
+                };
+                if kind_of(story) != "variants" {
+                    return Err(format!("\"{story}\" is not a matrix"));
+                }
+                let Some(view) = VIEWS.iter().find(|view| **view == wanted) else {
+                    return Err(format!("unknown view \"{wanted}\""));
+                };
+                session.view = *view;
+                Ok(json!({ "selected": story, "view": view }))
+            })
+        }
+        "get_args" => with_session(|session| match session.story {
+            Some(_) => Ok(args_report(session)),
+            None => Err("no story is selected".to_owned()),
+        }),
+        "set_args" => {
+            let values = arguments["values"].as_object().cloned().unwrap_or_default();
+            with_session(|session| {
+                if session.story.is_none() {
+                    return Err("no story is selected".to_owned());
+                }
+                // All-or-nothing, like the real atlas: nothing changes unless every value is valid.
+                let mut text = session.text.clone();
+                let mut radius = session.radius;
+                for (key, value) in &values {
+                    match key.as_str() {
+                        "text" => text = value.as_str().ok_or("arg \"text\" expects a string")?.to_owned(),
+                        "radius" => {
+                            radius = value
+                                .as_i64()
+                                .filter(|r| (0..=32).contains(r))
+                                .ok_or("arg \"radius\" expects an integer in 0..32")?;
+                        }
+                        other => return Err(format!("unknown arg \"{other}\"")),
+                    }
+                }
+                session.text = text;
+                session.radius = radius;
+                Ok(args_report(session))
+            })
+        }
+        _ => Err(format!("unknown tool {name}")),
+    }
 }
 
 fn call(request: &Value, id: Value) -> Option<Value> {
@@ -100,6 +225,12 @@ fn call(request: &Value, id: Value) -> Option<Value> {
         "hang" => {
             thread::sleep(Duration::from_secs(10));
             return None;
+        }
+        "list_stories" | "select_story" | "set_view" | "get_args" | "set_args" => {
+            match stateful(name, arguments) {
+                Ok(value) => json!({ "content": [{ "type": "text", "text": value.to_string() }], "isError": false }),
+                Err(message) => json!({ "content": [{ "type": "text", "text": message }], "isError": true }),
+            }
         }
         other => return Some(json!({ "id": id, "error": { "message": format!("unknown tool {other}") } })),
     };

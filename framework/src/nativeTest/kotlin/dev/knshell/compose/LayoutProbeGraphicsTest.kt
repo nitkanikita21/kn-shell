@@ -111,7 +111,7 @@ import kotlin.test.assertTrue
  * Requires a display connection — GTK needs one for style contexts and Pango metrics:
  * `./gradlew :framework:linuxX64Test`.
  */
-class LayoutProbeTest {
+class LayoutProbeGraphicsTest {
 
     // ---------------------------------------------------------------- helpers
 
@@ -1381,7 +1381,7 @@ class LayoutProbeTest {
         init {
             // GTK needs a display for style contexts; without one these tests cannot measure
             // real text metrics, so fail loudly instead of reporting bogus numbers.
-            check(gtk_init_check() != 0) { "LayoutProbeTest needs a display connection (run it from a graphical session)" }
+            check(gtk_init_check() != 0) { "LayoutProbeGraphicsTest needs a display connection (run it from a graphical session)" }
         }
     }
 }

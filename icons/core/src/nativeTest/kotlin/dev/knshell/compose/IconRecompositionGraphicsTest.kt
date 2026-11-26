@@ -35,11 +35,11 @@ import kotlin.test.assertTrue
  *
  * Requires a display connection, like the framework's widget tests.
  */
-class IconRecompositionTest {
+class IconRecompositionGraphicsTest {
 
     @BeforeTest
     fun initGtk() {
-        check(gtk_init_check() != 0) { "IconRecompositionTest needs a display connection" }
+        check(gtk_init_check() != 0) { "IconRecompositionGraphicsTest needs a display connection" }
     }
 
     private object TestPack : IconPack {

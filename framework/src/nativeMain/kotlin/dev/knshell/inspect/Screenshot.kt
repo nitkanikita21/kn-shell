@@ -93,7 +93,7 @@ private fun renderTexture(
 }
 
 /** Encodes [texture] as PNG and copies the bytes out of GLib. */
-private fun encodePng(texture: CPointer<GdkTexture>): ByteArray {
+internal fun encodePng(texture: CPointer<GdkTexture>): ByteArray {
     val bytes = gdk_texture_save_to_png_bytes(texture) ?: throw InspectException("PNG encoding failed")
     try {
         val size = g_bytes_get_size(bytes).toInt()

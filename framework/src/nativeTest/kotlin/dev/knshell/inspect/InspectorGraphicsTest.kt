@@ -52,14 +52,14 @@ import kotlin.test.assertTrue
  *
  * Requires a display connection, like [InputNodesTest].
  */
-class InspectorTest {
+class InspectorGraphicsTest {
 
     private lateinit var root: GtkBoxNode
     private lateinit var inspector: Inspector
 
     @BeforeTest
     fun setUp() {
-        check(gtk_init_check() != 0) { "InspectorTest needs a display connection" }
+        check(gtk_init_check() != 0) { "InspectorGraphicsTest needs a display connection" }
         root = newBox()
         inspector = Inspector(root = { root }, idle = {})
     }

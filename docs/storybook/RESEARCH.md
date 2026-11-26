@@ -71,10 +71,10 @@
 
 Контекст: `atlas/mcp` має керувати атласом невидимо, без вікна на робочому столі і без input-пристроїв.
 
-- **Власний мінімальний композитор на Rust** (`atlas/mcp/src/compositor.rs`, протокольні биндинги
+- **Власний мінімальний композитор на Rust** (`headless-compositor/src/lib.rs`, протокольні биндинги
   `wayland-server`). Прийнято. Він дає лише handshake, `configure` і `wl_callback.done`; нічого не малює,
   а `wl_seat` без клавіатури й миші. Input іде через інспектор.
-- **GPU через `linux-dmabuf`** (`src/compositor/dmabuf.rs`). З одним лише `wl_shm` GTK не міг показати кадр
+- **GPU через `linux-dmabuf`** (`headless-compositor/src/dmabuf.rs`). З одним лише `wl_shm` GTK не міг показати кадр
   з GPU (`GskVulkanRenderer`: «Queue family does not support surface», GL падав на llvmpipe). Досить
   оголосити протокол v4 з render node у feedback: буфери приймаються й одразу звільняються без імпорту,
   графічні бібліотеки композитору не потрібні. Перевірено на NVIDIA (RTX 4060): `GskVulkanRenderer`,

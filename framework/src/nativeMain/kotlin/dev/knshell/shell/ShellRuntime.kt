@@ -26,6 +26,7 @@ import kotlinx.cinterop.StableRef
 import kotlinx.cinterop.asStableRef
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.staticCFunction
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
@@ -92,6 +93,9 @@ internal class ShellRuntime private constructor() {
     private var nextCssClass = 0
     private var gtkReady = false
 
+    /** What stopped the recomposer. Nothing composed after that reaches the screen. */
+    private var compositionFailure: Throwable? = null
+
     init {
         ensureGtk()
     }
@@ -123,7 +127,10 @@ internal class ShellRuntime private constructor() {
         scope.launch {
             try {
                 recomposer.runRecomposeAndApplyChanges()
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
+                compositionFailure = e
                 println("[shell-runtime] Recomposer FAILED: ${e.message}")
             }
         }
@@ -260,10 +267,13 @@ internal class ShellRuntime private constructor() {
      *
      * Bounded by [IDLE_TIMEOUT_MS]: an endless animation keeps the recomposer busy, and the caller
      * then gets the state as it is rather than waiting forever. Runs on the GLib dispatcher.
+     *
+     * Throws [CompositionFailedException] once the composition has failed: the widgets then show
+     * what was there before the failure, which must not pass for the result of the last change.
      */
     internal suspend fun awaitIdle() {
         val settled = withTimeoutOrNull(IDLE_TIMEOUT_MS) {
-            while (true) {
+            while (compositionFailure == null) {
                 Snapshot.sendApplyNotifications()
                 val state = recomposer.currentState.value
                 if (state != Recomposer.State.PendingWork && state != Recomposer.State.InactivePendingWork) break
@@ -275,6 +285,7 @@ internal class ShellRuntime private constructor() {
             }
             true
         }
+        compositionFailure?.let { throw CompositionFailedException(it) }
         if (settled == null) {
             println("[shell-runtime] awaitIdle: still busy after $IDLE_TIMEOUT_MS ms, returning anyway")
         }

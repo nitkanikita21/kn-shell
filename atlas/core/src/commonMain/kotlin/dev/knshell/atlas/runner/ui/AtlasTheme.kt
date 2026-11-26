@@ -1,18 +1,31 @@
 // ---------------------------------------------------------------------------
 // AtlasTheme — the dark green palette and framed-control styling used by the
 // Atlas runner chrome (sidebar, matrix, args panel). Story previews are not
-// styled with this theme.
+// styled with this theme. Every rule is a typed framework modifier; there is
+// no raw CSS here.
 // ---------------------------------------------------------------------------
 
 package dev.knshell.atlas.runner.ui
 
+import dev.knshell.compose.BorderSide
 import dev.knshell.compose.Color
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.background
+import dev.knshell.compose.border
+import dev.knshell.compose.checkedBackground
+import dev.knshell.compose.dropDownButton
+import dev.knshell.compose.dropDownPopover
+import dev.knshell.compose.entryStyle
+import dev.knshell.compose.fontFamily
+import dev.knshell.compose.fontSize
 import dev.knshell.compose.hoverBackground
+import dev.knshell.compose.labelStyle
+import dev.knshell.compose.minSize
 import dev.knshell.compose.padding
-import dev.knshell.compose.rawStyle
+import dev.knshell.compose.radius
 import dev.knshell.compose.slider
+import dev.knshell.compose.switchKnob
+import dev.knshell.compose.textColor
 
 object AtlasTheme {
     val bg: Color = Color.hex(0x0D0F10)
@@ -26,6 +39,8 @@ object AtlasTheme {
     val stage: Color = Color.hex(0x090B0C)
     val accent: Color = Color.hex(0x7FD6A2)
     val accent2: Color = Color.hex(0x233029)
+    val changed: Color = Color.hex(0xE5C07B)
+    val failed: Color = Color.hex(0xE06C75)
 
     /** Corner radius in CSS pixels for every framed control. */
     const val RADIUS = 2
@@ -33,16 +48,14 @@ object AtlasTheme {
     const val FONT = "JetBrainsMono Nerd Font"
     const val FONT_SIZE = 12
 
-    private val labelCss: String
-        get() = "color: ${fg.toCss()}; font-family: \"$FONT\"; font-size: ${FONT_SIZE}px;"
+    /** The chrome's hairline: a 1px [line] border on the given [sides] (all four by default). */
+    fun Modifier.hairline(sides: Set<BorderSide> = BorderSide.ALL): Modifier = border(line, sides = sides)
 
-    /** 1px solid border in [line2] with [RADIUS] corners. Does not set a background. */
-    fun Modifier.framed(): Modifier =
-        rawStyle("", "border: 1px solid ${line2.toCss()}; border-radius: ${RADIUS}px;")
+    /** 1px border in [line2] with [RADIUS] corners. Does not set a background. */
+    fun Modifier.framed(): Modifier = border(line2).radius(RADIUS)
 
-    /** Monospace text colour and size for the widget and its descendants. */
-    fun Modifier.themedText(): Modifier =
-        rawStyle("", "color: ${fg.toCss()}; font-family: \"$FONT\"; font-size: ${FONT_SIZE}px;")
+    /** Monospace text colour and size for the widget and its text. */
+    fun Modifier.themedText(): Modifier = textColor(fg, transitionMs = 0).fontFamily(FONT).fontSize(FONT_SIZE)
 
     /** Text input: [input] background, [fg] text, framed, small padding. */
     fun Modifier.themedEntry(): Modifier =
@@ -50,37 +63,39 @@ object AtlasTheme {
             .background(input, radius = RADIUS, transitionMs = 0)
             .padding(horizontal = 6, vertical = 3)
             .themedText()
-            .rawStyle(" > text", "color: ${fg.toCss()}; caret-color: ${accent.toCss()}; background-color: transparent;")
-            .rawStyle(" > text > selection", "background-color: ${accent2.toCss()}; color: ${accent.toCss()};")
+            .entryStyle(textColor = fg, caretColor = accent, selectionBackground = accent2, selectionColor = accent)
 
     /** Switch: [input] track, [accent2] when checked, [accent] knob when checked, always visible. */
     fun Modifier.themedSwitch(): Modifier =
         framed()
             .background(input, radius = RADIUS, transitionMs = 0)
-            .rawStyle("", "min-width: 36px; min-height: 18px;")
-            .rawStyle(":checked", "background-color: ${accent2.toCss()};")
-            .rawStyle(" > slider", "background-color: ${dim.toCss()}; min-width: 14px; min-height: 14px; border-radius: ${RADIUS}px;")
-            .rawStyle(":checked > slider", "background-color: ${accent.toCss()};")
+            .minSize(width = 36, height = 18)
+            .checkedBackground(accent2)
+            .switchKnob(color = dim, checkedColor = accent, size = 14, radius = RADIUS)
 
     /** Dropdown: framed button, framed panel2 popover with hovered rows highlighted in [accent2]. */
     fun Modifier.themedDropDown(): Modifier =
         themedText()
-            .rawStyle(
-                " > button",
-                "border: 1px solid ${line2.toCss()}; border-radius: ${RADIUS}px; " +
-                    "background-color: ${input.toCss()}; color: ${fg.toCss()}; " +
-                    "padding: 3px 8px; min-height: 0;",
-            )
-            .rawStyle(
-                " popover > contents",
-                "background-color: ${panel2.toCss()}; border: 1px solid ${line2.toCss()}; " +
-                    "border-radius: ${RADIUS}px; color: ${fg.toCss()};",
-            )
             // Popup rows and button text are theme-owned labels: the app stylesheet sizes bare
             // `label` nodes, so the font has to be set on them directly.
-            .rawStyle(" label", labelCss)
-            .rawStyle(" popover row", "padding: 4px 8px;")
-            .rawStyle(" popover row:hover", "background-color: ${accent2.toCss()};")
+            .labelStyle(fg, FONT, FONT_SIZE)
+            .dropDownButton(
+                background = input,
+                color = fg,
+                border = line2,
+                radius = RADIUS,
+                paddingHorizontal = 8,
+                paddingVertical = 3,
+            )
+            .dropDownPopover(
+                background = panel2,
+                color = fg,
+                border = line2,
+                rowHover = accent2,
+                radius = RADIUS,
+                rowPaddingHorizontal = 8,
+                rowPaddingVertical = 4,
+            )
 
     /** Slider: thin trough in [line2], [accent] highlight, [fg] knob. */
     fun Modifier.themedSlider(): Modifier =
@@ -99,5 +114,5 @@ object AtlasTheme {
             .hoverBackground(accent2)
             .padding(horizontal = 10, vertical = 4)
             .themedText()
-            .rawStyle(" label", labelCss)
+            .labelStyle(fg, FONT, FONT_SIZE)
 }

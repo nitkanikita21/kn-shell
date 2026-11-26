@@ -12,6 +12,7 @@ use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
+use headless_compositor::Compositor;
 use rmcp::model::{CallToolResult, ContentBlock, JsonObject, Tool};
 use serde_json::{json, Value};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -20,7 +21,6 @@ use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
 
 use crate::build::{check_staleness, run_build};
-use crate::compositor::Compositor;
 use crate::config::{Config, HIDDEN_ENV_REMOVE};
 use crate::discover::{self, AtlasTarget};
 
@@ -49,6 +49,38 @@ impl Reply {
             result: CallToolResult::error(vec![ContentBlock::text(text)]),
             tools_changed,
         }
+    }
+}
+
+/// What the user had open in the atlas: the story, its matrix view and the arg values. It is read from
+/// the old atlas before that one is replaced, and put back into the new one, so a rebuild or a window
+/// change does not lose the place the user was looking at.
+#[derive(Debug, Default, PartialEq)]
+struct Session {
+    /// The selected story as `Group/Entry`.
+    story: Option<String>,
+    /// The matrix view, when the story is a matrix.
+    view: Option<String>,
+    /// Arg values by name, as the atlas reports them.
+    args: serde_json::Map<String, Value>,
+}
+
+/// The result of putting a [`Session`] back: whether the story reopened, and what did not come back.
+#[derive(Debug, Default, PartialEq)]
+struct Restored {
+    story: Option<String>,
+    notes: Vec<String>,
+}
+
+impl Restored {
+    /// The lines added to a reply: the story that is open again, then one line per thing lost.
+    fn lines(&self) -> String {
+        let mut lines = Vec::new();
+        if let Some(story) = &self.story {
+            lines.push(format!("reopened {story}"));
+        }
+        lines.extend(self.notes.iter().cloned());
+        lines.into_iter().map(|line| format!("\n{line}")).collect()
     }
 }
 
@@ -232,12 +264,13 @@ impl Supervisor {
         if already {
             return Reply::ok(format!("the atlas is already {place}"), false);
         }
+        let session = self.snapshot(&mut state).await;
         state.atlas = None;
         match self.ensure_running(&mut state).await {
-            Ok(_) => Reply::ok(
-                format!("the atlas is now {place}; it was restarted, so stories and args are at their defaults"),
-                true,
-            ),
+            Ok(_) => {
+                let restored = self.restore(&mut state, session).await;
+                Reply::ok(format!("the atlas is now {place}; it was restarted{}", restored.lines()), true)
+            }
             Err(error) => {
                 // Do not keep trying to open a window that cannot be opened.
                 state.visible = false;
@@ -285,12 +318,14 @@ impl Supervisor {
         }
 
         let mut state = self.state.lock().await;
+        let session = self.snapshot(&mut state).await;
         state.atlas = None;
         state.last_build = Some(started_at);
         match self.start_atlas(&mut state).await {
             Ok(()) => {
                 let pid = state.atlas.as_ref().map_or(0, |atlas| atlas.child.id());
-                Reply::ok(format!("build ok; atlas restarted (pid {pid})"), true)
+                let restored = self.restore(&mut state, session).await;
+                Reply::ok(format!("build ok; atlas restarted (pid {pid}){}", restored.lines()), true)
             }
             Err(error) => {
                 state.last_error = Some(error.clone());
@@ -606,6 +641,74 @@ impl Supervisor {
             .get("result")
             .cloned()
             .ok_or_else(|| "response has neither result nor error".to_owned())
+    }
+
+    /// Reads the story, matrix view and arg values of the running atlas. Empty when no atlas runs, when
+    /// nothing is selected, or when the atlas does not answer: then there is nothing to put back.
+    async fn snapshot(&self, state: &mut State) -> Session {
+        let mut session = Session::default();
+        if !state.atlas.as_mut().is_some_and(|atlas| atlas.is_alive()) {
+            return session;
+        }
+        let Ok(stories) = self.atlas_call(state, "list_stories", json!({})).await else {
+            return session;
+        };
+        let selected = stories
+            .as_array()
+            .and_then(|list| list.iter().find(|story| story["selected"] == json!(true)));
+        let Some(selected) = selected else {
+            return session;
+        };
+        session.story = selected["name"].as_str().map(str::to_owned);
+        session.view = selected["view"].as_str().map(str::to_owned);
+        if let Ok(answer) = self.atlas_call(state, "get_args", json!({})).await {
+            for arg in answer["args"].as_array().into_iter().flatten() {
+                if let (Some(name), Some(value)) = (arg["name"].as_str(), arg.get("value")) {
+                    session.args.insert(name.to_owned(), value.clone());
+                }
+            }
+        }
+        session
+    }
+
+    /// Opens the story of `session` in the running atlas, with its view and arg values. Each part is
+    /// tried on its own: a story that no longer exists, or an arg that was renamed, is reported and
+    /// the rest still comes back.
+    async fn restore(&self, state: &mut State, session: Session) -> Restored {
+        let mut restored = Restored::default();
+        let Some(story) = session.story else {
+            return restored;
+        };
+        if let Err(error) = self.atlas_call(state, "select_story", json!({ "story": story })).await {
+            restored.notes.push(format!("could not reopen {story}: {error}"));
+            return restored;
+        }
+        restored.story = Some(story);
+        if let Some(view) = session.view {
+            if let Err(error) = self.atlas_call(state, "set_view", json!({ "view": view })).await {
+                restored.notes.push(format!("could not set the view {view}: {error}"));
+            }
+        }
+        for (name, value) in session.args {
+            let mut values = serde_json::Map::new();
+            values.insert(name.clone(), value);
+            if let Err(error) = self.atlas_call(state, "set_args", json!({ "values": values })).await {
+                restored.notes.push(format!("arg {name} was not restored: {error}"));
+            }
+        }
+        restored
+    }
+
+    /// One tool call on the running atlas. Its text answer is JSON; an error result becomes `Err` with
+    /// the text the atlas gave.
+    async fn atlas_call(&self, state: &mut State, name: &str, arguments: Value) -> Result<Value, String> {
+        let params = json!({ "name": name, "arguments": arguments });
+        let answer = self.exchange(state, "tools/call", Some(params)).await?;
+        let text = answer["content"][0]["text"].as_str().unwrap_or_default().to_owned();
+        if answer["isError"].as_bool() == Some(true) {
+            return Err(text);
+        }
+        serde_json::from_str(&text).map_err(|error| format!("{name} answered without JSON: {error}"))
     }
 
     fn staleness_warning(&self, state: &State) -> Option<String> {

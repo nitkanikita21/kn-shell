@@ -15,7 +15,8 @@ import org.jetbrains.kotlin.gradle.plugin.mpp.NativeBuildType
  *    `main` and keeps the stories out of the application binary;
  *  - the debug executable `atlas`, and with it `linkAtlasDebugExecutableLinuxX64` and
  *    `runAtlasDebugExecutableLinuxX64` (the `atlas-mcp` tool finds atlases by that run task);
- *  - the task `runAtlas`; `-Pstory=Group/Entry` opens that story.
+ *  - the task `runAtlas`; `-Pstory=Group/Entry` opens that story;
+ *  - the tasks `atlasGoldenCheck` and `atlasGoldenRecord` (see [addGoldenTasks]).
  *
  * Linker options the module's own libraries need belong to the module: configure them for every
  * executable (`binaries.withType<Executable>().configureEach { … }`) and the atlas gets them too.
@@ -46,6 +47,10 @@ class AtlasPlugin : Plugin<Project> {
                 )
             }
             targets.forEach { configure(project, it, extension) }
+            // One atlas per module: the golden tasks belong to the first linuxX64 target.
+            targets.firstOrNull()?.let {
+                addGoldenTasks(project, it.binaries.getExecutable("atlas", NativeBuildType.DEBUG), extension)
+            }
         }
         addRunTasks(project)
     }

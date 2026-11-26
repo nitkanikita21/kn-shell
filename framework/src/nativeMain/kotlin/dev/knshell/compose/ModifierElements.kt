@@ -146,3 +146,47 @@ internal data class RadiusElement(val declarations: String) : ModifierElement
 
 /** Name the widget is addressed by from outside (`Modifier.testTag`); changes nothing visually. */
 internal data class TestTagElement(val name: String) : ModifierElement
+
+/** Inherited styles start over here (`Modifier.resetStyles`). */
+internal data object StyleResetElement : ModifierElement
+
+/** Border on some or all sides (`Modifier.border`). */
+internal data class BorderElement(val color: Color, val width: Int, val sides: Set<BorderSide>) : ModifierElement
+
+/** Colour and font of the label nodes inside the widget (`Modifier.labelStyle`). */
+internal data class LabelStyleElement(val color: Color, val fontFamily: String?, val fontSize: Int?) : ModifierElement
+
+/** Text field of an `Entry` (`Modifier.entryStyle`). */
+internal data class EntryStyleElement(
+    val textColor: Color,
+    val caretColor: Color,
+    val selectionBackground: Color,
+    val selectionColor: Color,
+) : ModifierElement
+
+/** Knob of a `Switch` (`Modifier.switchKnob`). */
+internal data class SwitchKnobElement(val color: Color, val checkedColor: Color, val size: Int, val radius: Int) :
+    ModifierElement
+
+/** Closed button of a `DropDown` (`Modifier.dropDownButton`). */
+internal data class DropDownButtonElement(
+    val background: Color,
+    val color: Color,
+    val border: Color,
+    val borderWidth: Int,
+    val radius: Int,
+    val paddingHorizontal: Int,
+    val paddingVertical: Int,
+) : ModifierElement
+
+/** Open list of a `DropDown` (`Modifier.dropDownPopover`). */
+internal data class DropDownPopoverElement(
+    val background: Color,
+    val color: Color,
+    val border: Color,
+    val borderWidth: Int,
+    val radius: Int,
+    val rowPaddingHorizontal: Int,
+    val rowPaddingVertical: Int,
+    val rowHover: Color,
+) : ModifierElement

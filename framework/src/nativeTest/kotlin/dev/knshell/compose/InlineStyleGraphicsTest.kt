@@ -30,11 +30,11 @@ import kotlin.test.assertEquals
  *
  * Requires a display connection, like [LayoutProbeTest].
  */
-class InlineStyleTest {
+class InlineStyleGraphicsTest {
 
     @BeforeTest
     fun initGtk() {
-        check(gtk_init_check() != 0) { "InlineStyleTest needs a display connection" }
+        check(gtk_init_check() != 0) { "InlineStyleGraphicsTest needs a display connection" }
         installPlainReset(gdk_display_get_default()!!)
     }
 

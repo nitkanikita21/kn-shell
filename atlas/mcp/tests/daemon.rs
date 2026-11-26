@@ -166,7 +166,20 @@ async fn proxies_text_and_image_results() {
     let (tools, started) = supervisor.list_atlas_tools().await;
     assert!(started);
     let names: Vec<&str> = tools.iter().map(|tool| tool.name.as_ref()).collect();
-    assert_eq!(names, ["text_tool", "image_tool", "fail_tool", "hang"]);
+    assert_eq!(
+        names,
+        [
+            "text_tool",
+            "image_tool",
+            "fail_tool",
+            "hang",
+            "list_stories",
+            "select_story",
+            "set_view",
+            "get_args",
+            "set_args"
+        ]
+    );
 
     let reply = supervisor.call_atlas("text_tool", args(json!({ "x": 1 }))).await;
     let value = as_json(&reply.result);
@@ -229,6 +242,44 @@ async fn missing_binary_lists_no_atlas_tools() {
     let status = all_text(&as_json(&supervisor.status().await));
     assert!(status.contains("(missing)"), "{status}");
     assert!(status.contains("last start error"), "{status}");
+}
+
+#[tokio::test]
+async fn reload_reopens_the_story_view_and_args() {
+    let sandbox = Sandbox::new();
+    sandbox.install_atlas();
+    let supervisor = Supervisor::new(sandbox.config("normal"));
+    supervisor.list_atlas_tools().await;
+
+    supervisor.call_atlas("select_story", args(json!({ "story": "Matrix/Grid" }))).await;
+    supervisor.call_atlas("set_view", args(json!({ "view": "table" }))).await;
+    supervisor
+        .call_atlas("set_args", args(json!({ "values": { "text": "Hi", "radius": 12 } })))
+        .await;
+
+    // The fake atlas forgets everything when it restarts, so whatever is shown afterwards was put back
+    // by the daemon.
+    let reply = supervisor.reload().await;
+    let value = as_json(&reply.result);
+    assert_ne!(value["isError"], json!(true), "{value}");
+    assert!(all_text(&value).contains("reopened Matrix/Grid"), "{}", all_text(&value));
+
+    let listed = supervisor.call_atlas("list_stories", None).await;
+    let stories: Value = serde_json::from_str(&all_text(&as_json(&listed.result))).unwrap();
+    let matrix = stories
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|story| story["name"] == "Matrix/Grid")
+        .unwrap();
+    assert_eq!(matrix["selected"], json!(true));
+    assert_eq!(matrix["view"], json!("table"));
+
+    let args_now = supervisor.call_atlas("get_args", None).await;
+    let args_now: Value = serde_json::from_str(&all_text(&as_json(&args_now.result))).unwrap();
+    assert_eq!(args_now["args"][0]["value"], json!("Hi"));
+    assert_eq!(args_now["args"][1]["value"], json!(12));
+    supervisor.shutdown().await;
 }
 
 #[tokio::test]

@@ -7,17 +7,30 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use atlas_mcp::atlas::Supervisor;
+use atlas_mcp::doctor;
 use atlas_mcp::config::{find_gradle_root, Config};
 use atlas_mcp::server::Daemon;
 use rmcp::transport::stdio;
 use rmcp::ServiceExt;
 use tokio::signal::unix::{signal, SignalKind};
 
-const USAGE: &str = "usage: atlas-mcp [--root <project root>]";
+const USAGE: &str = "usage: atlas-mcp [--root <project root>]\n       atlas-mcp doctor [--root <project root>]";
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let root = match parse_args(std::env::args().skip(1)) {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().map(String::as_str) == Some("doctor") {
+        // Not an MCP session: print the checks to stdout and say by the exit code whether they passed.
+        let root = match parse_args(args.into_iter().skip(1)) {
+            Ok(root) => root,
+            Err(message) => {
+                eprintln!("atlas-mcp: {message}\n{USAGE}");
+                return ExitCode::from(2);
+            }
+        };
+        return if doctor::run(&root) { ExitCode::SUCCESS } else { ExitCode::FAILURE };
+    }
+    let root = match parse_args(args.into_iter()) {
         Ok(root) => root,
         Err(message) => {
             eprintln!("atlas-mcp: {message}\n{USAGE}");

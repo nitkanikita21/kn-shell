@@ -29,11 +29,11 @@ import kotlin.test.assertEquals
  *
  * Requires a display connection, like [LayoutProbeTest].
  */
-class ChildOrderTest {
+class ChildOrderGraphicsTest {
 
     @BeforeTest
     fun initGtk() {
-        check(gtk_init_check() != 0) { "ChildOrderTest needs a display connection" }
+        check(gtk_init_check() != 0) { "ChildOrderGraphicsTest needs a display connection" }
     }
 
     @Test

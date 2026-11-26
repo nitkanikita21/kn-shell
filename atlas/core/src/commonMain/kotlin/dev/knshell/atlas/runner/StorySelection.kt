@@ -2,6 +2,7 @@ package dev.knshell.atlas.runner
 
 import dev.knshell.atlas.core.StoryGroup
 import dev.knshell.atlas.core.entry.StoryEntry
+import dev.knshell.atlas.runner.golden.GoldenOptions
 
 data class Selection(val group: StoryGroup, val entry: StoryEntry)
 
@@ -42,4 +43,30 @@ fun parseStorySpec(args: Array<String>, env: String?): String? {
         }
     }
     return fromArgs?.takeIf { it.isNotBlank() } ?: env?.takeIf { it.isNotBlank() }
+}
+
+/** Where a golden run puts its pictures when `--golden-out` does not say. */
+private const val DEFAULT_GOLDEN_OUTPUT = "build/atlas-golden"
+
+/**
+ * The golden run asked for on the command line, or `null` for an ordinary atlas: `--golden=<dir>`
+ * (or `--golden <dir>`) turns it on, `--record` updates the goldens instead of checking them,
+ * `--golden-out=<dir>` takes the pictures of a run, `--story` narrows it to one story or cell.
+ */
+fun parseGoldenOptions(args: Array<String>): GoldenOptions? {
+    fun value(flag: String): String? = args.withIndex().firstNotNullOfOrNull { (i, arg) ->
+        when {
+            arg == flag -> args.getOrNull(i + 1)?.takeUnless { it.startsWith("--") }
+            arg.startsWith("$flag=") -> arg.substringAfter('=')
+            else -> null
+        }
+    }?.takeIf { it.isNotBlank() }
+
+    val goldens = value("--golden") ?: return null
+    return GoldenOptions(
+        goldens = goldens,
+        output = value("--golden-out") ?: DEFAULT_GOLDEN_OUTPUT,
+        record = "--record" in args,
+        filter = value("--story"),
+    )
 }

@@ -13,7 +13,8 @@ Atlas — рабочий каталог для просмотра и прове�
 framework     GTK4-мост, Compose DSL, UI-виджеты, инспектор            ← библиотека
 atlas/core    DSL stories, модель args, runner, UI каталога, команды   ← зависит от framework
 atlas/plugin  Gradle-плагин dev.knshell.atlas: compilation и таски      ← included build
-atlas/mcp     Rust-демон atlas-mcp (MCP) и headless-композитор        ← cargo, не Gradle
+atlas/mcp     Rust-демон atlas-mcp (MCP)                              ← Gradle-модуль :atlas:mcp (cargo)
+headless-compositor  Wayland-композитор без экрана                    ← Gradle-модуль (cargo)
 shell-app     compilation linuxX64Atlas: stories и точка входа        ← приложение
 ```
 
@@ -230,7 +231,7 @@ cargo clippy --manifest-path atlas/mcp/Cargo.toml
 `cargo test` для `atlas/mcp` проверяет демон на фейковом атласе (`examples/fake_atlas.rs`): проксирование
 `tools/call`, ошибки, таймаут, пересборку, застарелость бинарника, остановку и конфликт имён. Запускайте
 через `cargo test`, потому что тест находит пример в каталоге сборки. Композитор можно поднять отдельно:
-`cargo run --manifest-path atlas/mcp/Cargo.toml --example headless -- <имя-сокета>`.
+`cargo run --manifest-path headless-compositor/Cargo.toml -- <имя-сокета>`.
 
 ## MCP: управление атласом из Claude
 
@@ -246,7 +247,7 @@ Claude ──MCP/stdio──> atlas-mcp (Rust) ──JSON-строки / unix so
                         │                                              │
                         ├─ поиск атласа, reload / status               └─ framework: дерево, действия, PNG
                         └─ приватный headless Wayland-композитор
-                           (atlas/mcp/src/compositor.rs)
+                           (headless-compositor/)
 ```
 
 - Демон сам **не знает о компонентах**. Инструменты атласа описаны в атласе (`tools/list`), демон их
@@ -261,7 +262,7 @@ Claude ──MCP/stdio──> atlas-mcp (Rust) ──JSON-строки / unix so
   рабочем столе окна нет и фокус не меняется. Что `hyprctl clients` его не видит, проверяется в
   сквозном тесте, а не в коде.
 - **Без системных зависимостей.** Не нужны KWin, weston, cage, broadway, браузер или sudo. Композитор —
-  небольшой Rust-код в `atlas/mcp/src/compositor.rs`, без рендеринга: он даёт handshake, `configure` и
+  небольшой Rust-код в `headless-compositor/src/lib.rs`, без рендеринга: он даёт handshake, `configure` и
   поток `wl_callback.done`, без которых GTK 4 перестаёт перекомпоновывать.
 - **Нет устройств ввода.** Композитор не объявляет `wl_seat` с клавиатурой или мышью. Действия выполняет
   инспектор (`dev.knshell.inspect.Inspector`): он вызывает те же GTK-сигналы, что и пользователь, поэтому

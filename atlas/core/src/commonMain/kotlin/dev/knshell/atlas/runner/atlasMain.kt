@@ -4,15 +4,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import dev.knshell.atlas.core.StoryGroup
+import dev.knshell.atlas.runner.golden.GoldenController
+import dev.knshell.atlas.runner.golden.runGolden
 import dev.knshell.atlas.runner.ui.App
 import dev.knshell.atlas.runner.ui.AtlasTheme
 import dev.knshell.compose.Box
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.background
 import dev.knshell.compose.expand
-import dev.knshell.compose.fontFamily
 import dev.knshell.compose.runComposeWindow
-import dev.knshell.compose.textColor
 import dev.knshell.inspect.LineSocketServer
 import dev.knshell.inspect.disableUiTransitions
 import dev.knshell.inspect.windowInspector
@@ -21,6 +21,8 @@ import kotlinx.cinterop.toKString
 import platform.posix.getenv
 
 val LocalAtlasHostService = staticCompositionLocalOf<AtlasHostService> { error("AtlasHostService is missing") }
+
+val LocalGoldenController = staticCompositionLocalOf<GoldenController> { error("GoldenController is missing") }
 
 private const val STORY_ENV = "KN_ATLAS_STORY"
 private const val INSPECT_ENV = "KN_ATLAS_INSPECT"
@@ -34,6 +36,8 @@ fun atlasMain(
     args: Array<String> = emptyArray(),
     title: String = "Untitled",
 ) {
+    parseGoldenOptions(args)?.let { runGolden(stories, it) }
+
     val service = AtlasHostService(stories)
     val env = getenv(STORY_ENV)?.toKString()
     val spec = parseStorySpec(args, env)
@@ -61,13 +65,18 @@ fun atlasMain(
         }
     }
 
+    val golden = GoldenController.forThisProcess()
+
     runComposeWindow(
         "KN Atlas - $title",
         width = 1200,
         height = 800,
         windowBackground = AtlasTheme.bg,
     ) {
-        CompositionLocalProvider(LocalAtlasHostService provides service) {
+        CompositionLocalProvider(
+            LocalAtlasHostService provides service,
+            LocalGoldenController provides golden,
+        ) {
             Root()
         }
     }
@@ -75,13 +84,9 @@ fun atlasMain(
 
 @Composable
 private fun Root() {
-    Box(
-        Modifier
-            .expand()
-            .fontFamily("JetBrainsMono Nerd Font")
-            .background(AtlasTheme.bg)
-            .textColor(AtlasTheme.fg)
-    ) {
+    // No font or text colour here: the chrome styles its own parts, and a story starts from a bare
+    // window (see StyleReset).
+    Box(Modifier.expand().background(AtlasTheme.bg)) {
         App()
     }
 }
