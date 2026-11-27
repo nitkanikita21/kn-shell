@@ -69,6 +69,7 @@ fn tools() -> Value {
         { "name": "list_stories", "description": "Stories of the fake catalog.", "inputSchema": empty },
         { "name": "select_story", "description": "Selects a story.", "inputSchema": empty },
         { "name": "set_view", "description": "Sets the matrix view.", "inputSchema": empty },
+        { "name": "set_environment", "description": "Sets the environment.", "inputSchema": empty },
         { "name": "get_args", "description": "Args of the selected story.", "inputSchema": empty },
         { "name": "set_args", "description": "Sets arg values.", "inputSchema": empty },
     ])
@@ -77,11 +78,13 @@ fn tools() -> Value {
 /// Stories the fake atlas knows: `(name, kind)`. Only `Matrix/Grid` has views.
 const STORIES: [(&str, &str); 2] = [("Button/Playground", "story"), ("Matrix/Grid", "variants")];
 const VIEWS: [&str; 2] = ["compose", "table"];
+const ENVIRONMENTS: [&str; 2] = ["Dark", "Light"];
 
 /// What the user has open: it lives as long as this atlas process, so a restarted atlas starts empty.
 struct Session {
     story: Option<&'static str>,
     view: &'static str,
+    environment: &'static str,
     text: String,
     radius: i64,
 }
@@ -93,6 +96,7 @@ fn with_session<R>(f: impl FnOnce(&mut Session) -> R) -> R {
     let session = guard.get_or_insert_with(|| Session {
         story: None,
         view: VIEWS[0],
+        environment: ENVIRONMENTS[0],
         text: "Save".to_owned(),
         radius: 8,
     });
@@ -125,6 +129,9 @@ fn stateful(name: &str, arguments: &Value) -> Result<Value, String> {
                         "kind": kind,
                         "selected": session.story == Some(*story),
                     });
+                    if session.story == Some(*story) {
+                        entry["environment"] = json!(session.environment);
+                    }
                     if *kind == "variants" {
                         entry["view"] = json!(session.view);
                         entry["views"] = json!(VIEWS);
@@ -157,6 +164,16 @@ fn stateful(name: &str, arguments: &Value) -> Result<Value, String> {
                 };
                 session.view = *view;
                 Ok(json!({ "selected": story, "view": view }))
+            })
+        }
+        "set_environment" => {
+            let wanted = arguments["name"].as_str().unwrap_or_default();
+            let Some(environment) = ENVIRONMENTS.iter().find(|name| **name == wanted) else {
+                return Err(format!("unknown environment \"{wanted}\""));
+            };
+            with_session(|session| {
+                session.environment = *environment;
+                Ok(json!({ "environment": environment }))
             })
         }
         "get_args" => with_session(|session| match session.story {
@@ -226,7 +243,7 @@ fn call(request: &Value, id: Value) -> Option<Value> {
             thread::sleep(Duration::from_secs(10));
             return None;
         }
-        "list_stories" | "select_story" | "set_view" | "get_args" | "set_args" => {
+        "list_stories" | "select_story" | "set_view" | "set_environment" | "get_args" | "set_args" => {
             match stateful(name, arguments) {
                 Ok(value) => json!({ "content": [{ "type": "text", "text": value.to_string() }], "isError": false }),
                 Err(message) => json!({ "content": [{ "type": "text", "text": message }], "isError": true }),

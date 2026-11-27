@@ -1,6 +1,7 @@
 package dev.knshell.atlas.runner.ui
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -34,9 +35,13 @@ fun App() {
     val current: Selection? = selection
     val golden = LocalGoldenController.current
 
+    CompositionLocalProvider(LocalAtlasEnvironment provides service.environment) {
     Row(modifier = Modifier.fillAll().background(AtlasTheme.bg, transitionMs = 0)) {
         Sidebar(
             groups = service.groups,
+            environments = service.environments,
+            environment = service.environment,
+            onEnvironment = { service.environment = it },
             selection = current,
             onSelect = { group, entry -> service.select(group, entry) },
             viewOf = service::viewOf,
@@ -86,6 +91,7 @@ fun App() {
                             ArgsPanel(
                                 args = panelArgs,
                                 live = live,
+                                docs = current.group.docs,
                                 modifier = Modifier.width(280).vExpand(),
                             )
                         }
@@ -94,4 +100,5 @@ fun App() {
             }
         }
     }
+}
 }

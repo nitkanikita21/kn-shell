@@ -36,7 +36,7 @@ enum class DiffMode(val title: String) {
 
 /** The worst status of every story that has something to show; stories that match are left out. */
 fun storyStatuses(report: GoldenReport): Map<String, CaseStatus> {
-    val worst = listOf(CaseStatus.Error, CaseStatus.Changed, CaseStatus.New, CaseStatus.Orphan)
+    val worst = listOf(CaseStatus.Error, CaseStatus.PlayFailed, CaseStatus.Changed, CaseStatus.New, CaseStatus.Orphan)
     return report.cases.filter { it.status != CaseStatus.Same }
         .groupBy { it.story }
         .mapValues { (_, cases) -> worst.first { status -> cases.any { it.status == status } } }
@@ -49,6 +49,7 @@ fun summaryText(report: GoldenReport): String {
         CaseStatus.Changed to "змінено",
         CaseStatus.New to "нових",
         CaseStatus.Error to "з помилкою",
+        CaseStatus.PlayFailed to "сценаріїв упало",
         CaseStatus.Orphan to "зайвих",
     )
     val differences = names.filter { report.count(it.first) > 0 }

@@ -1,6 +1,5 @@
 package dev.knshell.atlas.runner.ui
 
-import dev.knshell.compose.StyleReset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -191,7 +190,7 @@ private fun Preview(variants: Variants, combo: ArgSnapshot, args: ArgValues) {
         ) {
             // a table cell is as tall as its row: the weight claims that height, so the story can
             // sit in the middle of it
-            StyleReset(Modifier.weight().align(Align.Center)) {
+            Decorated(LocalAtlasEnvironment.current, Modifier.weight().align(Align.Center)) {
                 variants.render(cellArgs)
             }
         }

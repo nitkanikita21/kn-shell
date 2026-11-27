@@ -91,6 +91,7 @@ internal fun CaseStatus.badge(): Pair<String, Color> = when (this) {
     CaseStatus.Changed -> "●" to AtlasTheme.changed
     CaseStatus.New -> "+" to AtlasTheme.accent
     CaseStatus.Error -> "✕" to AtlasTheme.failed
+    CaseStatus.PlayFailed -> "▷" to AtlasTheme.failed
     CaseStatus.Orphan -> "?" to AtlasTheme.dim
     CaseStatus.Same -> "" to AtlasTheme.dim
 }

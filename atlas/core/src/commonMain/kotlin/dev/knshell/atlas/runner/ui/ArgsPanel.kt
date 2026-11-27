@@ -35,8 +35,11 @@ import dev.knshell.compose.weight
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+/** Longest line of the docs before it wraps, so that they do not widen the panel. */
+private const val DOCS_CHARS = 34
+
 @Composable
-fun ArgsPanel(args: List<Arg<*>>, live: LiveArgs, modifier: Modifier = Modifier) {
+fun ArgsPanel(args: List<Arg<*>>, live: LiveArgs, modifier: Modifier = Modifier, docs: String? = null) {
     with(AtlasTheme) {
         Column(
             spacing = 10,
@@ -46,6 +49,15 @@ fun ArgsPanel(args: List<Arg<*>>, live: LiveArgs, modifier: Modifier = Modifier)
                 .padding(all = 10)
                 .hairline(setOf(BorderSide.Left)),
         ) {
+            if (docs != null) {
+                Label(
+                    docs,
+                    align = 0f,
+                    wrap = true,
+                    maxWidthChars = DOCS_CHARS,
+                    modifier = Modifier.themedText().textColor(dim, transitionMs = 0).testTag("docs"),
+                )
+            }
             Label("args", align = 0f, modifier = Modifier.themedText().bold())
             if (args.isEmpty()) {
                 Label("no args", align = 0f, modifier = dimLabel)

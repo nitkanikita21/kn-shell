@@ -73,6 +73,12 @@ scale {
 """
 
 /**
+ * Closes every window, which makes [runComposeWindow] return. For code that drives windows from the
+ * outside, see [launchOnUiThread].
+ */
+fun closeComposeWindows() = ShellRuntime.instance().closeAll()
+
+/**
  * Creates a GTK window, mounts a Compose composition into it and blocks in the
  * GLib main loop.
  *

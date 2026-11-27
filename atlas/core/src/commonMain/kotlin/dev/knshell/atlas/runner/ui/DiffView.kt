@@ -81,7 +81,9 @@ private fun DiffCase(golden: GoldenController, story: String, case: CaseResult) 
     val one = AcceptScope.Case(case.id)
     Column(spacing = 8, modifier = Modifier.align(h = Align.Start).testTag("diff:case:${case.id}")) {
         Row(spacing = 12) {
-            Label(case.id.removePrefix("$story/").ifEmpty { story }, modifier = chromeText(AtlasTheme.fg))
+            // What tells this case from the others of the story: environment, cell, state or snapshot.
+            val caption = case.id.replaceFirst(story, "").replace("//", "/").trim('/')
+            Label(caption.ifEmpty { story }, modifier = chromeText(AtlasTheme.fg))
             Label(describe(case), modifier = chromeText(case.status.badge().second))
             if (golden.report?.acceptable(one)?.isNotEmpty() == true) {
                 ActionButton("Прийняти", "golden:accept:${case.id}", enabled = golden.blocker(one) == null) {
@@ -109,7 +111,7 @@ private fun DiffCase(golden: GoldenController, story: String, case: CaseResult) 
                 DiffMode.Flip -> Flip(golden, case.id, expected, actual)
             }
             CaseStatus.New -> Picture(golden, actual)
-            CaseStatus.Error -> Label(
+            CaseStatus.Error, CaseStatus.PlayFailed -> Label(
                 case.error.orEmpty(),
                 align = 0f,
                 wrap = true,
@@ -160,6 +162,7 @@ private fun describe(case: CaseResult): String = when (case.status) {
     }
     CaseStatus.New -> "еталона ще немає"
     CaseStatus.Error -> "не відрендерилась"
+    CaseStatus.PlayFailed -> "сценарій упав"
     CaseStatus.Orphan -> "зайвий еталон"
     CaseStatus.Same -> "без змін"
 }

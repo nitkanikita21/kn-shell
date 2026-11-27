@@ -27,3 +27,5 @@ kotlin {
         }
     }
 }
+
+apply(from = rootProject.file("gradle/graphics-tests.gradle.kts"))

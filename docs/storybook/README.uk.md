@@ -131,8 +131,53 @@ val buttonStories = group("Button") {
 | `int(default, range: IntRange)` | `Arg.IntNum` | `Slider` з діапазоном |
 | `float(default, range: ClosedFloatingPointRange<Float>)` | `Arg.FloatNum` | `Slider` з діапазоном |
 | `render { v -> }` | — | render групи за замовчуванням |
-| `story(name, render?)` | — | одна story |
-| `variants(name, render?, view?) { … }` | — | матриця; `view` — вигляд, з яким вона відкривається |
+| `docs("…")` | — | опис компонента; показується над панеллю args |
+| `story(name, states?, stateTarget?, play?) { v -> }` | — | одна story; блок необов'язковий, якщо є render групи |
+| `variants(name, render?, view?, states?, stateTarget?, play?) { … }` | — | матриця; `view` — вигляд, з яким вона відкривається |
+
+`group(title, category = "Form")` ставить групу під заголовок категорії в сайдбарі. Категорії йдуть у
+порядку першої згадки; назва story лишається `Group/Entry`.
+
+### Стани і сценарії
+
+`states` і `play` виконуються лише прогоном golden (див. «Візуальна перевірка»).
+
+```kotlin
+story(
+    "Keyboard",
+    states = listOf(InteractionState.Hover, InteractionState.Focus),  // кадри з примусовим станом
+    play = Play {
+        focus("target")
+        press(Key.Down)
+        expect("menu").role("menu").focused()
+        snapshot("open")
+        press(Key.Escape)
+        expectAbsent("menu")
+        expect("target").focused()
+    },
+)
+```
+
+- Цілі — `testTag`. Стани ставляться на віджет із tag `target` (або `stateTarget`).
+- Дії: `focus`, `click`, `hover`, `setText`, `press(Key, shift, ctrl, alt, meta)`, `type(text)`,
+  `settle()`, `snapshot(name)`. Кожна дія чекає, поки UI стабілізується.
+- Перевірки: `expect(tag)` з `role`, `name`, `description`, `text`, `focused`, `enabled`, `selected`,
+  `expanded`, `checked("true" | "false" | "mixed")`, `state(назва, значення)`; `expectAbsent(tag)`.
+- `press` і `type` — справжні натискання через клавіатуру `headless-compositor`.
+
+### Середовища (теми)
+
+Каталог сам задає, чим обгорнути stories; атлас нічого не стилізує.
+
+```kotlin
+atlasMain(args, stories, title = "My kit", environments = listOf(
+    AtlasEnvironment("Dark") { story -> MyTheme(dark) { story() } },
+    AtlasEnvironment("Light") { story -> MyTheme(light) { story() } },
+))
+```
+
+Якщо середовищ більше одного, у сайдбарі є перемикач (`environment:<назва>`), а golden знімаються
+для кожного: `Dark/Group/Entry.png`, `Light/Group/Entry.png`.
 
 Усередині `variants { }`:
 
@@ -238,9 +283,14 @@ KN_ATLAS_INSPECT=/run/user/1000/atlas.sock atlas.kexe
 | `-Pstory=Group/Entry` | лише одна story (або комірка `Group/Entry/caption`) |
 | `-Pgoldens=<тека>` | інша тека еталонів; типово `<модуль>/atlas-goldens` або `atlas { goldenDir = … }` |
 
-**Що знімається.** Тільки story, на сталому тлі, з типовими args і в початковому стані. Hover,
-pressed, відкриті popover-и, стан після кліків і значення з панелі в еталон не потрапляють. Нескінченна
-анімація не дасть двох однакових кадрів і буде помилкою.
+**Що знімається.** Тільки story, на сталому тлі, з типовими args. Перший кадр — у початковому стані;
+далі по кадру на кожен стан із `states` (`Entry@hover.png`) і на кожен `snapshot` сценарію
+(`Entry@open.png`). Значення з панелі в еталон не потрапляють. Кадр обрізається по story, тому вміст
+відкритого popover-а в картинку не входить (його перевіряють через `expect`). Нескінченна анімація не
+дасть двох однакових кадрів і буде помилкою.
+
+**Сценарій упав** (`▷` у вікні атласу, `Entry@play` у звіті) — перевірка `play` не пройшла; повідомлення
+називає крок. Така перевірка не проходить, а запис нічого не пише.
 
 **Результат.** `Button/Toolbar.png`, `Button/Variant X Size/Primary · Small.png`, поруч
 `environment.txt`. Різниця складається в `<модуль>/build/atlas-golden/`: `*.expected.png`,
@@ -283,12 +333,14 @@ Story без явного шрифту в preview показує системн�
 
 ```bash
 ./gradlew :atlas:core:linuxX64Test
+./gradlew :atlas:core:linuxX64GraphicsTest                # прогін golden у справжньому вікні
 ./gradlew :framework:linuxX64Test
 ./gradlew :atlas:mcp:check :headless-compositor:check     # cargo test обох крейтів
 cargo clippy --manifest-path atlas/mcp/Cargo.toml
 ```
 
-Тести `atlas:core` покривають лише логіку, без GTK-вікна: побудову груп і матриці
+`GoldenRunnerGraphicsTest` перевіряє стани, клавіші, popover і `play`. Решта тестів `atlas:core`
+покриває логіку без GTK-вікна: побудову груп і матриці
 (`GroupBuilderTest`), `LiveArgs` (`LiveArgsTest`), `AtlasHostService` (збереження args за story),
 `resolveStory` і `parseStorySpec` (`StorySelectionTest`).
 
@@ -328,9 +380,10 @@ Claude ──MCP/stdio──> atlas-mcp (Rust) ──JSON-рядки / unix sock
 - **Без системних залежностей.** Не потрібні KWin, weston, cage, broadway, браузер чи sudo. Композитор
   — невеликий Rust-код у `headless-compositor/src/lib.rs`, без рендерингу: він дає handshake, `configure` і
   потік `wl_callback.done`, без яких GTK 4 перестає перекомпонувати.
-- **Немає пристроїв введення.** Композитор не оголошує `wl_seat` з клавіатурою чи мишею. Дії
-  виконує інспектор (`dev.knshell.inspect.Inspector`), він викликає ті самі GTK-сигнали, що й
-  користувач, тож `Modifier.onClick`, `onValueChange` і `onCheckedChange` спрацьовують.
+- **Клавіатура без миші.** Композитор дає віртуальну клавіатуру (`HEADLESS_COMPOSITOR_KEYS`), миші
+  немає. Кліки та інші дії виконує інспектор (`dev.knshell.inspect.Inspector`): він викликає ті самі
+  GTK-сигнали, що й користувач, тож `Modifier.onClick`, `onValueChange` і `onCheckedChange`
+  спрацьовують.
 - Скріншоти малює сам клієнт (GTK-рендерер атласу), композитор нічого не малює.
 
 ### Встановлення і підключення
@@ -394,7 +447,11 @@ claude mcp add --scope user atlas -- atlas-mcp       # для всіх проє�
 | `set_args` | `values: {name: value}` | Усе або нічого: тип, enum за назвою і діапазон перевіряються до застосування. |
 | `reset_args` | — | Повертає args story до default. |
 | `set_view` | `view`: `compose` \| `table` | Вигляд вибраної матриці; `list_stories` показує поточний і доступні. |
-| `tree` | `target?`, `depth?` | Дерево віджетів (id, тип, testTag, bounds, CSS-класи, текст, стан) від кореня або від `target`. |
+| `set_environment` | `name` | Середовище preview (тема каталогу); `list_stories` показує поточне. |
+| `focus` | `target` | Клавіатурний фокус на віджет або першу фокусовну дитину. |
+| `press` | `key`, `shift?`, `ctrl?`, `alt?`, `meta?` | Натискання клавіші; лише в невидимому атласі. |
+| `type` | `text` | Набір тексту (літери, цифри, пробіл, `- . , /`) у віджет у фокусі; лише в невидимому атласі. |
+| `tree` | `target?`, `depth?` | Дерево віджетів (id, тип, testTag, bounds, CSS-класи, текст, роль, назва, ARIA-стани, фокус) від кореня або від `target`. |
 | `screenshot` | `target?` | PNG вікна або прямокутника ноди (з фоном сусідів); без `target` — корінь композиції. |
 | `click` | `target` | Кнопка або `Modifier.onClick`. |
 | `set_text` | `target`, `text` | `Entry`; викликає `onValueChange`. |
@@ -443,9 +500,9 @@ claude mcp add --scope user atlas -- atlas-mcp       # для всіх проє�
 
 ### Обмеження
 
-- **Popup-и і popover-и — окремі поверхні.** Відкритий список `DropDown` і вміст `HoverPopover`
-  (окрема Compose-композиція) не потрапляють на скріншот і в `tree`. Опції `DropDown` видно в полі
-  `options` його ноди.
+- **Popup-и і popover-и — окремі поверхні.** Вміст `Popup` і `HoverPopover` є в `tree`, а скріншот
+  його ноди малює саму поверхню popover-а; у скріншот вікна він не входить. Відкритий список
+  `DropDown` — внутрішній віджет GTK, його опції видно лише в полі `options`.
 - **`set_state` не викликає `Modifier.onHover`.** Він лише виставляє GTK state flags. Hover-callback-и
   йдуть з GTK motion controller, а його не чіпає.
 - **Без CSS-переходів.** Під інспектором GTK-переходи вимкнені, щоб знімок показував кінцевий стан;
@@ -454,8 +511,8 @@ claude mcp add --scope user atlas -- atlas-mcp       # для всіх проє�
   рендерить на GPU тим самим шляхом, що й на робочому столі (перевірено: `GskVulkanRenderer` на NVIDIA).
   Без render node клієнт переходить на програмний рендер через `wl_shm`. Інші драйвери та машини з
   кількома GPU не перевірялись; шейдери окремо теж.
-- **Немає реального вводу.** Клавіатура і миша до атласу не доходять. Фокус і фокусовані стани
-  лише ставляться примусово (`set_state focus`).
+- **Миші немає.** Клавіатура є лише в невидимому атласі (`press`, `type`); hover і pressed ставляться
+  примусово (`set_state`).
 - **MCP-скріншоти не порівнюються:** вони для перегляду. Порівняння пікселів — у розділі
   «Візуальна перевірка»; MCP-інструмента для його звіту немає. Контейнера й CI для нього теж немає.
 
@@ -466,14 +523,10 @@ claude mcp add --scope user atlas -- atlas-mcp       # для всіх проє�
 - **Rust-runner і KN-бібліотеки.** Ідея: `shell-kn` / `atlas-kn` як KN-бібліотеки з `@CName`,
   тонкий Rust-runner з CLI, watch і relink. Причина відкладання: поточний Kotlin/Native
   executable достатній; hot reload = перезапуск процесу, і цього досить.
-- **Декоратор теми.** Ідея: тема stories задається ззовні лямбдою (`KnTheme` споживача), а
-  Atlas не знає про токени ui kit. Перемикач Light/Dark — через цю лямбду.
 - **Пошук** по stories у сайдбарі.
 - **Kotlin-сніпет** під контролами, що оновлюється разом із значеннями.
 - **Pan/zoom** канвас (як у `mockups/overview.html`) і групування варіантів.
-- **UI kit** (`Button`/`Label`/`Slider` з варіантами) і переведення stories на нього.
 - **KSP** для генерації args.
-- **`play { }`** — сценарії взаємодії в DSL story.
 - **Node-тести** на основі stories (дамп дерева GTK для кожної комбінації).
 
 Зберігаємо з дизайну: Atlas ізольований від ui kit і його тем, stories не тягнуть сервіси

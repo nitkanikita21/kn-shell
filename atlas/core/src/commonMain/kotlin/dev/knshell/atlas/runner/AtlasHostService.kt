@@ -1,5 +1,8 @@
 package dev.knshell.atlas.runner
 
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import dev.knshell.atlas.core.StoryGroup
 import dev.knshell.atlas.core.entry.MatrixView
@@ -11,8 +14,12 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 class AtlasHostService(
-    val groups: List<StoryGroup>
+    val groups: List<StoryGroup>,
+    val environments: List<AtlasEnvironment> = emptyList(),
 ) {
+    /** The environment the preview shows stories in; `null` when the catalog supplies none. */
+    var environment by mutableStateOf(environments.firstOrNull())
+
     private val _selection = MutableStateFlow<Selection?>(null)
     val selection: StateFlow<Selection?> = _selection.asStateFlow()
 

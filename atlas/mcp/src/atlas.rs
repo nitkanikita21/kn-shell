@@ -61,6 +61,8 @@ struct Session {
     story: Option<String>,
     /// The matrix view, when the story is a matrix.
     view: Option<String>,
+    /// The environment of the preview, when the catalog has environments.
+    environment: Option<String>,
     /// Arg values by name, as the atlas reports them.
     args: serde_json::Map<String, Value>,
 }
@@ -523,6 +525,11 @@ impl Supervisor {
                 command.env_remove(key);
             }
         }
+        match &state.display {
+            // The keys of the private display, so that the atlas can press them.
+            Some(display) if !visible => command.env("HEADLESS_COMPOSITOR_KEYS", display.keys_socket()),
+            _ => command.env_remove("HEADLESS_COMPOSITOR_KEYS"),
+        };
         for (key, value) in &self.config.atlas_env {
             command.env(key, value);
         }
@@ -643,7 +650,7 @@ impl Supervisor {
             .ok_or_else(|| "response has neither result nor error".to_owned())
     }
 
-    /// Reads the story, matrix view and arg values of the running atlas. Empty when no atlas runs, when
+    /// Reads the story, matrix view, environment and arg values of the running atlas. Empty when no atlas runs, when
     /// nothing is selected, or when the atlas does not answer: then there is nothing to put back.
     async fn snapshot(&self, state: &mut State) -> Session {
         let mut session = Session::default();
@@ -661,6 +668,7 @@ impl Supervisor {
         };
         session.story = selected["name"].as_str().map(str::to_owned);
         session.view = selected["view"].as_str().map(str::to_owned);
+        session.environment = selected["environment"].as_str().map(str::to_owned);
         if let Ok(answer) = self.atlas_call(state, "get_args", json!({})).await {
             for arg in answer["args"].as_array().into_iter().flatten() {
                 if let (Some(name), Some(value)) = (arg["name"].as_str(), arg.get("value")) {
@@ -684,6 +692,11 @@ impl Supervisor {
             return restored;
         }
         restored.story = Some(story);
+        if let Some(name) = session.environment {
+            if let Err(error) = self.atlas_call(state, "set_environment", json!({ "name": name })).await {
+                restored.notes.push(format!("could not set the environment {name}: {error}"));
+            }
+        }
         if let Some(view) = session.view {
             if let Err(error) = self.atlas_call(state, "set_view", json!({ "view": view })).await {
                 restored.notes.push(format!("could not set the view {view}: {error}"));

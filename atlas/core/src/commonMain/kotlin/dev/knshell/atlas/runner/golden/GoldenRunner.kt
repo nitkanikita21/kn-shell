@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------------
-// The window of a golden run: one story at a time, alone on a fixed neutral stage. No sidebar, no
-// args panel and no AtlasTheme: what the picture shows is what the story renders.
+// The window of a golden run: one case at a time, alone on a fixed neutral stage. No sidebar, no
+// args panel and no AtlasTheme: what a picture shows is what the story and its environment render.
+// After the first picture come the forced states and the story's `play` script.
 // ---------------------------------------------------------------------------
 
 @file:OptIn(ExperimentalForeignApi::class)
@@ -13,13 +14,18 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.knshell.atlas.core.StoryGroup
+import dev.knshell.atlas.play.PlayDriver
+import dev.knshell.atlas.play.PlayFailure
+import dev.knshell.atlas.play.PlayScope
+import dev.knshell.atlas.runner.AtlasEnvironment
+import dev.knshell.atlas.runner.ui.Decorated
 import dev.knshell.compose.Align
 import dev.knshell.compose.Box
 import dev.knshell.compose.Color
 import dev.knshell.compose.Column
+import dev.knshell.compose.Key
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.Scroll
-import dev.knshell.compose.StyleReset
 import dev.knshell.compose.align
 import dev.knshell.compose.background
 import dev.knshell.compose.expand
@@ -29,7 +35,10 @@ import dev.knshell.compose.runComposeWindow
 import dev.knshell.compose.testTag
 import dev.knshell.compose.weight
 import dev.knshell.inspect.InspectException
+import dev.knshell.inspect.InspectNode
 import dev.knshell.inspect.Inspector
+import dev.knshell.inspect.InteractionState
+import dev.knshell.inspect.VirtualKeyboard
 import dev.knshell.inspect.disableUiTransitions
 import dev.knshell.inspect.windowInspector
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -51,10 +60,17 @@ private const val WINDOW_HEIGHT = 960
 private const val ATTEMPT_PAUSE_MS = 20L
 private const val ATTEMPTS = 100
 
+/** The time a key press needs to travel from the compositor to the widgets. */
+private const val EVENT_MS = 40L
+
 /** Runs the golden check or record described by [options] and ends the process with its status. */
-internal fun runGolden(stories: List<StoryGroup>, options: GoldenOptions): Nothing {
+internal fun runGolden(
+    stories: List<StoryGroup>,
+    environments: List<AtlasEnvironment>,
+    options: GoldenOptions,
+): Nothing {
     val cases = try {
-        goldenCases(stories, options.filter)
+        goldenCases(stories, options.filter, environments)
     } catch (e: IllegalArgumentException) {
         println("golden: ${e.message}")
         exit(2)
@@ -64,6 +80,7 @@ internal fun runGolden(stories: List<StoryGroup>, options: GoldenOptions): Nothi
 
     var shown by mutableStateOf<GoldenCase?>(null)
     val inspector = windowInspector()
+    val keyboard = VirtualKeyboard.fromEnvironment()
 
     // Outside the composition: a story that breaks it must still be reported.
     launchOnUiThread {
@@ -74,7 +91,7 @@ internal fun runGolden(stories: List<StoryGroup>, options: GoldenOptions): Nothi
                 binary = fileStamp("/proc/self/exe").orEmpty(),
                 capture = { case ->
                     shown = case
-                    capture(inspector, case)
+                    shoot(inspector, keyboard, case)
                 },
                 environment = {
                     // The fonts are chosen by whoever started the run; see the Gradle plugin.
@@ -99,7 +116,7 @@ internal fun runGolden(stories: List<StoryGroup>, options: GoldenOptions): Nothi
 }
 
 @Composable
-private fun GoldenStage(case: GoldenCase?) {
+internal fun GoldenStage(case: GoldenCase?) {
     Column(modifier = Modifier.expand().background(Stage, transitionMs = 0)) {
         // The scroll gives a story its natural size, whatever the window offers.
         Scroll(modifier = Modifier.weight().hExpand(), horizontal = true, vertical = true) {
@@ -107,8 +124,11 @@ private fun GoldenStage(case: GoldenCase?) {
             Box(Modifier.align(h = Align.Start, v = Align.Start)) {
                 if (case != null) {
                     key(case.id) {
-                        // The same boundary as in the preview, so both show the same story.
-                        StyleReset(Modifier.align(h = Align.Start, v = Align.Start).testTag(tagOf(case))) {
+                        // The same surroundings as in the preview, so both show the same story.
+                        Decorated(
+                            case.environment,
+                            Modifier.align(h = Align.Start, v = Align.Start).testTag(tagOf(case)),
+                        ) {
                             case.Content()
                         }
                     }
@@ -121,17 +141,79 @@ private fun GoldenStage(case: GoldenCase?) {
 /** Per case, so that the widgets of the previous one can never be taken for this one. */
 private fun tagOf(case: GoldenCase): String = "golden:${case.id}"
 
+/** The first picture of [case], then one per forced state, then its script with its snapshots. */
+internal suspend fun shoot(inspector: Inspector, keyboard: VirtualKeyboard?, case: GoldenCase): CaseShots {
+    val stage = tagOf(case)
+    val base = capture(inspector, stage)
+    val extra = mutableListOf<Pair<String, ByteArray>>()
+    var failure: String? = null
+    val driver = StageDriver(inspector, keyboard, stage) { name, picture -> extra += name to picture }
+    try {
+        for (state in case.entry.states) {
+            val target = driver.tree().find(case.entry.stateTarget)
+                ?: throw PlayFailure("states: nothing is tagged ${case.entry.stateTarget}")
+            inspector.setState(target.id, state, true)
+            driver.settle()
+            extra += state.name.lowercase() to capture(inspector, stage)
+            inspector.setState(target.id, state, false)
+            driver.settle()
+        }
+        case.entry.play?.let { play -> with(play) { PlayScope(driver).run() } }
+    } catch (e: PlayFailure) {
+        failure = e.message
+    } catch (e: InspectException) {
+        failure = e.message
+    }
+    return CaseShots(base, extra, failure)
+}
+
+private fun InspectNode.find(tag: String): InspectNode? =
+    if (testTag == tag) this else children.firstNotNullOfOrNull { it.find(tag) }
+
+/** Drives the story on the stage for `play`; targets are looked up inside the stage only. */
+private class StageDriver(
+    private val inspector: Inspector,
+    private val keyboard: VirtualKeyboard?,
+    private val stage: String,
+    private val keep: (String, ByteArray) -> Unit,
+) : PlayDriver {
+    override fun tree(): InspectNode = checkNotNull(inspector.tree().find(stage)) { "the story left the stage" }
+
+    override suspend fun settle() {
+        delay(EVENT_MS)
+        inspector.awaitIdle()
+    }
+
+    override fun click(id: Int) = inspector.click(id)
+
+    override fun focus(id: Int) = inspector.focus(id)
+
+    override fun setState(id: Int, state: InteractionState, on: Boolean) = inspector.setState(id, state, on)
+
+    override fun setText(id: Int, text: String) = inspector.setText(id, text)
+
+    override fun press(key: Key, shift: Boolean, ctrl: Boolean, alt: Boolean, meta: Boolean) =
+        keys().press(key, shift, ctrl, alt, meta)
+
+    override fun type(text: String) = keys().type(text)
+
+    private fun keys(): VirtualKeyboard =
+        keyboard ?: throw PlayFailure("no keyboard: the run is not under headless-compositor")
+
+    override suspend fun snapshot(name: String) = keep(name, capture(inspector, stage))
+}
+
 /**
- * The PNG of the story on the stage, once it is painted and stays the same. Throws when it never
+ * The PNG of the widget tagged [tag], once it is painted and stays the same. Throws when it never
  * is: it renders nothing, it keeps changing, or it does not fit the window.
  */
-private suspend fun capture(inspector: Inspector, case: GoldenCase): ByteArray {
+private suspend fun capture(inspector: Inspector, tag: String): ByteArray {
     var previous: ByteArray? = null
     var problem = "nothing was painted"
     repeat(ATTEMPTS) {
         inspector.awaitIdle()
         try {
-            val node = inspector.find(tagOf(case))
+            val node = inspector.find(tag)
             val stage = inspector.tree().bounds
             val bounds = node.bounds
             check(bounds.x + bounds.width <= stage.width && bounds.y + bounds.height <= stage.height) {

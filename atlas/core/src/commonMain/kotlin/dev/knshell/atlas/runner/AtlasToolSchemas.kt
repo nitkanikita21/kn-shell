@@ -49,8 +49,38 @@ internal val AtlasTools: JsonArray = JsonArray(
             required = listOf("view"),
         ),
         tool(
+            "set_environment",
+            "Show the stories in another environment of the catalog, such as its light theme.",
+            mapOf("name" to field("string", "Environment name, as the sidebar shows it")),
+            listOf("name"),
+        ),
+        tool(
+            "focus",
+            "Give the keyboard focus to a widget.",
+            mapOf("target" to TARGET),
+            listOf("target"),
+        ),
+        tool(
+            "press",
+            "Press a key (Enter, Space, Escape, Tab, Up, Down, Left, Right, Home, End, PageUp, PageDown, Backspace, Delete, F1-F12) in the hidden atlas.",
+            mapOf(
+                "key" to field("string", "Key name"),
+                "shift" to field("boolean", "Hold Shift"),
+                "ctrl" to field("boolean", "Hold Ctrl"),
+                "alt" to field("boolean", "Hold Alt"),
+                "meta" to field("boolean", "Hold Super"),
+            ),
+            listOf("key"),
+        ),
+        tool(
+            "type",
+            "Type text (letters, digits, spaces and - . , /) into the focused widget of the hidden atlas.",
+            mapOf("text" to field("string", "Text to type")),
+            listOf("text"),
+        ),
+        tool(
             "tree",
-            "Compact JSON of the widget tree (id, type, testTag, bounds, text, state). Optionally only the subtree of a target.",
+            "Compact JSON of the widget tree (id, type, testTag, bounds, text, ARIA role, name, states, focus). Optionally only the subtree of a target.",
             mapOf(
                 "target" to TARGET,
                 "depth" to field("integer", "How many levels of children to include; 0 is the node alone. Default: all"),

@@ -9,6 +9,8 @@
 
 package dev.knshell.inspect
 
+import dev.knshell.compose.focusFirstNow
+import kn.gtk.gtk_widget_grab_focus
 import kn.gtk.cairo_version_string
 import kn.gtk.g_type_name_from_instance
 import kn.gtk.gtk_get_major_version
@@ -101,6 +103,14 @@ class Inspector internal constructor(
                 }
                 node.inlineStyle.interaction.invokeClick()
             }
+        }
+    }
+
+    /** Gives the keyboard focus to the widget, or to the first focusable widget inside it. */
+    fun focus(id: Int) {
+        val node = actionable(id)
+        if (gtk_widget_grab_focus(node.widget) == 0 && !focusFirstNow(node.widget)) {
+            throw InspectException("node #$id (${node.typeName()}) takes no focus")
         }
     }
 

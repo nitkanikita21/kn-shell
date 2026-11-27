@@ -312,6 +312,11 @@ internal class ShellRuntime private constructor() {
         }
     }
 
+    /** Closes every window; the main loop ends with the last one. */
+    fun closeAll() {
+        windows.toList().forEach(::closeWindow)
+    }
+
     private fun closeWindow(record: RuntimeWindow) {
         if (record.closed || windows.none { it === record }) return
         gtk_window_close(record.window)

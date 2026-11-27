@@ -176,6 +176,7 @@ async fn proxies_text_and_image_results() {
             "list_stories",
             "select_story",
             "set_view",
+            "set_environment",
             "get_args",
             "set_args"
         ]
@@ -245,7 +246,7 @@ async fn missing_binary_lists_no_atlas_tools() {
 }
 
 #[tokio::test]
-async fn reload_reopens_the_story_view_and_args() {
+async fn reload_reopens_the_story_view_environment_and_args() {
     let sandbox = Sandbox::new();
     sandbox.install_atlas();
     let supervisor = Supervisor::new(sandbox.config("normal"));
@@ -253,6 +254,7 @@ async fn reload_reopens_the_story_view_and_args() {
 
     supervisor.call_atlas("select_story", args(json!({ "story": "Matrix/Grid" }))).await;
     supervisor.call_atlas("set_view", args(json!({ "view": "table" }))).await;
+    supervisor.call_atlas("set_environment", args(json!({ "name": "Light" }))).await;
     supervisor
         .call_atlas("set_args", args(json!({ "values": { "text": "Hi", "radius": 12 } })))
         .await;
@@ -274,6 +276,7 @@ async fn reload_reopens_the_story_view_and_args() {
         .unwrap();
     assert_eq!(matrix["selected"], json!(true));
     assert_eq!(matrix["view"], json!("table"));
+    assert_eq!(matrix["environment"], json!("Light"));
 
     let args_now = supervisor.call_atlas("get_args", None).await;
     let args_now: Value = serde_json::from_str(&all_text(&as_json(&args_now.result))).unwrap();

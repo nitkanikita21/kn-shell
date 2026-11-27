@@ -28,6 +28,9 @@ enum class CaseStatus {
     /** The story could not be rendered. */
     Error,
 
+    /** The story's `play` script failed. */
+    PlayFailed,
+
     /** A golden that no story produces. */
     Orphan,
 }

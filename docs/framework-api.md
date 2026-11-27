@@ -78,6 +78,27 @@ GTK only reaches those from a display-wide provider. That provider stays private
 is scoped by the widget's generated class (`.knm-N`) and removed when the widget is finalized, so a
 sub-node rule never leaks to other widgets and does not outlive its widget.
 
+### Accessibility, keyboard and focus
+
+| Symbol | Purpose |
+| --- | --- |
+| `Modifier.semantics(Semantics(…))` | ARIA role, name, description, states (`checked`, `pressed`, `expanded`, `selected`, `disabled`, `busy`, `hidden`, `invalid`, `required`, `modal`), `hasPopup`, `orientation`, value range and relations (`labelledBy`, `describedBy`, `controls`, `activeDescendant`), written to GTK's accessibility tree (AT-SPI). A field left `null` is not claimed. |
+| `SemanticsRef`, `Modifier.semanticsRef(ref)` | Names a widget for relations; `ref.announce(message, assertive)` speaks through it. |
+| `Modifier.mergedSemantics()` | Hides a child that only repeats its parent's name. |
+| `Modifier.onKey(capture) { event -> Boolean }` | Key presses reaching the widget or its descendants; `true` consumes. `capture` runs before the children. `KeyEvent(key, character, shift, ctrl, alt, meta)`. |
+| `Modifier.focusable(focusable, autofocus)` | Puts a widget in (or, with `false`, takes it out of) the Tab order. Roving focus is one `focusable(true)` item among `false` ones. |
+| `FocusRequester`, `Modifier.focusRequester(r)`, `Modifier.onFocusChange { }` | Moving focus from code and following it. |
+| `FocusScope(modifier, trap, autoFocus, restoreFocus) { }` | A group that focuses its first widget, optionally keeps Tab inside, and gives the focus back when it leaves the composition. |
+
+### Layers and popups
+
+| Symbol | Purpose |
+| --- | --- |
+| `OverlayHost { }`, `Portal { }` | `Portal` draws its content over everything in the nearest `OverlayHost` (dialogs, toasts), with the composition locals of the place it is declared in. |
+| `Popup(open, onDismiss, side, align, autoFocus, dismissible, content) { anchor }` (`dev.knshell.shell`) | A popover of the compositor, so it is not clipped by a layer-shell bar. The caller owns `open`; Escape and an outside click call `onDismiss`. Content sees the caller's composition locals; focus goes in and comes back. |
+
+A child added later to a `Stack` or `Overlay` paints at its place in composition order.
+
 ### Animated size (Compose-owned)
 
 The size animation is a **`Modifier`** — there is no dedicated component. `animatedWidth` /
@@ -119,7 +140,7 @@ Benchmark: `scripts/anim-bench.sh` (`--help`).
 | `window(WindowSpec) { … }` | regular toplevel |
 | `Shell.services` | same object as `Services` |
 | `Shell.Hyprland.focusWorkspace/spawn/dispatch` | compositor actions |
-| `HoverPopover { trigger }` | popover with its own Compose composition |
+| `HoverPopover { trigger }`, `Popup(…)` | popovers with their own Compose composition (see [Layers and popups](#layers-and-popups)) |
 | `BarAnchor`, `BarLayer`, `ExclusiveZone`, `Margins` | window spec types (`keyboardMode` takes a
   `GTK_LAYER_SHELL_KEYBOARD_MODE_*` constant, not a wrapper type) |
 
@@ -162,7 +183,8 @@ MCP daemon (`atlas/mcp`) is its main user. The API is plain Kotlin; there is no 
 | `Modifier.testTag(name)` (`dev.knshell.compose`) | Names a node so `Inspector.find` can address it. No visual effect. Tags are not checked for uniqueness; a lookup by a shared tag throws. |
 | `windowInspector()` | Inspector of the first window of `ShellRuntime`. GTK is not touched until the first call on the result. |
 | `Inspector` | Reads, acts and renders one window (see below). Its constructor is internal; get it from `windowInspector()`. |
-| `InspectNode` | One node of the tree: `id`, `type`, `testTag`, `bounds` (`NodeBounds`, relative to the composition root), `cssClasses`, `text`, `checked`, `value`, `selected`, `options`, `visible`, `sensitive`, `children`. |
+| `InspectNode` | One node of the tree: `id`, `type`, `testTag`, `bounds` (`NodeBounds`, relative to the composition root), `cssClasses`, `text`, `checked`, `value`, `selected`, `options`, `visible`, `sensitive`, `children`, `role`, `name`, `description`, `states`, `focused`. |
+| `VirtualKeyboard` | Presses keys through `headless-compositor`; `VirtualKeyboard.fromEnvironment()` is `null` anywhere else. |
 | `InteractionState` | `Hover`, `Pressed`, `Focus`: the states `setState` can force. |
 | `InspectException` | Every refused request: unknown or ambiguous target, wrong node type, hidden or insensitive node, value out of range. |
 | `LineSocketServer(path, handler)` | Newline-delimited request/response server on a unix socket (mode `0600`), served by the GLib main loop. `start(): Boolean` binds (and returns `false` with a log line on failure); `stop()` closes everything and removes the socket file. The framework does not know the payload; the handler decides what a line means. |
@@ -173,13 +195,14 @@ MCP daemon (`atlas/mcp`) is its main user. The API is plain Kotlin; there is no 
 | --- | --- |
 | `tree(): InspectNode` | Whole composition, depth first, with ids and testTags. |
 | `find(target: String): InspectNode` | Node named by a decimal id or a testTag. Throws when nothing or several nodes match. |
+| `focus(id)` | Gives the keyboard focus to the widget or its first focusable descendant. |
 | `click(id)` | Clicks a `Button` (emits `clicked`), or runs the `Modifier.onClick` handler of another node. Throws if the node has no click handler. |
 | `setText(id, text)` | Replaces the text of an `Entry`; its `onValueChange` fires. |
 | `setChecked(id, checked)` | Toggles a `Switch`; its `onCheckedChange` fires. |
 | `setValue(id, value)` | Moves a `Slider`. Values outside its range, or NaN, are rejected. |
 | `select(id, index)` | Selects an item of a `DropDown`. Indices outside its options are rejected. |
 | `setState(id, state, on)` | Sets or clears GTK state flags: hover (prelight), pressed (active), focus (focused, focus-visible). `onHover` callbacks are not fired. |
-| `screenshot(id: Int? = null): ByteArray` | PNG of the composition root, or of a node's rectangle. The area is cropped from the whole window's render, so neighbouring backgrounds are included. Popups and popovers are separate surfaces and are not in it. |
+| `screenshot(id: Int? = null): ByteArray` | PNG of the composition root, or of a node's rectangle. The area is cropped from the render of the node's surface, so neighbouring backgrounds are included. A popover is its own surface: a node inside one is rendered from it, and it is not part of a picture of the window. |
 | `suspend awaitIdle()` | Waits until pending recomposition and layout are done. |
 
 Actions go through the same GTK signals a user input would emit, so Compose callbacks fire. A node

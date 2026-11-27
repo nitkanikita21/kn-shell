@@ -8,6 +8,9 @@
 
 package dev.knshell.atlas.runner
 
+import kotlinx.coroutines.delay
+import dev.knshell.inspect.VirtualKeyboard
+import dev.knshell.compose.Key
 import dev.knshell.atlas.core.arg.Arg
 import dev.knshell.atlas.core.arg.LiveArgs
 import dev.knshell.atlas.core.entry.Variants
@@ -37,6 +40,8 @@ class AtlasCommands(
     private val service: AtlasHostService,
     private val inspector: Inspector,
     private val idle: suspend () -> Unit = inspector::awaitIdle,
+    /** Present when the atlas runs under headless-compositor, which can press keys. */
+    private val keyboard: VirtualKeyboard? = VirtualKeyboard.fromEnvironment(),
 ) {
     /** One request line in, one answer line out (compact JSON, no raw newline). Never throws except on cancellation. */
     suspend fun handle(line: String): String {
@@ -86,6 +91,10 @@ class AtlasCommands(
         "set_args" -> setArgs(args)
         "reset_args" -> resetArgs()
         "set_view" -> setView(args)
+        "set_environment" -> setEnvironment(args)
+        "focus" -> act(args) { id -> inspector.focus(id) }
+        "press" -> press(args)
+        "type" -> typeText(args)
         "tree" -> tree(args)
         "screenshot" -> screenshot(args)
         "click" -> act(args) { id -> inspector.click(id) }
@@ -106,7 +115,9 @@ class AtlasCommands(
                 buildJsonObject {
                     put("name", "${group.title}/${entry.name}")
                     put("kind", if (entry is Variants) "variants" else "story")
-                    put("selected", current != null && current.group === group && current.entry === entry)
+                    val selected = current != null && current.group === group && current.entry === entry
+                    put("selected", selected)
+                    if (selected) service.environment?.let { put("environment", it.name) }
                     if (entry is Variants) {
                         put("view", service.viewOf(entry).name.lowercase())
                         put("views", JsonArray(entry.views.map { JsonPrimitive(it.name.lowercase()) }))
@@ -172,6 +183,42 @@ class AtlasCommands(
         service.setView(matrix, view)
         idle()
         return listStories()
+    }
+
+    private suspend fun setEnvironment(args: JsonObject): List<JsonObject> {
+        val wanted = args.str("name")
+        val found = service.environments.firstOrNull { it.name.equals(wanted, ignoreCase = true) }
+            ?: throw ToolError(
+                "\"name\" must be one of ${service.environments.joinToString { it.name }.ifEmpty { "(none)" }}",
+            )
+        service.environment = found
+        idle()
+        return json(buildJsonObject { put("environment", found.name) })
+    }
+
+    private suspend fun press(args: JsonObject): List<JsonObject> {
+        val name = args.str("key")
+        val key = Key.entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+            ?.takeUnless { it == Key.Character || it == Key.Unknown }
+            ?: throw ToolError("unknown key \"$name\"; use type for printing keys")
+        fun held(modifier: String) = args.primitive(modifier)?.booleanOrNull == true
+        keys().press(key, held("shift"), held("ctrl"), held("alt"), held("meta"))
+        return afterKeys()
+    }
+
+    private suspend fun typeText(args: JsonObject): List<JsonObject> {
+        keys().type(args.str("text"))
+        return afterKeys()
+    }
+
+    private fun keys(): VirtualKeyboard = keyboard
+        ?: throw ToolError("keys work only in the hidden atlas, which runs under headless-compositor")
+
+    private suspend fun afterKeys(): List<JsonObject> {
+        // The events travel through the compositor before the widgets see them.
+        delay(KEY_TRAVEL_MS)
+        idle()
+        return json(buildJsonObject { put("ok", true) })
     }
 
     private fun requireSelection(): Selection =
@@ -247,6 +294,11 @@ class AtlasCommands(
         options?.let { put("options", JsonArray(it.map { option -> JsonPrimitive(option) })) }
         put("visible", visible)
         put("sensitive", sensitive)
+        put("role", role)
+        this@toJson.name?.let { put("name", it) }
+        this@toJson.description?.let { put("description", it) }
+        if (states.isNotEmpty()) put("states", JsonObject(states.mapValues { JsonPrimitive(it.value) }))
+        if (focused) put("focused", true)
         if (children.isNotEmpty() && depth > 0) {
             put("children", JsonArray(children.map { it.toJson(depth - 1) }))
         }
@@ -334,6 +386,9 @@ class AtlasCommands(
     private fun json(value: JsonElement): List<JsonObject> =
         listOf(text(Json.encodeToString(JsonElement.serializer(), value)))
 }
+
+/** How long a key press needs to reach the widgets. */
+private const val KEY_TRAVEL_MS = 40L
 
 /** A request the tool cannot carry out: bad or missing arguments, no selection, unknown names. */
 private class ToolError(message: String) : Exception(message)

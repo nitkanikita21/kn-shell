@@ -11,6 +11,7 @@ import dev.knshell.atlas.core.entry.MatrixView
 import dev.knshell.atlas.core.entry.Story
 import dev.knshell.atlas.core.entry.StoryEntry
 import dev.knshell.atlas.core.entry.Variants
+import dev.knshell.atlas.runner.AtlasEnvironment
 import dev.knshell.atlas.runner.Selection
 import dev.knshell.atlas.runner.golden.CaseStatus
 import dev.knshell.atlas.runner.golden.GoldenController
@@ -44,6 +45,9 @@ import dev.knshell.ui.primitives.Space
 @Composable
 fun Sidebar(
     groups: List<StoryGroup>,
+    environments: List<AtlasEnvironment>,
+    environment: AtlasEnvironment?,
+    onEnvironment: (AtlasEnvironment) -> Unit,
     selection: Selection?,
     onSelect: (StoryGroup, StoryEntry) -> Unit,
     viewOf: (Variants) -> MatrixView,
@@ -62,12 +66,34 @@ fun Sidebar(
     }
 
     Column(modifier = frame) {
+        if (environments.size > 1) {
+            Row(spacing = 6, modifier = with(AtlasTheme) { Modifier.hExpand().padding(all = 8) }) {
+                environments.forEach { choice ->
+                    ActionButton(choice.name, "environment:${choice.name}", active = choice === environment) {
+                        onEnvironment(choice)
+                    }
+                }
+            }
+        }
         GoldenPanel(golden)
         Scroll(modifier = Modifier.weight()) {
             Column(modifier = Modifier.hExpand()) {
-                groups.forEach { group ->
-                    val entries = group.entries.filter { !onlyChanged || "${group.title}/${it.name}" in statuses }
-                    if (entries.isNotEmpty()) {
+                // Categories in the order the catalog first names them.
+                groups.groupBy { it.category }.forEach { (category, members) ->
+                    val visible = members.map { group ->
+                        group to group.entries.filter { !onlyChanged || "${group.title}/${it.name}" in statuses }
+                    }.filter { it.second.isNotEmpty() }
+                    if (category != null && visible.isNotEmpty()) {
+                        key("category:$category") {
+                            Label(
+                                category,
+                                align = 0f,
+                                modifier = Modifier.padding(horizontal = 8, vertical = 4)
+                                    .textColor(AtlasTheme.dim, transitionMs = 0).testTag("category:$category"),
+                            )
+                        }
+                    }
+                    visible.forEach { (group, entries) ->
                         key(group.title) {
                             StoryGroupRow(group, entries, statuses, selection, onSelect, viewOf)
                         }

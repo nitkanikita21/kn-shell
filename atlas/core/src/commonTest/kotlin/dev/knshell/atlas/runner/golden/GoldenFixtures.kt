@@ -47,11 +47,24 @@ class Workspace {
             options = GoldenOptions(goldens, output, record, filter),
             cases = goldenCases(listOf(sampleGroup()), filter),
             binary = binary,
-            capture = { capture(it) },
+            capture = { CaseShots(capture(it)) },
             environment = { environment },
             log = { log += it },
         ).run()
     }
+
+    /** A session over any cases, with the pictures given whole. */
+    fun runSession(cases: List<GoldenCase>, record: Boolean, capture: (GoldenCase) -> CaseShots): GoldenReport =
+        runBlocking {
+            GoldenSession(
+                options = GoldenOptions(goldens, output, record),
+                cases = cases,
+                binary = "build-1",
+                capture = { capture(it) },
+                environment = { sampleEnvironment },
+                log = { log += it },
+            ).run()
+        }
 
     fun golden(case: GoldenCase): ByteArray? = readBytes("$goldens/${case.path}")
 }

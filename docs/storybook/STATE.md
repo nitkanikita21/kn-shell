@@ -1,12 +1,12 @@
 # Atlas: стан роботи (передача на інший комп'ютер)
 
-Знімок на 2026-11-26, гілка `atlas`. Опис того, як усе влаштовано, — у [`README.uk.md`](README.uk.md);
+Знімок на 2026-11-27, гілка `ui-kit` (від `atlas`). Опис того, як усе влаштовано, — у [`README.uk.md`](README.uk.md);
 тут лише те, що потрібно, щоб продовжити.
 
 ## Запуск на новій машині
 
 ```bash
-git checkout atlas && git pull
+git checkout ui-kit && git pull
 
 ./gradlew :demo:shell-app:runAtlas                              # каталог у вікні
 cargo install --path atlas/mcp                             # MCP-тулза → ~/.cargo/bin/atlas-mcp
@@ -28,17 +28,17 @@ JDK 21, `pkg-config`. `local.properties` не комітиться (машинн
 
 ```bash
 ./gradlew :framework:linuxX64Test :atlas:core:linuxX64Test :icons:core:linuxX64Test   # без дисплея
-./gradlew :framework:linuxX64GraphicsTest :icons:core:linuxX64GraphicsTest            # GTK-тести
+./gradlew :framework:linuxX64GraphicsTest :atlas:core:linuxX64GraphicsTest :icons:core:linuxX64GraphicsTest   # GTK-тести
 ./gradlew :atlas:mcp:check :headless-compositor:check                                 # cargo test
 ./gradlew :demo:shell-app:atlasGoldenCheck                                                 # вигляд stories
 ```
 
-GTK-тести йдуть у графічній сесії, якщо вона є, а без неї самі запускаються під `headless-compositor`.
-Примусово без екрана: `env -u WAYLAND_DISPLAY -u DISPLAY ./gradlew …`. Будь-який інший клієнт можна
-запустити так: `headless-compositor -- <команда>`.
+GTK-тести завжди йдуть під `headless-compositor`: на робочому столі нічого не з'являється, а тести
+можуть натискати клавіші. Будь-який інший клієнт можна запустити так:
+`headless-compositor -- <команда>`.
 
-На 2026-11-27: `framework` 39 без дисплея і 124 графічні, `atlas:core` 114, `icons:core` 20 і 2,
-демон 23, композитор 4; без падінь.
+На 2026-11-27: `framework` 39 без дисплея і 131 графічний, `atlas:core` 122 і 1, `icons:core` 20 і 2,
+кіт 3, демон 23, композитор 6; без падінь.
 
 ## Що зроблено
 
@@ -87,11 +87,10 @@ GTK-тести йдуть у графічній сесії, якщо вона є
 ## Відомі обмеження і неперевірене
 
 - `reload` і `set_visible` перезапускають атлас, але вибрана story, вигляд матриці й значення args відновлюються демоном з нового атласу (`Session` у `atlas.rs`). Ті частини, яких у новій збірці немає, демон перелічує у відповіді.
-- Відкритий список `DropDown` і popover-и не потрапляють на скріншот і в `tree`; `set_state` не викликає
+- Відкритий список `DropDown` не потрапляє на скріншот і в `tree`; `set_state` не викликає
   `Modifier.onHover`.
 - `framework` і `atlas:core` не публікуються: інший репозиторій поки не отримає бібліотеки (відкладено).
   На другому справжньому проєкті тулза не перевірялась.
-- Порядок накладання в `Stack` / `Overlay` для пізніше доданих дітей не виправлений.
 - Закриття видимого вікна рукою перевірено лише тестом із фейковим атласом.
 - Тригер `HoverPopover` і `ShaderCanvas` виправлені без окремих тестів.
 

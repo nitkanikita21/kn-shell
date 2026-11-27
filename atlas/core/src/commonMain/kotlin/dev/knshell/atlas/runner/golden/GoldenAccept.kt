@@ -25,7 +25,8 @@ fun GoldenReport.acceptBlocker(scope: AcceptScope, binaryNow: String): String? =
     !finished -> "перевірка ще триває"
     binary != binaryNow -> "звіт застарів: атлас перезібрано, запусти перевірку знову"
     environmentDiffers && scope != AcceptScope.All -> "інше середовище: можна лише «Прийняти все»"
-    environmentDiffers && count(CaseStatus.Error) > 0 -> "інше середовище, а частина story впала: спершу виправ їх"
+    environmentDiffers && (count(CaseStatus.Error) > 0 || count(CaseStatus.PlayFailed) > 0) ->
+        "інше середовище, а частина story впала: спершу виправ їх"
     acceptable(scope).isEmpty() -> "немає чого приймати"
     else -> null
 }

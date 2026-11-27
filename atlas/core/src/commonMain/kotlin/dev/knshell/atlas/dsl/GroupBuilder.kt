@@ -1,5 +1,8 @@
 package dev.knshell.atlas.dsl
 
+import dev.knshell.atlas.core.entry.DEFAULT_STATE_TARGET
+import dev.knshell.atlas.play.Play
+import dev.knshell.inspect.InteractionState
 import dev.knshell.atlas.core.StoryGroup
 import dev.knshell.atlas.core.arg.Arg
 import dev.knshell.atlas.core.entry.MatrixView
@@ -12,11 +15,13 @@ import kotlin.properties.PropertyDelegateProvider
 import kotlin.properties.ReadOnlyProperty
 
 
-fun group(title: String, build: GroupBuilder.() -> Unit): StoryGroup =
-    GroupBuilder(title).apply(build).build()
+fun group(title: String, category: String? = null, build: GroupBuilder.() -> Unit): StoryGroup =
+    GroupBuilder(title, category).apply(build).build()
 
 @AtlasDsl
-class GroupBuilder internal constructor(private val title: String) {
+class GroupBuilder internal constructor(private val title: String, private val category: String?) {
+    private var docs: String? = null
+
     private val args = mutableListOf<Arg<*>>()
     private val pending = mutableListOf<() -> StoryEntry>()   // збираємо відкладено
     private var defaultRender: Render? = null
@@ -46,14 +51,33 @@ class GroupBuilder internal constructor(private val title: String) {
     // --- рендер ---
     fun render(block: Render) { defaultRender = block }
 
-    fun story(name: String, render: Render? = null) {
-        pending += { Story(name, render ?: needDefault(name)) }
+    /** What the component is for, shown beside its stories. */
+    fun docs(text: String) { docs = text.trimIndent().trim() }
+
+    /** A story with its own render, passed as a value. */
+    fun story(name: String, render: Render) = story(name, render = render, play = null)
+
+    /**
+     * A story. [states] adds golden pictures with those interaction states forced on the widget tagged
+     * [stateTarget]; [play] drives the story in the golden run and states what must be true.
+     */
+    fun story(
+        name: String,
+        states: List<InteractionState> = emptyList(),
+        stateTarget: String = DEFAULT_STATE_TARGET,
+        play: Play? = null,
+        render: Render? = null,
+    ) {
+        pending += { Story(name, render ?: needDefault(name), states, stateTarget, play) }
     }
 
     fun variants(
         name: String,
         render: Render? = null,
         view: MatrixView = MatrixView.Compose,
+        states: List<InteractionState> = emptyList(),
+        stateTarget: String = DEFAULT_STATE_TARGET,
+        play: Play? = null,
         build: VariantsBuilder.() -> Unit,
     ) {
         val vb = VariantsBuilder().apply(build)
@@ -62,7 +86,7 @@ class GroupBuilder internal constructor(private val title: String) {
             require(view.supports(vb.axes.size)) {
                 "[$title/$name] the ${view.title} view needs exactly 2 axes, the matrix has ${vb.axes.size}"
             }
-            Variants(name, vb.combos(), vb.axes.map { it.arg }, view, render ?: needDefault(name))
+            Variants(name, vb.combos(), vb.axes.map { it.arg }, view, render ?: needDefault(name), states, stateTarget, play)
         }
     }
 
@@ -74,6 +98,6 @@ class GroupBuilder internal constructor(private val title: String) {
         entries.groupBy { it.name.lowercase() }.values.forEach { dups ->
             check(dups.size == 1) { "[$title] duplicate story '${dups[0].name}' (names are case-insensitive)" }
         }
-        return StoryGroup(title, args.toList(), entries)
+        return StoryGroup(title, args.toList(), entries, category, docs)
     }
 }

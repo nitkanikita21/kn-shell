@@ -35,10 +35,11 @@ fun atlasMain(
     stories: List<StoryGroup>,
     args: Array<String> = emptyArray(),
     title: String = "Untitled",
+    environments: List<AtlasEnvironment> = emptyList(),
 ) {
-    parseGoldenOptions(args)?.let { runGolden(stories, it) }
+    parseGoldenOptions(args)?.let { runGolden(stories, environments, it) }
 
-    val service = AtlasHostService(stories)
+    val service = AtlasHostService(stories, environments)
     val env = getenv(STORY_ENV)?.toKString()
     val spec = parseStorySpec(args, env)
 
