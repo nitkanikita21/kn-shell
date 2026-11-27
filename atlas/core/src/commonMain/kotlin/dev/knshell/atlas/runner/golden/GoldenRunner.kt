@@ -90,6 +90,10 @@ internal fun runGolden(
                 cases = cases,
                 binary = fileStamp("/proc/self/exe").orEmpty(),
                 capture = { case ->
+                    // An empty stage first: focus left by the previous case must not mark this one.
+                    shown = null
+                    inspector.awaitIdle()
+                    inspector.resetFocus()
                     shown = case
                     shoot(inspector, keyboard, case)
                 },
@@ -200,26 +204,34 @@ private class StageDriver(
     private fun keys(): VirtualKeyboard =
         keyboard ?: throw PlayFailure("no keyboard: the run is not under headless-compositor")
 
-    override suspend fun snapshot(name: String) = keep(name, capture(inspector, stage))
+    override suspend fun snapshot(name: String, id: Int?) = keep(
+        name,
+        if (id == null) capture(inspector, stage) else steady(inspector) { inspector.screenshot(id) },
+    )
 }
 
 /**
- * The PNG of the widget tagged [tag], once it is painted and stays the same. Throws when it never
- * is: it renders nothing, it keeps changing, or it does not fit the window.
+ * The PNG of the stage content tagged [tag], once it is painted and stays the same. Throws when it
+ * never is: it renders nothing, it keeps changing, or it does not fit the window.
  */
-private suspend fun capture(inspector: Inspector, tag: String): ByteArray {
+private suspend fun capture(inspector: Inspector, tag: String): ByteArray = steady(inspector) {
+    val node = inspector.find(tag)
+    val stage = inspector.tree().bounds
+    val bounds = node.bounds
+    check(bounds.x + bounds.width <= stage.width && bounds.y + bounds.height <= stage.height) {
+        "the story is ${bounds.width}x${bounds.height} px, more than the ${stage.width}x${stage.height} px stage"
+    }
+    inspector.screenshot(node.id)
+}
+
+/** The first picture [shot] gives twice in a row. */
+private suspend fun steady(inspector: Inspector, shot: () -> ByteArray): ByteArray {
     var previous: ByteArray? = null
     var problem = "nothing was painted"
     repeat(ATTEMPTS) {
         inspector.awaitIdle()
         try {
-            val node = inspector.find(tag)
-            val stage = inspector.tree().bounds
-            val bounds = node.bounds
-            check(bounds.x + bounds.width <= stage.width && bounds.y + bounds.height <= stage.height) {
-                "the story is ${bounds.width}x${bounds.height} px, more than the ${stage.width}x${stage.height} px stage"
-            }
-            val picture = inspector.screenshot(node.id)
+            val picture = shot()
             if (previous?.contentEquals(picture) == true) return picture
             previous = picture
         } catch (e: InspectException) {

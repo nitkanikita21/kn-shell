@@ -58,6 +58,9 @@ import kn.gtk.gtk_range_set_value
 import kn.gtk.gtk_switch_set_active
 import kn.gtk.gtk_widget_get_height
 import kn.gtk.gtk_widget_get_root
+import kn.gtk.gtk_window_set_focus_visible
+import kn.gtk.gtk_window_set_focus
+import kn.gtk.GtkWindow
 import kn.gtk.gtk_widget_get_width
 import kn.gtk.gtk_widget_set_state_flags
 import kn.gtk.gtk_widget_unset_state_flags
@@ -112,6 +115,16 @@ class Inspector internal constructor(
         if (gtk_widget_grab_focus(node.widget) == 0 && !focusFirstNow(node.widget)) {
             throw InspectException("node #$id (${node.typeName()}) takes no focus")
         }
+    }
+
+    /**
+     * Takes the keyboard focus away from every widget and hides the focus ring again, as in a window
+     * nobody has used yet.
+     */
+    fun resetFocus() {
+        val window = gtk_widget_get_root(requireRoot().widget)?.reinterpret<GtkWindow>() ?: return
+        gtk_window_set_focus(window, null)
+        gtk_window_set_focus_visible(window, 0)
     }
 
     /** Replaces the text of an Entry; the Entry's `onValueChange` fires as it does for typing. */

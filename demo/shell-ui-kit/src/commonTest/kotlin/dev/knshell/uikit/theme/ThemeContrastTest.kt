@@ -38,6 +38,8 @@ class ThemeContrastTest {
         Triple("foreground on background", t.foreground, t.background),
         Triple("cardForeground on card", t.cardForeground, t.card),
         Triple("mutedForeground on card", t.mutedForeground, t.card),
+        Triple("mutedForeground on background", t.mutedForeground, t.background),
+        Triple("mutedForeground on secondary", t.mutedForeground, t.secondary),
         Triple("popoverForeground on popover", t.popoverForeground, t.popover),
         Triple("primaryForeground on primary", t.primaryForeground, t.primary),
         Triple("secondaryForeground on secondary", t.secondaryForeground, t.secondary),

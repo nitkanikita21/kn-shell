@@ -79,6 +79,7 @@ class GoldenRunnerGraphicsTest {
                     press(Key.Down)
                     expect("menu").focused()
                     snapshot("open")
+                    snapshot("menu", "menu")
                     press(Key.Escape)
                     expectAbsent("menu")
                     expect("target").focused()
@@ -116,7 +117,7 @@ class GoldenRunnerGraphicsTest {
         failure?.let { throw it }
         val (keys, broken) = shots
         assertNull(keys.playFailure)
-        assertEquals(listOf("hover", "on", "open"), keys.extra.map { it.first })
+        assertEquals(listOf("hover", "on", "open", "menu"), keys.extra.map { it.first })
         val pictures = keys.extra.toMap()
         assertFalse(keys.base.contentEquals(pictures.getValue("hover")), "hover must look different")
         assertFalse(keys.base.contentEquals(pictures.getValue("on")), "the toggled switch must look different")

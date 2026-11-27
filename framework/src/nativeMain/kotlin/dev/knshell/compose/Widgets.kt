@@ -16,7 +16,6 @@ import kotlinx.cinterop.CPointer
 import kotlinx.cinterop.ExperimentalForeignApi
 import kn.gtk.GtkOrientation
 import kn.gtk.cairo_t
-import kn.gtk.gtk_box_new
 
 @Composable
 private fun gtkBox(
@@ -29,10 +28,9 @@ private fun gtkBox(
     ComposeNode<GtkBoxNode, GtkApplier>(
         factory = {
             GtkBoxNode(
-                gtk_box_new(
+                newBox(
                     if (vertical) GtkOrientation.GTK_ORIENTATION_VERTICAL else GtkOrientation.GTK_ORIENTATION_HORIZONTAL,
-                    spacing,
-                )!!,
+                ),
             ).plain().also { it.configureBox(vertical, spacing, homogeneous) }
         },
         update = {
@@ -102,7 +100,7 @@ fun Box(modifier: Modifier = Modifier, content: @Composable () -> Unit = {}) {
     ComposeNode<GtkBoxNode, GtkApplier>(
         factory = {
             GtkBoxNode(
-                gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!,
+                newBox(GtkOrientation.GTK_ORIENTATION_VERTICAL),
             ).plain().also { it.configureBox(vertical = true, spacing = 0, homogeneous = false) }
         },
         update = {

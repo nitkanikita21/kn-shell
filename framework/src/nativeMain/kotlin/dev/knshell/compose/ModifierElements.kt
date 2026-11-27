@@ -198,3 +198,5 @@ internal data class DropDownPopoverElement(
     val rowPaddingVertical: Int,
     val rowHover: Color,
 ) : ModifierElement
+
+internal data class EnabledElement(val enabled: Boolean) : ModifierElement

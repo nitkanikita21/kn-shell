@@ -26,6 +26,7 @@ import kn.gtk.gtk_widget_set_margin_start
 import kn.gtk.gtk_widget_set_margin_top
 import kn.gtk.gtk_widget_set_opacity
 import kn.gtk.gtk_widget_set_overflow
+import kn.gtk.gtk_widget_set_sensitive
 import kn.gtk.gtk_widget_set_size_request
 import kn.gtk.gtk_widget_set_valign
 import kn.gtk.gtk_widget_set_vexpand
@@ -52,6 +53,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var requiredWidth = false
     var requiredHeight = false
     var opacity: Float? = null
+    var enabled: Boolean? = null
     var hexpand: Boolean? = null
     var vexpand: Boolean? = null
     var halign: UInt? = null
@@ -150,6 +152,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is AspectRatioElement -> Unit
 
             is OpacityElement -> opacity = element.value
+            is EnabledElement -> enabled = element.enabled
 
             is RadiusElement -> rules += "" to element.declarations
 
@@ -401,6 +404,14 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     } else if (fieldWritten(widget, OPACITY_KEY)) {
         gtk_widget_set_opacity(widget, 1.0)
         setFieldWritten(widget, OPACITY_KEY, false)
+    }
+
+    if (enabled != null) {
+        gtk_widget_set_sensitive(widget, if (enabled == true) 1 else 0)
+        setFieldWritten(widget, ENABLED_KEY, true)
+    } else if (fieldWritten(widget, ENABLED_KEY)) {
+        gtk_widget_set_sensitive(widget, 1)
+        setFieldWritten(widget, ENABLED_KEY, false)
     }
 
     transitions.forEach { (selector, properties) ->

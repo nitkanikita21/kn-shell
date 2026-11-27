@@ -38,7 +38,8 @@ interface PlayDriver {
 
     fun type(text: String)
 
-    suspend fun snapshot(name: String)
+    /** A picture of the stage, or of the widget [id] alone. */
+    suspend fun snapshot(name: String, id: Int?)
 }
 
 /**
@@ -74,8 +75,12 @@ class PlayScope internal constructor(private val driver: PlayDriver) {
     /** Waits for the UI to settle, for work a script did not start itself. */
     suspend fun settle() = driver.settle()
 
-    /** A golden picture of the stage at this point, named after the case and [name]. */
-    suspend fun snapshot(name: String) = driver.snapshot(name)
+    /**
+     * A golden picture at this point, named after the case and [name]: of the stage, or of the widget
+     * tagged [target], which is the way to picture the content of a popup.
+     */
+    suspend fun snapshot(name: String, target: String? = null) =
+        driver.snapshot(name, target?.let { find(it).id })
 
     /** Assertions on the widget tagged [target]. */
     fun expect(target: String): Expectation = Expectation(this, target, find(target))
@@ -85,6 +90,11 @@ class PlayScope internal constructor(private val driver: PlayDriver) {
     }
 
     internal fun fail(message: String): Nothing = throw PlayFailure("after $last: $message")
+
+    /** The focused widgets, named by their tag or type, for failure messages. */
+    internal fun focusedNodes(): String = nodes().filter { it.focused }
+        .joinToString { it.testTag ?: "an untagged ${it.type}${it.name?.let { name -> " \"$name\"" } ?: ""}" }
+        .ifEmpty { "nothing" }
 
     private suspend fun step(what: String, action: () -> Unit) {
         steps++
@@ -134,7 +144,12 @@ class Expectation internal constructor(
 
     fun text(text: String) = check("text", text, node.text)
 
-    fun focused(focused: Boolean = true) = check("focused", focused, node.focused)
+    fun focused(focused: Boolean = true): Expectation {
+        if (focused != node.focused) {
+            scope.fail("$target: expected focused $focused, got ${node.focused}; focus is on ${scope.focusedNodes()}")
+        }
+        return this
+    }
 
     fun enabled(enabled: Boolean = true) = check("enabled", enabled, node.sensitive)
 

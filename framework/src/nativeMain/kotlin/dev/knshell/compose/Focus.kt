@@ -32,7 +32,6 @@ import kn.gtk.gtk_window_list_toplevels
 import kn.gtk.g_object_ref
 import kn.gtk.g_object_unref
 import kn.gtk.g_signal_connect_data
-import kn.gtk.gtk_box_new
 import kn.gtk.gtk_event_controller_focus_new
 import kn.gtk.gtk_event_controller_key_new
 import kn.gtk.gtk_event_controller_set_propagation_phase
@@ -260,7 +259,7 @@ internal class PreviousFocus {
 }
 
 internal class GtkFocusScopeNode(private val previous: PreviousFocus, private val autoFocus: Boolean) :
-    GtkBoxNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!) {
+    GtkBoxNode(newBox(GtkOrientation.GTK_ORIENTATION_VERTICAL)) {
 
     var restores = true
     var traps = false

@@ -8,6 +8,11 @@ plugins {
     id("dev.knshell.atlas")
 }
 
+atlas {
+    // The example shell keeps its goldens at the root of the repository.
+    goldenDir = rootProject.file("atlas-goldens")
+}
+
 val paletteArchiveFile =
     rootProject.file(
         "palette-core/target/x86_64-unknown-linux-gnu/debug/libpalette_core.a",

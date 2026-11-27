@@ -2,6 +2,8 @@
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
+    // The catalog of the kit: stories in src/linuxX64Atlas/kotlin, goldens in atlas-goldens/.
+    id("dev.knshell.atlas")
 }
 
 kotlin {

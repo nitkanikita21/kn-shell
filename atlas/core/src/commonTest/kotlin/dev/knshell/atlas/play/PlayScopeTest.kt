@@ -34,7 +34,7 @@ class PlayScopeTest {
             if (key == Key.Right) selected = 2
         }
         override fun type(text: String) { log += "type $text" }
-        override suspend fun snapshot(name: String) { log += "snapshot $name" }
+        override suspend fun snapshot(name: String, id: Int?) { log += "snapshot $name ${id ?: "stage"}" }
     }
 
     private val driver = FakeDriver()
@@ -56,7 +56,7 @@ class PlayScopeTest {
         }
 
         assertEquals(
-            listOf("click 2", "settle", "press Right", "settle", "Hover 3 true", "settle", "snapshot second"),
+            listOf("click 2", "settle", "press Right", "settle", "Hover 3 true", "settle", "snapshot second stage"),
             driver.log,
         )
     }

@@ -236,13 +236,13 @@ function theme(dark,hue,preset,fixed){
   const des=nudged(hue,25), t={}, a={};
   if(dark){
     Object.assign(t,{background:rgb(.145+lift,neutral,hue), card:rgb(.225+lift*.9,neutral,hue), foreground:rgb(.985,.004+neutral*.3,second),
-      primary:rgb(.705,brand,hue), secondary:rgb(.31+lift*1.1,sec,second), mutedForeground:rgb(.708,Math.min(tn,.05),second), accent:rgb(.371+lift*1.3,tn,hue),
+      primary:rgb(.705,brand,hue), secondary:rgb(.31+lift*1.1,sec,second), mutedForeground:rgb(.745,Math.min(tn,.05),second), accent:rgb(.371+lift*1.3,tn,hue),
       destructive:rgb(.68,Math.min(Math.max(chroma*1.5,.15),.21),des), ring:rgb(.556,Math.min(tn*1.8,.13),second)});
     t.destructiveForeground = fixed ? t.background : t.foreground;
     t.primaryForeground=t.background; a.border=[...rgb(.62,neutral*1.4,hue),.22]; a.input=[...rgb(.68,neutral*1.6,hue),.28];
   } else {
     Object.assign(t,{background:rgb(.935-lift*.6,neutral*.8,hue), card:rgb(.998-lift*.25,neutral*.45,hue), foreground:rgb(.205,Math.max(neutral*.5,.004),hue),
-      primary:rgb(fixed?.48:.55,brand,hue), secondary:rgb(.905-lift*.9,Math.max(sec*1.05,.006),second), mutedForeground:rgb(.50,Math.min(tn,.05),second), accent:rgb(.865-lift*.5,tn*.95,hue),
+      primary:rgb(fixed?.48:.55,brand,hue), secondary:rgb(.905-lift*.9,Math.max(sec*1.05,.006),second), mutedForeground:rgb(.45,Math.min(tn,.05),second), accent:rgb(.865-lift*.5,tn*.95,hue),
       destructive:rgb(fixed?.56:.577,Math.min(Math.max(chroma*1.6,.17),.245),des), destructiveForeground:rgb(.985,.004,hue), ring:rgb(.55,Math.min(tn*1.8,.13),second)});
     t.primaryForeground=t.background; a.border=[...rgb(.84,Math.max(neutral,.006),hue),1]; a.input=a.border;
   }

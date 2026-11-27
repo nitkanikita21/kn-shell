@@ -23,7 +23,6 @@ import kn.gtk.GtkWidget
 import kn.gtk.GTK_ALIGN_CENTER
 import kn.gtk.gtk_box_append
 import kn.gtk.gtk_box_insert_child_after
-import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
 import kn.gtk.gtk_center_box_get_center_widget
 import kn.gtk.gtk_center_box_get_end_widget
@@ -213,7 +212,7 @@ internal enum class CenterSlot { Start, Center, End }
  * other side of the bar.
  */
 internal class GtkCenterRegionNode(slot: CenterSlot) :
-    GtkBoxNode(gtk_box_new(GtkOrientation.GTK_ORIENTATION_HORIZONTAL, 0)!!) {
+    GtkBoxNode(newBox(GtkOrientation.GTK_ORIENTATION_HORIZONTAL)) {
     /** Set again on recomposition, so a region can move between slots. */
     var slot: CenterSlot = slot
 }

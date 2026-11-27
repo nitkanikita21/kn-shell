@@ -82,10 +82,10 @@ sub-node rule never leaks to other widgets and does not outlive its widget.
 
 | Symbol | Purpose |
 | --- | --- |
-| `Modifier.semantics(Semantics(…))` | ARIA role, name, description, states (`checked`, `pressed`, `expanded`, `selected`, `disabled`, `busy`, `hidden`, `invalid`, `required`, `modal`), `hasPopup`, `orientation`, value range and relations (`labelledBy`, `describedBy`, `controls`, `activeDescendant`), written to GTK's accessibility tree (AT-SPI). A field left `null` is not claimed. |
+| `Modifier.semantics(Semantics(…))` | ARIA role, name, description, states (`checked`, `pressed`, `expanded`, `selected`, `disabled`, `busy`, `hidden`, `invalid`, `required`, `modal`), `hasPopup`, `orientation`, value range and relations (`labelledBy`, `describedBy`, `controls`, `activeDescendant`), written to GTK's accessibility tree (AT-SPI). A field left `null` is not claimed; several `semantics` calls in a chain merge, the later one winning field by field. |
 | `SemanticsRef`, `Modifier.semanticsRef(ref)` | Names a widget for relations; `ref.announce(message, assertive)` speaks through it. |
-| `Modifier.mergedSemantics()` | Hides a child that only repeats its parent's name. |
 | `Modifier.onKey(capture) { event -> Boolean }` | Key presses reaching the widget or its descendants; `true` consumes. `capture` runs before the children. `KeyEvent(key, character, shift, ctrl, alt, meta)`. |
+| `Modifier.enabled(enabled)` | `false`: no clicks, no focus, `:disabled`, announced as unavailable. |
 | `Modifier.focusable(focusable, autofocus)` | Puts a widget in (or, with `false`, takes it out of) the Tab order. Roving focus is one `focusable(true)` item among `false` ones. |
 | `FocusRequester`, `Modifier.focusRequester(r)`, `Modifier.onFocusChange { }` | Moving focus from code and following it. |
 | `FocusScope(modifier, trap, autoFocus, restoreFocus) { }` | A group that focuses its first widget, optionally keeps Tab inside, and gives the focus back when it leaves the composition. |
@@ -196,6 +196,7 @@ MCP daemon (`atlas/mcp`) is its main user. The API is plain Kotlin; there is no 
 | `tree(): InspectNode` | Whole composition, depth first, with ids and testTags. |
 | `find(target: String): InspectNode` | Node named by a decimal id or a testTag. Throws when nothing or several nodes match. |
 | `focus(id)` | Gives the keyboard focus to the widget or its first focusable descendant. |
+| `resetFocus()` | Takes the focus away from every widget and hides the focus ring. |
 | `click(id)` | Clicks a `Button` (emits `clicked`), or runs the `Modifier.onClick` handler of another node. Throws if the node has no click handler. |
 | `setText(id, text)` | Replaces the text of an `Entry`; its `onValueChange` fires. |
 | `setChecked(id, checked)` | Toggles a `Switch`; its `onCheckedChange` fires. |

@@ -1,5 +1,6 @@
 package dev.knshell.ui
 
+
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -108,5 +109,32 @@ class FocusGraphicsTest {
             assertEquals(listOf("outside"), focused())
             assertEquals(true, inside.first())
         }
+    }
+
+    @Test
+    fun `Tab stops on a focusable container on the way in and on the way back`() = uiTest({
+        Column {
+            Box(Modifier.testTag("before").focusable(autofocus = true)) { Label("before") }
+            Column(modifier = Modifier.testTag("panel").focusable()) {
+                Label("text")
+                Box(Modifier.testTag("inner").focusable()) { Label("inner") }
+            }
+            Box(Modifier.testTag("after").focusable()) { Label("after") }
+        }
+    }) {
+        fun tab(shift: Boolean = false): List<String> {
+            keyboard.press(Key.Tab, shift = shift)
+            settle()
+            return focused()
+        }
+
+        assertEquals(
+            listOf(listOf("panel"), listOf("inner"), listOf("after")),
+            listOf(tab(), tab(), tab()),
+        )
+        assertEquals(
+            listOf(listOf("inner"), listOf("panel"), listOf("before")),
+            listOf(tab(shift = true), tab(shift = true), tab(shift = true)),
+        )
     }
 }

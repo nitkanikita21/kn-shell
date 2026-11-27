@@ -59,6 +59,12 @@ fun Modifier.radialGradient(vararg stops: Color): Modifier =
 fun Modifier.glow(color: Color, blur: Int = 12, spread: Int = 0): Modifier =
     with(GlowElement(color, blur, spread))
 
+/**
+ * Whether the widget and what is inside it take input. A disabled widget gets no clicks and no
+ * focus, matches `:disabled`, and screen readers announce it as unavailable.
+ */
+fun Modifier.enabled(enabled: Boolean): Modifier = with(EnabledElement(enabled))
+
 /** Widget opacity, `0f` invisible to `1f` opaque (GTK `gtk_widget_set_opacity`, whole subtree). */
 fun Modifier.opacity(value: Float): Modifier = with(OpacityElement(value))
 

@@ -168,6 +168,7 @@ internal const val VEXPAND_KEY = "kn-modifier-vexpand"
 internal const val HALIGN_KEY = "kn-modifier-halign"
 internal const val VALIGN_KEY = "kn-modifier-valign"
 internal const val OPACITY_KEY = "kn-modifier-opacity"
+internal const val ENABLED_KEY = "kn-modifier-enabled"
 internal const val SIZE_KEY = "kn-modifier-size"
 
 /** Whether a [Modifier] chain has written this layout field on [widget] before. */

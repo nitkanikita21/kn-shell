@@ -160,7 +160,8 @@ story(
 
 - Цілі — `testTag`. Стани ставляться на віджет із tag `target` (або `stateTarget`).
 - Дії: `focus`, `click`, `hover`, `setText`, `press(Key, shift, ctrl, alt, meta)`, `type(text)`,
-  `settle()`, `snapshot(name)`. Кожна дія чекає, поки UI стабілізується.
+  `settle()`, `snapshot(name, target?)` (без `target` кадр сцени, з ним кадр одного віджета, зокрема в popover-і).
+  Кожна дія чекає, поки UI стабілізується.
 - Перевірки: `expect(tag)` з `role`, `name`, `description`, `text`, `focused`, `enabled`, `selected`,
   `expanded`, `checked("true" | "false" | "mixed")`, `state(назва, значення)`; `expectAbsent(tag)`.
 - `press` і `type` — справжні натискання через клавіатуру `headless-compositor`.
@@ -286,7 +287,7 @@ KN_ATLAS_INSPECT=/run/user/1000/atlas.sock atlas.kexe
 **Що знімається.** Тільки story, на сталому тлі, з типовими args. Перший кадр — у початковому стані;
 далі по кадру на кожен стан із `states` (`Entry@hover.png`) і на кожен `snapshot` сценарію
 (`Entry@open.png`). Значення з панелі в еталон не потрапляють. Кадр обрізається по story, тому вміст
-відкритого popover-а в картинку не входить (його перевіряють через `expect`). Нескінченна анімація не
+відкритого popover-а в кадр сцени не входить: його знімають через `snapshot(name, target)`. Нескінченна анімація не
 дасть двох однакових кадрів і буде помилкою.
 
 **Сценарій упав** (`▷` у вікні атласу, `Entry@play` у звіті) — перевірка `play` не пройшла; повідомлення
@@ -315,7 +316,7 @@ KN_ATLAS_INSPECT=/run/user/1000/atlas.sock atlas.kexe
 | нічого | системні | еталони можуть відрізнятися |
 | `atlas { goldenFonts = file("fonts") }` або `atlas.goldenFonts=<тека>` у `gradle.properties` | тільки ця тека | збігаються |
 
-У цьому репозиторії це `golden-fonts/`, а еталони лежать у `atlas-goldens/` (`goldens=` у `gradle.properties`). **Тека має містити всі шрифти, які використовують stories.**
+У цьому репозиторії це `golden-fonts/`. Еталони кіта лежать у `demo/shell-ui-kit/atlas-goldens/`, а `shell-app` тримає свої в кореневій `atlas-goldens/` (`atlas { goldenDir = … }`). **Тека має містити всі шрифти, які використовують stories.**
 Story без явного шрифту в preview показує системний шрифт, а в еталоні — той, що є в теці.
 
 `environment.txt` зберігає версії GTK, Pango, cairo, рендерер і відбиток шрифтів. Якщо вони інші,

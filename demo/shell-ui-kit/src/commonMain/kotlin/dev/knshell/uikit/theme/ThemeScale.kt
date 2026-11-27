@@ -112,7 +112,7 @@ object ThemeScale {
             secondary = tint.color(0.31f + lift * 1.1f + pull * 0.8f, tint.second, second = true),
             secondaryForeground = foreground,
             muted = tint.color(0.31f + lift * 1.1f + pull * 0.8f, tint.second, second = true),
-            mutedForeground = tint.color(0.708f, minOf(tint.tint, MUTED_FOREGROUND_MAX_CHROMA), second = true),
+            mutedForeground = tint.color(0.745f, minOf(tint.tint, MUTED_FOREGROUND_MAX_CHROMA), second = true),
             // shadcn's `accent` is the hover wash, one step above `secondary` — not the brand.
             accent = tint.color(0.371f + lift * 1.3f + pull, tint.tint),
             accentForeground = foreground,
@@ -168,7 +168,8 @@ object ThemeScale {
             secondary = tint.color(0.905f - lift * 0.9f + pull * 0.15f, maxOf(tint.second * 1.05f, 0.006f), second = true),
             secondaryForeground = foreground,
             muted = tint.color(0.905f - lift * 0.9f + pull * 0.15f, maxOf(tint.second * 1.05f, 0.006f), second = true),
-            mutedForeground = tint.color(0.50f, minOf(tint.tint, MUTED_FOREGROUND_MAX_CHROMA), second = true),
+            // Dark enough to read on `secondary` too, where inactive tabs write it.
+            mutedForeground = tint.color(0.45f, minOf(tint.tint, MUTED_FOREGROUND_MAX_CHROMA), second = true),
             accent = tint.color(0.865f - lift * 0.5f, tint.tint * 0.95f),
             accentForeground = foreground,
             destructive = tint.color(0.56f, minOf(maxOf(tint.chroma * 1.6f, 0.17f), 0.245f), hue = tint.destructiveHue),
