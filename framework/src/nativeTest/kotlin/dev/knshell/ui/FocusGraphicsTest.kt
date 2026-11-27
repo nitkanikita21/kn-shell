@@ -173,4 +173,18 @@ class FocusGraphicsTest {
             assertEquals(listOf("before"), focused())
         }
     }
+
+    @Test
+    fun `a key says which physical key it was`() {
+        val seen = mutableListOf<KeyEvent>()
+        uiTest({
+            Box(Modifier.testTag("only").focusable(autofocus = true).onKey { seen.add(it) }) { Label("only") }
+        }) {
+            keyboard.chord('k', ctrl = true)
+            keyboard.type("a.")
+            settle()
+            assertEquals(listOf('k', 'a', '.'), seen.filter { it.key == Key.Character }.map { it.latin })
+            assertEquals(true, seen.first { it.latin == 'k' }.ctrl)
+        }
+    }
 }

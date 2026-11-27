@@ -73,13 +73,20 @@ fun atlasMain(
         width = 1200,
         height = 800,
         windowBackground = AtlasTheme.bg,
+        windowModifier = shortcuts(service),
     ) {
-        CompositionLocalProvider(
-            LocalAtlasHostService provides service,
-            LocalGoldenController provides golden,
-        ) {
-            Root()
-        }
+        AtlasWindow(service, golden)
+    }
+}
+
+/** The content of the atlas window. */
+@Composable
+internal fun AtlasWindow(service: AtlasHostService, golden: GoldenController) {
+    CompositionLocalProvider(
+        LocalAtlasHostService provides service,
+        LocalGoldenController provides golden,
+    ) {
+        Root()
     }
 }
 

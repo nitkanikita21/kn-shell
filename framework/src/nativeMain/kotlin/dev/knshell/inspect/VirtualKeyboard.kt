@@ -51,6 +51,18 @@ class VirtualKeyboard(private val socket: String) {
         send((listOf("key", key.name) + modifiers).joinToString(" "))
     }
 
+    /** One stroke of the letter key [letter] with the modifiers held, as for a shortcut. */
+    fun chord(letter: Char, shift: Boolean = false, ctrl: Boolean = false, alt: Boolean = false, meta: Boolean = false) {
+        require(letter.uppercaseChar() in 'A'..'Z') { "chord() presses letter keys" }
+        val modifiers = listOfNotNull(
+            "shift".takeIf { shift },
+            "ctrl".takeIf { ctrl },
+            "alt".takeIf { alt },
+            "super".takeIf { meta },
+        )
+        send((listOf("key", letter.uppercaseChar().toString()) + modifiers).joinToString(" "))
+    }
+
     /** Types [text]: letters, digits, spaces and `- . , /`. */
     fun type(text: String) {
         require('\n' !in text) { "press(Key.Enter) ends a line" }

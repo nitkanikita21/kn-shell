@@ -2,6 +2,7 @@ package dev.knshell.atlas.runner.ui
 
 import dev.knshell.atlas.Size
 import dev.knshell.atlas.dsl.group
+import dev.knshell.atlas.runner.sidebarOrder
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

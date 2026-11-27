@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Мокап: зручність атласу</title>
+<style>
+:root{color-scheme:dark;--bg:#0d0f10;--panel:#121516;--panel2:#181c1d;--line:#242a2b;--line2:#333b3c;--fg:#c8d2ce;--dim:#6d7a76;--input:#0b0e0f;--stage:#090b0c;--accent:#7fd6a2;--accent2:#233029;--changed:#e5c07b;--failed:#e06c75}
+*{box-sizing:border-box}
+body{margin:0;background:#050606;color:var(--fg);font:12px/1.45 "JetBrains Mono","JetBrainsMono Nerd Font",ui-monospace,monospace;padding:20px}
+h1{font-size:16px;margin:0 0 4px} h2{font-size:13px;margin:22px 0 8px}
+p{margin:0 0 10px;color:var(--dim);max-width:90ch}
+button{font:inherit;color:inherit;background:none;border:0;border-radius:2px;padding:3px 8px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;white-space:nowrap}
+button:hover{background:var(--panel2)} button.on{background:var(--accent2);color:var(--accent)}
+button:focus-visible,input:focus-visible{outline:1px solid var(--accent);outline-offset:1px}
+button[disabled]{color:var(--dim);cursor:default;background:none}
+.seg{display:inline-flex;gap:2px;background:var(--input);padding:2px;border-radius:2px}
+.seg button{color:var(--dim)} .seg button.on{color:var(--accent)}
+.demo{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0}
+.demo b{color:var(--dim);font-weight:400}
+.wrap{overflow-x:auto}
+.win{width:1200px;height:720px;display:flex;border:1px solid var(--line2);background:var(--bg);margin-top:6px;position:relative}
+.side{width:240px;flex:none;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.head{padding:8px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.row{display:flex;gap:8px;align-items:center} .grow{flex:1}
+.search{display:flex;align-items:center;gap:6px;background:var(--input);border:1px solid var(--line2);border-radius:2px;padding:3px 6px}
+.search:focus-within{border-color:var(--accent)}
+.search input{flex:1;min-width:0;border:0;outline:0;background:none;color:var(--fg);font:inherit}
+.search input::placeholder{color:var(--dim)}
+.key{font-size:10px;color:var(--dim);border:1px solid var(--line2);border-radius:2px;padding:0 4px}
+.search button{padding:0 4px}
+.tree{overflow:auto;flex:1;padding-bottom:8px;scrollbar-width:thin;scrollbar-color:var(--line2) var(--panel)}
+.treehead{display:flex;align-items:center;padding:4px 8px 0;color:var(--dim)}
+.cat{color:var(--dim);padding:6px 8px 2px}
+.group{display:flex;gap:8px;align-items:center;padding:3px 8px;font-weight:700;cursor:pointer;width:100%;border-radius:0}
+.item{display:flex;gap:8px;align-items:center;padding:3px 8px 3px 36px;cursor:pointer;width:100%;border-radius:0;justify-content:flex-start}
+.item.sel{background:var(--accent2);color:var(--accent)}
+.item.cursor{box-shadow:inset 0 0 0 1px var(--accent)}
+.ico{width:20px;height:16px;color:var(--dim);text-align:center;flex:none;display:inline-grid;place-items:center}
+.ico svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.group .ico{color:var(--accent)}
+mark{background:transparent;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.badge{margin-left:auto}
+.none{padding:16px 10px;color:var(--dim)}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.bar{display:flex;align-items:center;gap:8px;padding:5px 8px;border-bottom:1px solid var(--line);background:var(--panel);min-width:0}
+.bar.sub{background:var(--bg)} .bar .cap{color:var(--dim)}
+.sep{width:1px;height:16px;background:var(--line2)}
+.stage{flex:1;position:relative;background:var(--stage);display:flex;align-items:center;justify-content:center;overflow:auto;min-height:0}
+.frame{position:relative;background:#001503;padding:16px;display:flex;flex-direction:column;gap:10px;align-items:flex-start}
+.frame.fixed{outline:1px dashed var(--line2);outline-offset:6px}
+.frame .wlabel{position:absolute;top:-24px;left:0;color:var(--dim);display:none} .frame.fixed .wlabel{display:block}
+.k{font-family:"Adwaita Sans","Inter",system-ui,sans-serif;font-size:13px;color:#eaf6ec}
+.kbtn{display:inline-flex;align-items:center;height:34px;padding:0 12px;border-radius:8px;background:#2abd60;color:#00210a;font-weight:600}
+.kbtn.alt{background:transparent;border:1px solid #4a6b52;color:#eaf6ec}
+.kbtn.off{opacity:.45}
+.measure .frame [data-m]{cursor:crosshair}
+.hl{position:absolute;border:1px solid var(--changed);pointer-events:none;display:none}
+.tip{position:absolute;background:var(--panel2);border:1px solid var(--line2);padding:6px 8px;pointer-events:none;display:none;z-index:3;white-space:nowrap;box-shadow:0 6px 18px #000a}
+.tip dt{color:var(--dim)} .tip dl{display:grid;grid-template-columns:auto auto;gap:0 10px;margin:0} .tip dd{margin:0}
+.args{width:280px;flex:none;background:var(--panel);border-left:1px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:10px;overflow:auto}
+.args .docs{color:var(--dim)} .args label{color:var(--dim);display:block;margin-bottom:3px}
+.ctl{background:var(--input);border:1px solid var(--line2);border-radius:2px;padding:3px 8px}
+.sw{width:36px;height:20px;background:var(--input);border:1px solid var(--line2)} .sw::after{content:"";display:block;width:16px;height:16px;margin:1px;background:var(--dim)}
+.script{flex:1;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--line2) var(--stage);background:var(--stage);padding:12px 16px}
+.step{display:grid;grid-template-columns:20px 28px 1fr;gap:6px;padding:3px 0;align-items:start}
+.step .n{color:var(--dim);text-align:right}
+.ok{color:var(--accent)} .bad{color:var(--failed)} .skip{color:var(--dim)}
+.why{grid-column:3;color:var(--failed);background:var(--panel2);padding:6px 8px;margin-top:4px;border-radius:2px}
+.shot{grid-column:3;margin:6px 0 4px}
+.shot figcaption{color:var(--dim);margin-bottom:4px}
+.shot .frame{padding:12px;display:inline-flex}
+.diff{display:flex;gap:16px;padding:12px 16px} .diff figure{margin:0} .diff figcaption{color:var(--dim);margin-bottom:4px}
+.hidden{display:none!important}
+table{border-collapse:collapse;max-width:900px;width:100%} td{border-top:1px solid var(--line);padding:5px 12px 5px 0;vertical-align:top} td:first-child{white-space:nowrap;color:var(--accent)}
+</style>
+</head>
+<body>
+<h1>Мокап: зручність атласу</h1>
+<p>Клікабельний: працюють пошук і клавіші в ньому, вкладки, ширина превʼю, вимірювання та ховання панелей. Це імітація вигляду в HTML, а не GTK.</p>
+<div class="demo"><b>Показати стан:</b>
+  <span class="seg" id="demo">
+    <button data-s="idle" class="on">звичайний</button>
+    <button data-s="checked">перевірено story</button>
+    <button data-s="failed">сценарій упав</button>
+    <button data-s="running">прогін триває</button>
+    <button data-s="never">ще не перевірялось</button>
+  </span>
+</div>
+
+<div class="wrap"><div class="win" id="win">
+  <aside class="side" id="side">
+    <div class="head">
+      <div class="row">
+        <span class="seg"><button class="on">Dark</button><button>Light</button></span>
+        <span class="grow"></span>
+        <button id="checkAll" title="Прогнати весь каталог">▷ Все</button>
+      </div>
+      <div class="search">
+        <span style="color:var(--dim)">⌕</span>
+        <input id="q" placeholder="пошук stories" autocomplete="off" aria-label="Пошук stories">
+        <span class="key" id="hint">Ctrl K</span>
+        <button id="clear" class="hidden" aria-label="Очистити пошук">✕</button>
+      </div>
+      <div id="summary"></div>
+    </div>
+    <div class="treehead"><span id="count"></span><span class="grow"></span><button id="fold">згорнути все</button></div>
+    <div class="tree" id="tree"></div>
+  </aside>
+
+  <main class="main">
+    <div class="bar">
+      <button id="tSide" title="Сайдбар (Ctrl B)" aria-label="Сховати сайдбар">◧</button>
+      <span class="seg" id="tabs">
+        <button data-t="preview" class="on">Preview</button>
+        <button data-t="script">Сценарій</button>
+        <button data-t="diff">Різниця</button>
+      </span>
+      <span class="grow"></span>
+      <span class="cap">Перевірити:</span>
+      <button id="checkStory" title="Перевірити цю story (Ctrl Enter)">▷ story</button>
+      <button id="checkGroup" title="Перевірити всі stories групи">▷ групу</button>
+      <button id="tArgs" title="Панель args (Ctrl J)" aria-label="Сховати панель args">◨</button>
+    </div>
+    <div class="bar sub" id="tools">
+      <span class="cap">Ширина:</span>
+      <span class="seg" id="widths"><button data-w="320">320</button><button data-w="640">640</button><button data-w="0" class="on">вільно</button></span>
+      <span class="grow"></span>
+      <button id="tMeasure" title="Вимірювання (M)">⌖ Виміряти</button>
+      <button title="GTK Inspector: стилі й дерево віджетів">{ } GTK Inspector</button>
+    </div>
+    <div class="stage" id="preview">
+      <div class="frame k" id="frame">
+        <span class="wlabel" id="wlabel"></span>
+        <div class="row" style="gap:8px">
+          <span class="kbtn" data-m="ButtonContainer|save|button|Зберегти">Зберегти</span>
+          <span class="kbtn alt" data-m="ButtonContainer|busy|button|Зачекайте">◌ Зачекайте</span>
+          <span class="kbtn off" data-m="ButtonContainer|off|button|Недоступна">Недоступна</span>
+        </div>
+        <span data-m="Label|count|generic|Натиснуто: 2">Натиснуто: 2</span>
+      </div>
+      <div class="hl" id="hl"></div><div class="tip" id="tip"></div>
+    </div>
+    <div class="script hidden" id="script"></div>
+    <div class="stage hidden" id="diff" style="align-items:flex-start;justify-content:flex-start"></div>
+  </main>
+
+  <aside class="args" id="args">
+    <div class="docs">Дія. Роль button: Enter, Space і клік виконують onClick.</div>
+    <b>args</b>
+    <div><label>label</label><div class="ctl">Зберегти</div></div>
+    <div><label>color</label><div class="ctl">Primary ▾</div></div>
+    <div><label>variant</label><div class="ctl">Solid ▾</div></div>
+    <div><label>size</label><div class="ctl">Md ▾</div></div>
+    <div><label>loading</label><div class="sw"></div></div>
+    <button class="ctl" style="margin-top:auto;justify-content:center">Reset</button>
+  </aside>
+</div></div>
+
+<h2>Клавіші</h2>
+<table>
+<tr><td>Ctrl K, /</td><td>фокус у пошук (<code>/</code> — лише коли не набираєте текст)</td></tr>
+<tr><td>↑ ↓, Enter</td><td>ходити по результатах і відкрити</td></tr>
+<tr><td>Escape</td><td>очистити пошук; вдруге — повернути фокус</td></tr>
+<tr><td>Ctrl Enter</td><td>перевірити відкриту story</td></tr>
+<tr><td>M</td><td>увімкнути чи вимкнути вимірювання (поза полями вводу)</td></tr>
+<tr><td>Ctrl B, Ctrl J</td><td>сховати сайдбар, панель args</td></tr>
+</table>
+<h2>Пошук і памʼять</h2>
+<table>
+<tr><td>що шукає</td><td>назви категорій, груп і stories; регістр неважливий; кілька слів — усі мають збігтися</td></tr>
+<tr><td>збіг із групою</td><td>показує всі її stories; згорнуті групи під час пошуку розгортаються, потім повертаються</td></tr>
+<tr><td>памʼятається</td><td>story, тема, вигляд матриць, згорнуті групи, сховані панелі, ширина превʼю. Значення args — ні</td></tr>
+<tr><td>перевірка</td><td>«Story» і «Групу» доповнюють попередній звіт; «Все» перезаписує його</td></tr>
+<tr><td>MCP</td><td><code>search_stories</code>, <code>check_story</code>, <code>set_width</code></td></tr>
+</table>
+
+<script>
+const catalog=[
+ ["Element",[["UButton",["Playground","States","Keyboard","Accessibility","Examples"],["Variants","Sizes"]],["UBadge",["Playground","Accessibility","Examples"],["Variants","Sizes"]],["UCard",["Playground","Examples"],["Variants"]]]],
+ ["Form",[["UInput",["Playground","States","Keyboard","Accessibility"],["Sizes","Colors"]],["USelect",["Playground","States","Keyboard"],["Sizes"]]]],
+ ["Overlays",[["UModal",["Playground","Open","Keyboard","Theme change"],[]],["UDropdownMenu",["Playground","Keyboard"],["Sizes","Sides"]]]]];
+const $=id=>document.getElementById(id);
+let sel="UButton/Keyboard", cursor=null, folded=new Set(), state="idle", measure=false;
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;");
+function mark(text,words){
+  let spans=[]; const low=text.toLowerCase();
+  for(const w of words){const i=low.indexOf(w); if(i>=0) spans.push([i,i+w.length]);}
+  spans.sort((a,b)=>a[0]-b[0]); let out="",at=0;
+  for(const [a,b] of spans){ if(a<at) continue; out+=esc(text.slice(at,a))+"<mark>"+esc(text.slice(a,b))+"</mark>"; at=b; }
+  return out+esc(text.slice(at));
+}
+function results(){
+  const words=$("q").value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const out=[]; let n=0;
+  for(const [cat,groups] of catalog){
+    const gs=[];
+    for(const [g,stories,variants] of groups){
+      const entries=[...stories.map(s=>[s,false]),...variants.map(s=>[s,true])]
+        .filter(([e])=>words.every(w=>(cat+" "+g+" "+e).toLowerCase().includes(w)));
+      if(entries.length){gs.push([g,entries]); n+=entries.length;}
+    }
+    if(gs.length) out.push([cat,gs]);
+  }
+  return {words,out,n};
+}
+const svg=d=>`<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const ICON={story:svg('<path d="M17 3a2 2 0 0 1 2 2v15l-7-4-7 4V5a2 2 0 0 1 2-2z"/>'),matrix:svg('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 12h18M12 3v18"/>'),
+  book:svg('<path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>'),open:svg('<path d="m6 9 6 6 6-6"/>'),closed:svg('<path d="m9 18 6-6-6-6"/>')};
+const badge=key=>{
+  if(state==="checked"&&key==="UButton/Keyboard") return '<span class="badge ok">✓</span>';
+  if(state==="failed"&&key==="UButton/Keyboard") return '<span class="badge bad">▷</span>';
+  if(state==="failed"&&key==="UBadge/Variants") return '<span class="badge" style="color:var(--changed)">●</span>';
+  return "";
+};
+function tree(){
+  const {words,out,n}=results(), searching=words.length>0;
+  const keys=[];
+  $("tree").innerHTML=out.length?out.map(([cat,groups])=>`<div class="cat"><span>${mark(cat,words)}</span></div>`+groups.map(([g,entries])=>{
+    const closed=!searching&&folded.has(g);
+    return `<button class="group" data-g="${g}"><span class="ico" style="color:var(--dim)">${closed?ICON.closed:ICON.open}</span><span class="ico">${ICON.book}</span><span>${mark(g,words)}</span></button>`+
+      (closed?"":entries.map(([e,matrix])=>{const key=g+"/"+e; keys.push(key);
+        return `<button class="item ${key===sel?"sel":""} ${key===cursor?"cursor":""}" data-k="${key}"><span class="ico">${matrix?ICON.matrix:ICON.story}</span><span>${mark(e,words)}</span>${badge(key)}</button>`;}).join(""));
+  }).join("")).join(""):`<div class="none">Нічого не знайдено за «${esc($("q").value)}».<br><br><button class="ctl" id="reset">Очистити пошук</button></div>`;
+  $("count").textContent=searching?`знайдено: ${n}`:"";
+  $("fold").classList.toggle("hidden",searching);
+  $("fold").textContent=folded.size>=7?"розгорнути все":"згорнути все";
+  $("clear").classList.toggle("hidden",!searching); $("hint").classList.toggle("hidden",searching);
+  tree.keys=keys;
+}
+function summary(){
+  const s={idle:"",
+   checked:'<div class="ok">✓ UButton/Keyboard без змін</div><div class="skip">перевірено 2 кадри за 4 с</div>',
+   failed:'<div><span style="color:var(--changed)">●</span> змінено: 1</div><div><span class="bad">▷</span> сценаріїв упало: 1</div><div class="row" style="margin-top:4px;gap:2px"><button style="padding:3px 4px">≡ лише змінені</button><span class="grow"></span><button class="ok" style="padding:3px 4px">✓ Прийняти все</button></div>',
+   running:'<div class="skip">◌ UButton: 12/37</div>', never:""}[state];
+  $("summary").innerHTML=s;
+  for(const id of ["checkAll","checkStory","checkGroup"]) $(id).disabled=state==="running";
+  $("checkStory").textContent=state==="running"?"◌ 12/37":"▷ story";
+  $("tabs").querySelector('[data-t="diff"]').classList.toggle("hidden",state!=="failed");
+  $("tabs").querySelector('[data-t="script"]').innerHTML="Сценарій"+(state==="failed"?' <span class="bad">▷</span>':"");
+}
+const shot=(name,text)=>`<figure class="shot"><figcaption>snapshot «${name}»</figcaption><div class="frame k"><div class="row" style="gap:8px"><span class="kbtn">Зберегти</span><span class="kbtn alt">◌ Зачекайте</span></div><span>${text}</span></div></figure>`;
+const step=(n,cls,text,extra="")=>`<div class="step"><span class="${cls}">${cls==="ok"?"✓":cls==="bad"?"✕":"·"}</span><span class="n">${n}</span><span class="${cls==="skip"?"skip":""}">${text}</span>${extra}</div>`;
+function script(){
+  const hasPlay=/Keyboard|Accessibility|Theme change/.test(sel);
+  if(!hasPlay){$("script").innerHTML='<p>У цієї story немає сценарію <code>play</code>.</p>';return;}
+  if(state==="never"){$("script").innerHTML='<p>Сценарій ще не проганявся. Він виконується у прихованому вікні, бо натискати клавіші можна лише там.</p><button class="ctl">▷ Прогнати цю story</button>';return;}
+  const failed=state==="failed";
+  $("script").innerHTML=`<div class="row" style="margin-bottom:10px"><span class="seg"><button class="on">Dark</button><button>Light</button></span><span class="skip">з прогону 2 хв тому</span><span class="grow"></span><button class="ctl">▷ Прогнати ще раз</button></div>`+
+   step(1,"ok","focus save")+step(2,"ok","expect save: focused")+step(3,"ok","press Enter")+step(4,"ok",'expect count: text "Натиснуто: 1"',shot("перше натискання","Натиснуто: 1"))+step(5,"ok","press Space")+
+   (failed?step(6,"bad",'expect count: text "Натиснуто: 9"','<div class="why">очікувалось «Натиснуто: 9», є «Натиснуто: 2»</div>')+step(7,"skip","press Tab")+step(8,"skip","expect busy: focused")
+          :step(6,"ok",'expect count: text "Натиснуто: 2"')+step(7,"ok","press Tab")+step(8,"ok","expect busy: focused"));
+}
+function diff(){
+  $("diff").innerHTML=`<div class="diff"><figure><figcaption>Еталон</figcaption><div class="frame k"><span class="kbtn">Зберегти</span></div></figure><figure><figcaption>Зараз</figcaption><div class="frame k"><span class="kbtn" style="padding:0 20px">Зберегти</span></div></figure></div>`;
+}
+function tab(t){
+  if(t==="diff"&&state!=="failed") t="preview";
+  for(const b of $("tabs").children) b.classList.toggle("on",b.dataset.t===t);
+  for(const id of ["preview","script","diff"]) $(id).classList.toggle("hidden",id!==t);
+  $("tools").classList.toggle("hidden",t!=="preview");
+  hide();
+}
+function render(){tree();summary();script();diff();}
+function hide(){$("hl").style.display=$("tip").style.display="none";}
+function open(key){sel=key;render();}
+$("tree").onclick=e=>{
+  if(e.target.closest("#reset")){$("q").value="";cursor=null;tree();$("q").focus();return;}
+  const k=e.target.closest("[data-k]"), g=e.target.closest("[data-g]");
+  if(k) open(k.dataset.k); else if(g){const n=g.dataset.g; folded.has(n)?folded.delete(n):folded.add(n); tree();}
+};
+$("q").oninput=()=>{tree();cursor=tree.keys[0]||null;tree();};
+$("clear").onclick=()=>{$("q").value="";cursor=null;tree();$("q").focus();};
+$("q").onkeydown=e=>{
+  const keys=tree.keys, i=keys.indexOf(cursor);
+  if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault(); cursor=keys[(i+(e.key==="ArrowDown"?1:-1)+keys.length)%keys.length]||null; tree(); document.querySelector(".item.cursor")?.scrollIntoView({block:"nearest"});}
+  else if(e.key==="Enter"&&cursor){open(cursor);}
+  else if(e.key==="Escape"){e.preventDefault(); if($("q").value){$("q").value="";cursor=null;tree();} else $("q").blur();}
+};
+$("fold").onclick=()=>{const all=catalog.flatMap(c=>c[1].map(g=>g[0])); folded=folded.size>=all.length?new Set():new Set(all); tree();};
+$("tabs").onclick=e=>{const b=e.target.closest("[data-t]"); if(b) tab(b.dataset.t);};
+$("widths").onclick=e=>{const b=e.target.closest("[data-w]"); if(!b) return;
+  for(const x of $("widths").children) x.classList.toggle("on",x===b);
+  const w=+b.dataset.w; $("frame").style.width=w?w+"px":""; $("frame").classList.toggle("fixed",!!w); $("wlabel").textContent=w+" px"; hide();};
+function setMeasure(on){measure=on; $("tMeasure").classList.toggle("on",on); $("preview").classList.toggle("measure",on); hide();}
+$("tMeasure").onclick=()=>setMeasure(!measure);
+$("preview").onmousemove=e=>{
+  if(!measure) return;
+  const el=e.target.closest("[data-m]"); if(!el){hide();return;}
+  const [type,tag,role,name]=el.dataset.m.split("|"), r=el.getBoundingClientRect(), s=$("preview").getBoundingClientRect(), f=$("frame").getBoundingClientRect();
+  Object.assign($("hl").style,{display:"block",left:r.left-s.left+"px",top:r.top-s.top+"px",width:r.width+"px",height:r.height+"px"});
+  $("tip").innerHTML=`<dl><dt>тип</dt><dd>${type}</dd><dt>testTag</dt><dd>${tag}</dd><dt>розмір</dt><dd>${Math.round(r.width)} × ${Math.round(r.height)}</dd><dt>позиція</dt><dd>${Math.round(r.left-f.left)}, ${Math.round(r.top-f.top)}</dd><dt>роль</dt><dd>${role}</dd><dt>назва</dt><dd>${name}</dd></dl>`;
+  Object.assign($("tip").style,{display:"block",left:Math.max(4,r.left-s.left)+"px",top:r.bottom-s.top+8+"px"});
+};
+$("preview").onmouseleave=hide;
+const toggle=(panel,button)=>{const off=$(panel).classList.toggle("hidden"); $(button).classList.toggle("on",off); hide();};
+$("tSide").onclick=()=>toggle("side","tSide"); $("tArgs").onclick=()=>toggle("args","tArgs");
+$("demo").onclick=e=>{const b=e.target.closest("[data-s]"); if(!b) return; state=b.dataset.s;
+  for(const x of $("demo").children) x.classList.toggle("on",x===b);
+  render(); tab(state==="failed"||state==="never"?"script":"preview"); if(state==="never"||state==="failed") sel="UButton/Keyboard", render();};
+addEventListener("keydown",e=>{
+  const typing=e.target.tagName==="INPUT", c=e.ctrlKey||e.metaKey;
+  if((c&&e.code==="KeyK")||(!typing&&e.key==="/")){e.preventDefault(); $("side").classList.remove("hidden"); $("q").focus(); $("q").select();}
+  else if(c&&e.code==="KeyB"){e.preventDefault(); $("tSide").click();}
+  else if(c&&e.code==="KeyJ"){e.preventDefault(); $("tArgs").click();}
+  else if(!typing&&!c&&e.code==="KeyM") setMeasure(!measure);
+});
+render(); tab("preview");
+const wanted=new URLSearchParams(location.search);
+if(wanted.get("q")){$("q").value=wanted.get("q"); tree(); cursor=tree.keys[0]; tree();}
+if(wanted.get("state")) document.querySelector(`#demo [data-s="${wanted.get("state")}"]`)?.click();
+if(wanted.get("measure")){setMeasure(true); const el=document.querySelector('[data-m*="|save|"]'); el.dispatchEvent(new MouseEvent("mousemove",{bubbles:true}));}
+if(wanted.get("w")) document.querySelector(`#widths [data-w="${wanted.get("w")}"]`)?.click();
+</script>
+</body>
+</html>

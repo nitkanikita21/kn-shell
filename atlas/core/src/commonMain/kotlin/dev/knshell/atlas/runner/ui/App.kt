@@ -1,6 +1,9 @@
 package dev.knshell.atlas.runner.ui
 
 import androidx.compose.runtime.Composable
+import dev.knshell.compose.focusRequester
+import dev.knshell.compose.FocusRequester
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,6 +38,8 @@ fun App() {
     val current: Selection? = selection
     val golden = LocalGoldenController.current
 
+    val previewFocus = remember { FocusRequester() }
+
     CompositionLocalProvider(LocalAtlasEnvironment provides service.environment) {
     Row(modifier = Modifier.fillAll().background(AtlasTheme.bg, transitionMs = 0)) {
         Sidebar(
@@ -42,8 +47,10 @@ fun App() {
             environments = service.environments,
             environment = service.environment,
             onEnvironment = { service.environment = it },
+            state = service.sidebar,
             selection = current,
             onSelect = { group, entry -> service.select(group, entry) },
+            onLeaveSearch = { previewFocus.requestFocus() },
             viewOf = service::viewOf,
             golden = golden,
             modifier = Modifier.width(240).vExpand(),
@@ -82,7 +89,12 @@ fun App() {
                         }
 
                         Row(modifier = Modifier.weight().fillAll()) {
-                            Box(modifier = Modifier.weight().fillAll().testTag("preview")) {
+                            Box(
+                                modifier = Modifier.weight().fillAll()
+                                    // Takes the focus only when asked: where Escape in the search leads.
+                                    .focusRequester(previewFocus)
+                                    .testTag("preview"),
+                            ) {
                                 when (val entry = current.entry) {
                                     is Story -> StoryView(entry, live, Modifier.fillAll())
                                     is Variants -> VariantsView(entry, live, Modifier.fillAll())

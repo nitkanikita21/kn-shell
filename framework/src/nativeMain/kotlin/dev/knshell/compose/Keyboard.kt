@@ -48,6 +48,11 @@ data class KeyEvent(
     val ctrl: Boolean = false,
     val alt: Boolean = false,
     val meta: Boolean = false,
+    /**
+     * What the physical key prints on a US layout, for letters, digits and `, . /`. For shortcuts,
+     * which should work whatever layout is switched on.
+     */
+    val latin: Char? = null,
 )
 
 /**
@@ -60,7 +65,14 @@ fun Modifier.onKey(capture: Boolean = false, handler: (KeyEvent) -> Boolean): Mo
 
 internal data class KeyElement(val handler: (KeyEvent) -> Boolean, val capture: Boolean) : ModifierElement
 
-internal fun keyEvent(keyval: UInt, state: UInt): KeyEvent {
+/** Rows of a US keyboard by the hardware code of their first key, as GDK numbers keys. */
+private val US_ROWS = listOf(10u to "1234567890", 24u to "qwertyuiop", 38u to "asdfghjkl", 52u to "zxcvbnm,./")
+
+private fun usKey(keycode: UInt): Char? = US_ROWS.firstNotNullOfOrNull { (first, keys) ->
+    if (keycode >= first) keys.getOrNull((keycode - first).toInt()) else null
+}
+
+internal fun keyEvent(keyval: UInt, state: UInt, keycode: UInt = 0u): KeyEvent {
     fun held(mask: UInt) = state and mask != 0u
     // X11 keysyms, which GDK key values are.
     val key = when (keyval) {
@@ -91,5 +103,6 @@ internal fun keyEvent(keyval: UInt, state: UInt): KeyEvent {
         ctrl = held(GDK_CONTROL_MASK),
         alt = held(GDK_ALT_MASK),
         meta = held(GDK_SUPER_MASK),
+        latin = usKey(keycode),
     )
 }

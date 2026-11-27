@@ -182,14 +182,14 @@ internal class InputState(private val widget: CPointer<GtkWidget>) {
         val controller = gtk_event_controller_key_new() ?: return
         keyControllers[capture] = controller
         val pressed = if (capture) {
-            staticCFunction { _: COpaquePointer?, keyval: UInt, _: UInt, state: UInt, data: COpaquePointer? ->
+            staticCFunction { _: COpaquePointer?, keyval: UInt, code: UInt, state: UInt, data: COpaquePointer? ->
                 val self = data?.asStableRef<InputState>()?.get()
-                if (self?.handleKey(true, keyEvent(keyval, state)) == true) 1 else 0
+                if (self?.handleKey(true, keyEvent(keyval, state, code)) == true) 1 else 0
             }
         } else {
-            staticCFunction { _: COpaquePointer?, keyval: UInt, _: UInt, state: UInt, data: COpaquePointer? ->
+            staticCFunction { _: COpaquePointer?, keyval: UInt, code: UInt, state: UInt, data: COpaquePointer? ->
                 val self = data?.asStableRef<InputState>()?.get()
-                if (self?.handleKey(false, keyEvent(keyval, state)) == true) 1 else 0
+                if (self?.handleKey(false, keyEvent(keyval, state, code)) == true) 1 else 0
             }
         }
         g_signal_connect_data(

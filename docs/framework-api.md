@@ -84,7 +84,7 @@ sub-node rule never leaks to other widgets and does not outlive its widget.
 | --- | --- |
 | `Modifier.semantics(Semantics(…))` | ARIA role, name, description, states (`checked`, `pressed`, `expanded`, `selected`, `disabled`, `busy`, `hidden`, `invalid`, `required`, `modal`), `hasPopup`, `orientation`, value range and relations (`labelledBy`, `describedBy`, `controls`, `activeDescendant`), written to GTK's accessibility tree (AT-SPI). A field left `null` is not claimed; several `semantics` calls in a chain merge, the later one winning field by field. |
 | `SemanticsRef`, `Modifier.semanticsRef(ref)` | Names a widget for relations; `ref.announce(message, assertive)` speaks through it. |
-| `Modifier.onKey(capture) { event -> Boolean }` | Key presses reaching the widget or its descendants; `true` consumes. `capture` runs before the children. `KeyEvent(key, character, shift, ctrl, alt, meta)`. |
+| `Modifier.onKey(capture) { event -> Boolean }` | Key presses reaching the widget or its descendants; `true` consumes. `capture` runs before the children. `KeyEvent(key, character, shift, ctrl, alt, meta, latin)`; `latin` is the key on a US layout, for shortcuts. |
 | `Modifier.enabled(enabled)` | `false`: no clicks, no focus, `:disabled`, announced as unavailable. |
 | `Modifier.focusable(focusable, autofocus)` | Puts a widget in (or, with `false`, takes it out of) the Tab order. Roving focus is one `focusable(true)` item among `false` ones. |
 | `FocusRequester`, `Modifier.focusRequester(r)`, `Modifier.onFocusChange { }` | Moving focus from code and following it; `requestFocus()`, and `moveFocus(backwards)` for the stop after or before the widget. |

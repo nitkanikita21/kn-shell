@@ -17,6 +17,8 @@ class AtlasHostService(
     val groups: List<StoryGroup>,
     val environments: List<AtlasEnvironment> = emptyList(),
 ) {
+    val sidebar = SidebarState(groups)
+
     /** The environment the preview shows stories in; `null` when the catalog supplies none. */
     var environment by mutableStateOf(environments.firstOrNull())
 
@@ -41,6 +43,10 @@ class AtlasHostService(
 
     fun toggleGroup(entry: Variants, group: String) {
         collapsed[entry to group] = !isCollapsed(entry, group)
+    }
+
+    fun focusSearch() {
+        sidebar.searchFocus.requestFocus()
     }
 
     fun select(group: StoryGroup, entry: StoryEntry) {
