@@ -1,14 +1,16 @@
-# Atlas: стан роботи (передача на інший комп'ютер)
+# Atlas і UI-кіт: стан роботи (передача на інший комп'ютер)
 
-Знімок на 2026-11-27, гілка `ui-kit` (від `atlas`). Опис того, як усе влаштовано, — у [`README.uk.md`](README.uk.md);
+Знімок на 2026-11-27, гілка `ui-kit` (від `atlas`), не запушена. Опис атласу — у
+[`README.uk.md`](README.uk.md), кіта — у [`demo/shell-ui-kit/README.md`](../../demo/shell-ui-kit/README.md);
 тут лише те, що потрібно, щоб продовжити.
 
 ## Запуск на новій машині
 
 ```bash
-git checkout ui-kit && git pull
+git checkout ui-kit
 
-./gradlew :demo:shell-app:runAtlas                              # каталог у вікні
+./gradlew :demo:shell-ui-kit:runAtlas                      # каталог кіта у вікні
+KN_SHELL_DEMO=1 ./scripts/run.sh                           # бар і вікно-демо кіта
 cargo install --path atlas/mcp                             # MCP-тулза → ~/.cargo/bin/atlas-mcp
 claude mcp add --scope user atlas -- atlas-mcp             # один раз на машину
 ```
@@ -16,79 +18,62 @@ claude mcp add --scope user atlas -- atlas-mcp             # один раз н�
 Після реєстрації перезапустити Claude Code у корені репозиторію. Перший пошук атласу йде через Gradle;
 якщо бінарника атласу ще немає, спершу викликати інструмент `reload`.
 
-Перевірити машину: `atlas-mcp doctor` (бібліотеки, JDK 21, render-вузол, сесія). Потрібно: GTK 4 з `gio-unix-2.0`, gtk4-layer-shell, librsvg, fontconfig, libepoxy, Rust (cargo),
-JDK 21, `pkg-config`. `local.properties` не комітиться (машинний шлях до konan).
-
-**Ноутбук перевірено (2026-11-27):** дві GPU (`renderD128` amdgpu, `renderD129` nvidia), композитор
-бере першу. Під `headless-compositor` проходять GTK-тести, атлас рендериться на GPU й віддає
-скріншоти. Через сам `atlas-mcp` (`reload`, `screenshot`) не перевірялось. Якщо там щось не працює,
-у `logs` будуть помилки Vulkan/EGL.
+Перевірити машину: `atlas-mcp doctor`. Потрібно: GTK 4 з `gio-unix-2.0`, gtk4-layer-shell, librsvg,
+fontconfig, libepoxy, Rust (cargo), JDK 21, `pkg-config`; для `a11y-check.py` ще `python-gobject` і
+`at-spi2-core`. `local.properties` не комітиться (машинний шлях до konan).
 
 ## Тести
 
 ```bash
-./gradlew :framework:linuxX64Test :atlas:core:linuxX64Test :icons:core:linuxX64Test   # без дисплея
-./gradlew :framework:linuxX64GraphicsTest :atlas:core:linuxX64GraphicsTest :icons:core:linuxX64GraphicsTest   # GTK-тести
+./gradlew :framework:linuxX64Test :atlas:core:linuxX64Test :icons:core:linuxX64Test :demo:shell-ui-kit:linuxX64Test
+./gradlew :framework:linuxX64GraphicsTest :atlas:core:linuxX64GraphicsTest :icons:core:linuxX64GraphicsTest   # GTK
 ./gradlew :atlas:mcp:check :headless-compositor:check                                 # cargo test
-./gradlew :demo:shell-app:atlasGoldenCheck                                                 # вигляд stories
+./gradlew :demo:shell-ui-kit:atlasGoldenCheck                                         # вигляд і play, ~5 хв
+./gradlew :demo:shell-ui-kit:linkAtlasDebugExecutableLinuxX64 && scripts/a11y-check.py
 ```
 
 GTK-тести завжди йдуть під `headless-compositor`: на робочому столі нічого не з'являється, а тести
-можуть натискати клавіші. Будь-який інший клієнт можна запустити так:
-`headless-compositor -- <команда>`.
+можуть натискати клавіші. Будь-який інший клієнт: `headless-compositor -- <команда>`.
 
-На 2026-11-27: `framework` 39 без дисплея і 131 графічний, `atlas:core` 122 і 1, `icons:core` 20 і 2,
-кіт 3, демон 23, композитор 6; без падінь.
+## Що зроблено в гілці `ui-kit`
 
-## Що зроблено
-
-- **Каталог:** контроли для всіх args (`string`, `boolean`, `enum`, `int`, `float`), значення за кожною
-  story, Reset, темна тема, `--story`.
-- **Матриці:** вигляди `Compose` (групи, що згортаються) і `Table`, перемикач, типовий вигляд у DSL
-  (`variants("…", view = MatrixView.Table)`), значок вигляду в сайдбарі.
-- **MCP (`atlas/mcp`):** Rust-демон; приватний дисплей — з модуля `headless-compositor` (рендер на
-  GPU через `linux-dmabuf`). Атласи знаходить через Gradle init-скрипт у модулях із плагіном
-  `dev.knshell.atlas`, за таскою `runAtlas…Executable…`.
-  Інструменти демона: `list_atlases`, `use_atlas`, `set_visible`, `reload`, `status`,
-  `logs`, `stop`; решту віддає сам атлас.
-- **Golden:** прогін усіх stories без екрана з порівнянням пікселів, «Перевірити» й «Прийняти» у
-  вікні атласу, шрифти проєкту в `golden-fonts/`. Еталони демо-stories лежать у кореневій
-  `atlas-goldens/` (`goldens=atlas-goldens` у `gradle.properties`). Записані на ноутбуці, на ПК збіг
-  ще не перевірявся.
-- **Gradle-плагін (`atlas/plugin`):** `id("dev.knshell.atlas")` створює compilation, executable і таски.
-- **Структура:** `atlas/core`, `atlas/mcp`, `atlas/plugin`; окремо `headless-compositor`.
-- **Framework:** `Entry`, `Switch`, `DropDown`, `Grid`, інспектор (`dev.knshell.inspect`),
-  `Modifier.testTag`.
+- `demo/shell-app` і `demo/shell-ui-kit`; дизайн-система перенесена в кіт, сервіси лишились у шелі.
+- `framework`: ARIA-семантика, клавіатура й фокус, `Popup`, `OverlayHost`/`Portal`, `enabled`,
+  поле пароля; інспектор бачить popover-и, ролі, стани й фокус.
+- `headless-compositor`: віртуальна клавіатура.
+- Атлас: `play { }`, кадри станів, середовища (Dark/Light), категорії, `docs`.
+- Кіт: 23 компоненти, сторіси, еталони в `demo/shell-ui-kit/atlas-goldens/`.
+- `shell-app` перейшов на кіт; його каталог і кореневу `atlas-goldens/` прибрано.
 
 ### Виправлені баги `framework` (перевірити бар `shell-app`)
 
-- Sub-node стилі (`Modifier.slider()`, `rawStyle(" …")`) не застосовувались.
-- `Button`, `Flow`, тригер `HoverPopover` дописували пізніше створену дитину в кінець.
-- Перестановка дітей (`move`) знищувала віджети в будь-якому контейнері й ставила елемент не туди.
-- `Icon` не застосовував жодних змін після створення; плавний перехід кольору не працював. Тепер
-  іконки з залежним від стану кольором у барі справді анімуються.
-- `ShaderCanvas` мав той самий дефект з `animated` / `fragmentSource`.
+- `width(…).height(…)` затирали одне одного; так само два `align` чи `fillWidth().vExpand()`.
+- Фокусовний `Box`/`Column` не був зупинкою Tab.
+- Вміст кнопки не отримував її ширину.
+- `Label(wrap = true, maxWidthChars = …)` обрізався до одного рядка.
+- Порядок накладання в `Stack` / `Overlay` для пізніше доданих дітей.
+- Давніші: sub-node стилі, порядок і перестановка дітей, `Icon` після створення, `ShaderCanvas`.
 
-`shell-app` після цих правок лише збирається й лінкується; візуально бар не перевірявся.
+Бар `shell-app` після цих правок лише збирається: layer-shell у композиторі немає, **візуально бар не
+перевірявся**.
 
 ## Далі
 
-1. **Спайк полотна** для зуму й панорами матриці: чи GTK коректно масштабує живі віджети (чіткість
-   тексту, кліки й hover по збільшеному, `bounds` і скріншоти інспектора). Імовірний шлях —
-   `GtkFixed` із трансформацією дочірнього віджета (не перевірено). У `framework` бракує також подій
-   скролу й перетягування.
-2. Зум і панорама для виглядів Compose і Table.
-3. Вигляди **Focus** і **Board**: чи потрібні взагалі, ще не вирішено.
-
-Мокапи чотирьох варіантів (A таблиця, B Compose Preview, C фокус, D дошка), приватна сторінка:
-<https://claude.ai/artifact/SHDayjqcnDEdyXjxVkPbh5>. Обрано B як основний і A як перемикач; обидва
-реалізовані без зуму.
+1. Переглянути бар і демо: `KN_SHELL_DEMO=1 ./scripts/run.sh`.
+2. На ПК: `./gradlew :demo:shell-ui-kit:atlasGoldenCheck` (еталони записані на ноутбуці).
+3. Прослухати кіт з Orca за чеклістом у README кіта.
+4. Атлас: зум і панорама матриць (спайк полотна), вигляди Focus і Board — не вирішено.
 
 ## Відомі обмеження і неперевірене
 
 - `reload` і `set_visible` перезапускають атлас, але вибрана story, вигляд матриці й значення args відновлюються демоном з нового атласу (`Session` у `atlas.rs`). Ті частини, яких у новій збірці немає, демон перелічує у відповіді.
 - Відкритий список `DropDown` не потрапляє на скріншот і в `tree`; `set_state` не викликає
   `Modifier.onHover`.
+- `atlas-mcp` на цій машині не встановлювався: нові інструменти (`press`, `set_environment`) перевірені
+  тестами демона з фейковим атласом, не через MCP.
+- Скріншот інспектора може не вдатися, поки у вікні йде нескінченна анімація («the window painted
+  nothing»); у каталозі кіта анімації вимкнені.
+- `UModal` і `UToasterHost` самі не створюють окреме вікно для layer-shell (як це зробити — у README кіта).
 - `framework` і `atlas:core` не публікуються: інший репозиторій поки не отримає бібліотеки (відкладено).
   На другому справжньому проєкті тулза не перевірялась.
 - Закриття видимого вікна рукою перевірено лише тестом із фейковим атласом.

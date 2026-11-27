@@ -4,13 +4,6 @@ plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
-    // Каталог компонентів: сторіс у src/linuxX64Atlas/kotlin, таска runAtlas.
-    id("dev.knshell.atlas")
-}
-
-atlas {
-    // The example shell keeps its goldens at the root of the repository.
-    goldenDir = rootProject.file("atlas-goldens")
 }
 
 val paletteArchiveFile =
@@ -34,8 +27,7 @@ kotlin {
                 entryPoint = "main"
             }
 
-            // Спільне для всіх executable модуля, зокрема atlas від плагіна:
-            // Rust/palette архів і glibc-прапорець.
+            // Спільне для всіх executable модуля: Rust/palette архів і glibc-прапорець.
             withType<Executable>().configureEach {
                 linkerOpts("--allow-shlib-undefined")
                 linkerOpts(paletteArchiveFile.absolutePath)
@@ -72,7 +64,6 @@ val rustArchive =
         "rust-core/target/x86_64-unknown-linux-gnu/debug/libkn_shell_core.a",
     )
 
-// Умова ширша за "linkDebug", бо `linkAtlasDebugExecutableLinuxX64` з нього не починається.
 tasks.matching { it.name.startsWith("link") && it.name.contains("Executable") }.configureEach {
     inputs.file(rustArchive).optional()
     inputs.file(paletteArchiveFile).optional()

@@ -165,7 +165,9 @@ fun <T : Any> URadioGroup(
                             )
                         }
                     }
-                    Column(spacing = tokens.spacing.xs, modifier = Modifier.hExpand()) {
+                    // In a column the text takes the width; side by side each choice keeps its own.
+                    val textWidth = if (orientation == UOrientation.Vertical) Modifier.hExpand() else Modifier
+                    Column(spacing = tokens.spacing.xs, modifier = textWidth) {
                         Label(
                             item.label,
                             align = 0f,
@@ -218,7 +220,7 @@ fun <T : Any> URadioGroup(
         if (orientation == UOrientation.Vertical) {
             Column(spacing = tokens.spacing.sm) { choices() }
         } else {
-            Row(spacing = tokens.spacing.md) { choices() }
+            Row(spacing = tokens.spacing.md, modifier = Modifier.align(h = Align.Start)) { choices() }
         }
     }
 }

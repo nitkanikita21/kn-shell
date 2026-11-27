@@ -12,9 +12,8 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 (see [Verification log](#verification-log)).
 
 > **Важливо: усе в `demo/` — це ПРИКЛАД використання фреймворку, а не частина самого фреймворку.**
-> `demo/shell-app/` (бар, острови, модулі, сервіс теми й палітра шпалер, story-каталог
-> `demo/shell-app/src/linuxX64Atlas/`) і `demo/shell-ui-kit/` (дизайн-система та UI-кіт цього
-> прикладу) не є API фреймворку: його не можна вважати стабільним, його не слід імпортувати з інших
+> `demo/shell-app/` (бар, острови, сервіс теми й палітра шпалер, демо-вікно кіта) і
+> `demo/shell-ui-kit/` (дизайн-система, UI-кіт цього прикладу та його story-каталог) не є API фреймворку: його не можна вважати стабільним, його не слід імпортувати з інших
 > модулів фреймворку і на нього не можна спиратися як на залежність. Згодом `demo/` буде винесено в
 > окремий проєкт, тож залежності йдуть тільки в один бік:
 > `demo/shell-app` → `demo/shell-ui-kit` → `framework`.
@@ -26,7 +25,7 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │ shell-app (ПРИКЛАД, example app)                                 │
-│   main() → startKnShell()  + example bar (TestBar, chips)         │
+│   main() → Shell.run  + example bar, UI kit demo (KN_SHELL_DEMO)  │
 └───────────────▲──────────────────────────────────────────────────┘
                 │
 ┌───────────────┴──────────────────────────────────────────────────┐
@@ -62,8 +61,8 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 | `headless-compositor/` | Wayland compositor without a screen (Rust): the private display of `atlas-mcp`, also usable for GTK tests |
 | `atlas/` | component catalog for `framework/`: `core`, Gradle `plugin`, and the `mcp` daemon (Rust) |
 | `framework/` | GTK4 C interop, `GtkApplier`, Compose DSL, Modifier/animation, shell runtime (`Shell.run`, layer-shell), reactive `Services`, UI primitives (`ui/primitives`) — the reusable library, no bar |
-| `demo/shell-app/` | **приклад використання `framework/`** (не частина фреймворку, буде винесено в окремий проєкт): thin entrypoint, приклад бару, сервіс теми й палітра шпалер, story-каталог атласу |
-| `demo/shell-ui-kit/` | UI-кіт прикладу: дизайн-система (`theme/`: токени, `ThemeScale`, тонування) і компоненти на `framework/` |
+| `demo/shell-app/` | **приклад використання `framework/`** (не частина фреймворку, буде винесено в окремий проєкт): thin entrypoint, приклад бару, сервіс теми й палітра шпалер; `KN_SHELL_DEMO=1` відкриває вікно-демо кіта |
+| [`demo/shell-ui-kit/`](demo/shell-ui-kit/README.md) | UI-кіт прикладу: дизайн-система, 23 доступні компоненти на `framework/`, story-каталог і еталони |
 
 ---
 

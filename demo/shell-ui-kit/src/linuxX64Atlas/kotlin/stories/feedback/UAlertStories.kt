@@ -11,6 +11,7 @@ import dev.knshell.compose.Column
 import dev.knshell.compose.Key
 import dev.knshell.compose.Label
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.width
 import dev.knshell.compose.testTag
 import dev.knshell.icons.lucide.Lucide
 import dev.knshell.inspect.InteractionState
@@ -130,6 +131,18 @@ val uAlertStories = group("UAlert", category = "Feedback") {
         Samples {
             UAlert("Мало місця", description = "Лишилось 2 ГБ.", color = UColor.Warning, variant = UVariant.Outline)
             UAlert("Збережено", description = "Налаштування застосовано.", color = UColor.Success, variant = UVariant.Subtle)
+        }
+    }
+
+    // Text longer than one line, so that a picture shows it wraps.
+    story("Long text") {
+        Column(modifier = Modifier.width(420)) {
+            UAlert(
+                "Мало місця на диску, і це заголовок, довший за звичайний",
+                description = "Лишилося 2 ГБ. Звільніть місце, інакше оновлення не встановиться, а система " +
+                    "нагадуватиме про це щодня, доки місця знову не вистачить.",
+                color = UColor.Warning,
+            )
         }
     }
 }

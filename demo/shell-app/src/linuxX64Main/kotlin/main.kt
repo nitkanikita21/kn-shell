@@ -5,7 +5,8 @@ import dev.knshell.uikit.theme.ThemeMode
 import dev.knshell.app.theme.ThemeService
 import dev.knshell.app.ui.bar.Workspaces
 import dev.knshell.app.ui.bar.Island
-import dev.knshell.app.ui.TestUi
+import dev.knshell.app.ui.demo.TestUi
+import dev.knshell.app.ui.helpers.ShellTheme
 import dev.knshell.app.ui.helpers.injectDi
 import dev.knshell.compose.CenterBox
 import dev.knshell.compose.Modifier
@@ -40,7 +41,7 @@ fun main() {
     initKoin()
     KoinPlatform.getKoin().getAll<ShellService>().forEach(ShellService::start)
 
-    // Opt-in theme playground; see the window declaration below.
+    // Opt-in demo of the UI kit; see the window declaration below.
     val demo = platform.posix.getenv("KN_SHELL_DEMO") != null
 
     // `Shell.run` declares the windows and then blocks in the GLib main loop. It is a
@@ -62,22 +63,24 @@ fun main() {
             // Exactly one surface drives the theme: three bars polling in parallel would
             // extract the wallpaper three times a tick.
             WallpaperThemeDriver()
-            CenterBox(
-                modifier = Modifier.fillWidth(),
-                start = { Spacer() },
-                center = {
-                    Island(Modifier.inputRegion().radius(0, 0, null, null)) {
-                        Row(4, modifier = Modifier.centerV()) {
-                            Workspaces()
+            ShellTheme {
+                CenterBox(
+                    modifier = Modifier.fillWidth(),
+                    start = { Spacer() },
+                    center = {
+                        Island(Modifier.inputRegion().radius(0, 0, null, null)) {
+                            Row(4, modifier = Modifier.centerV()) {
+                                Workspaces()
+                            }
                         }
-                    }
-                },
-                end = { Spacer() },
-            )
+                    },
+                    end = { Spacer() },
+                )
+            }
         }
         if (demo) {
-            window(WindowSpec(title = "KN Shell — theme", width = 900, height = 620)) {
-                TestUi()
+            window(WindowSpec(title = "KN Shell — UI kit", width = 900, height = 620)) {
+                ShellTheme { TestUi() }
             }
         }
     }

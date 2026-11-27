@@ -15,14 +15,14 @@ atlas/core    DSL stories, модель args, runner, UI каталогу, ко�
 atlas/plugin  Gradle-плагін dev.knshell.atlas: compilation і таски      ← included build
 atlas/mcp     Rust-демон atlas-mcp (MCP)                              ← Gradle-модуль :atlas:mcp (cargo)
 headless-compositor  Wayland-композитор без екрана                    ← Gradle-модуль (cargo)
-shell-app     compilation linuxX64Atlas: stories і точка входу        ← застосунок
+shell-ui-kit  compilation linuxX64Atlas: stories і точка входу        ← приклад (demo/shell-ui-kit)
 ```
 
 - **`atlas:core`** (`atlas/core/`) — `group`/`story`/`variants`, типи args (`Arg`), `LiveArgs`,
   `CellArgs`, `AtlasHostService`, `resolveStory`, `parseStorySpec`, `atlasMain`, UI каталогу
   (`runner/ui`). Пакет `dev.knshell.atlas`.
-- **Stories** живуть у `shell-app`, у compilation `linuxX64Atlas` (`demo/shell-app/src/linuxX64Atlas/kotlin/atlas/`).
-  Compilation і таски додає плагін `dev.knshell.atlas`. Вона залежить від `:atlas:core`, тож звичайний `main` (шелл) stories не містить.
+- **Stories** живуть у модулі, що показує свої компоненти, у compilation `linuxX64Atlas`; у цьому репозиторії це кіт (`demo/shell-ui-kit/src/linuxX64Atlas/kotlin/`).
+  Compilation і таски додає плагін `dev.knshell.atlas`. Вона залежить від `:atlas:core`, тож звичайна збірка модуля stories не містить.
   Точка входу — `fun main(args: Array<String>)` у `atlas/main.kt`, вона викликає `atlasMain(...)`.
 - Runner — не окремий модуль і не Rust-процес: Atlas — звичайний Kotlin/Native executable
   (`atlas`, debug), in-process. Rust-демон `atlas/mcp` тільки керує цим executable з боку MCP;
@@ -223,20 +223,20 @@ golden. Правила, що явно називають нащадків (`labe
 ## Запуск
 
 ```bash
-./gradlew :demo:shell-app:runAtlas
+./gradlew :demo:shell-ui-kit:runAtlas
 ```
 
 Обрати story при старті:
 
 ```bash
 # через Gradle
-./gradlew :demo:shell-app:runAtlas -Pstory="Button/Primary"
+./gradlew :demo:shell-ui-kit:runAtlas -Pstory="UButton/Keyboard"
 # або те саме через змінну середовища
-KN_ATLAS_STORY="Button/Primary" ./gradlew :demo:shell-app:runAtlas
+KN_ATLAS_STORY="UButton/Keyboard" ./gradlew :demo:shell-ui-kit:runAtlas
 # бінарник
-demo/shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "Button/Size X State"
+demo/shell-ui-kit/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "UButton/Variants"
 # або змінна середовища
-KN_ATLAS_STORY="Button/Primary" demo/shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
+KN_ATLAS_STORY="UButton/Keyboard" demo/shell-ui-kit/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
 ```
 
 - `--story Group/Entry` або `--story=Group/Entry` має пріоритет над `KN_ATLAS_STORY`.
@@ -275,8 +275,8 @@ KN_ATLAS_INSPECT=/run/user/1000/atlas.sock atlas.kexe
 (еталоном) піксель у піксель, без допуску.
 
 ```bash
-./gradlew :demo:shell-app:atlasGoldenRecord      # зняти або оновити еталони
-./gradlew :demo:shell-app:atlasGoldenCheck       # порівняти; вихід ≠ 0, якщо щось відрізняється
+./gradlew :demo:shell-ui-kit:atlasGoldenRecord      # зняти або оновити еталони
+./gradlew :demo:shell-ui-kit:atlasGoldenCheck       # порівняти; вихід ≠ 0, якщо щось відрізняється
 ```
 
 | Властивість | Дія |
@@ -316,7 +316,7 @@ KN_ATLAS_INSPECT=/run/user/1000/atlas.sock atlas.kexe
 | нічого | системні | еталони можуть відрізнятися |
 | `atlas { goldenFonts = file("fonts") }` або `atlas.goldenFonts=<тека>` у `gradle.properties` | тільки ця тека | збігаються |
 
-У цьому репозиторії це `golden-fonts/`. Еталони кіта лежать у `demo/shell-ui-kit/atlas-goldens/`, а `shell-app` тримає свої в кореневій `atlas-goldens/` (`atlas { goldenDir = … }`). **Тека має містити всі шрифти, які використовують stories.**
+У цьому репозиторії це `golden-fonts/`. Еталони кіта лежать у `demo/shell-ui-kit/atlas-goldens/`. **Тека має містити всі шрифти, які використовують stories.**
 Story без явного шрифту в preview показує системний шрифт, а в еталоні — той, що є в теці.
 
 `environment.txt` зберігає версії GTK, Pango, cairo, рендерер і відбиток шрифтів. Якщо вони інші,

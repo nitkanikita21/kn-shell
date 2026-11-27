@@ -48,25 +48,25 @@ val tuning by collectThemeTuning()   // State<ThemeTuning> — поточний 
 
 | Токен | Для чого | Приклад у коді |
 | --- | --- | --- |
-| `background` | саме вікно, базова поверхня | `test.ui.kt:71` `Modifier.background(c.background)` |
-| `foreground` | основний текст/іконки на `background` | `test.ui.kt:169` |
-| `card` | піднята поверхня: картки, панелі | `test.ui.kt:365` |
-| `cardForeground` | текст на `card` | `Workspaces.kt:34` |
-| `popover` | плаваючі поверхні: меню, тултіпи (зараз == `card`) | — |
-| `popoverForeground` | текст на `popover` | — |
-| `primary` | **бренд** зі шпалер: активний таб, заповнена кнопка, акцентна іконка | `test.ui.kt:166` |
-| `primaryForeground` | текст/іконка на `primary` (== `background` за значенням) | — (у коді пишуть `c.background`) |
-| `secondary` | другий ступінь поверхні: неактивний таб, well, трек прогресу | `test.ui.kt:213` |
+| `background` | саме вікно, базова поверхня | `USurface` |
+| `foreground` | основний текст/іконки на `background` | текст `USurface` |
+| `card` | піднята поверхня: картки, панелі | `UCard`, `UInput` |
+| `cardForeground` | текст на `card` | `UKbd` |
+| `popover` | плаваючі поверхні: меню, тултіпи (зараз == `card`) | `UPopupSurface`, `UModal`, `UToastCard` |
+| `popoverForeground` | текст на `popover` | там само |
+| `primary` | **бренд** зі шпалер: активний таб, заповнена кнопка, акцентна іконка | `UButton` (Solid), активна вкладка |
+| `primaryForeground` | текст/іконка на `primary` (== `background` за значенням) | текст на ньому |
+| `secondary` | другий ступінь поверхні: неактивний таб, well, трек прогресу | список `UTabs` (Pill), трек `UProgress` |
 | `secondaryForeground` | текст на `secondary` | — |
 | `muted` | приглушена зона (зараз == `secondary`) | — |
-| `mutedForeground` | другорядний текст: підказки, підписи, таймстемпи | `test.ui.kt` (14 місць) |
-| `accent` | **hover/pressed wash**, НЕ бренд | `test.ui.kt:262` `.hoverBackground(c.accent)` |
-| `accentForeground` | текст на `accent` | `Workspaces.kt:34` |
-| `destructive` | помилки, видалення; червоний, підфарбований під теплі шпалери (±12°) | — |
-| `destructiveForeground` | текст на `destructive` | — |
-| `border` | хайрлайн між поверхнями | `test.ui.kt:100` `borderColor = c.border`, `test.ui.kt:309` розділювач |
-| `input` | обведення полів вводу, трохи сильніше за `border` | — |
-| `ring` | focus ring | — |
+| `mutedForeground` | другорядний текст: підказки, підписи, таймстемпи | описи, підписи, неактивні вкладки |
+| `accent` | **hover/pressed wash**, НЕ бренд | наведення в меню й списках, `UAvatar`, `USkeleton` |
+| `accentForeground` | текст на `accent` | `UAvatar` |
+| `destructive` | помилки, видалення; червоний, підфарбований під теплі шпалери (±12°) | `UColor.Error`, рамка поля з помилкою |
+| `destructiveForeground` | текст на `destructive` | текст на ньому |
+| `border` | хайрлайн між поверхнями | рамки `UCard`, `UModal`, розділювачі |
+| `input` | обведення полів вводу, трохи сильніше за `border` | обведення полів, прапорця, радіо |
+| `ring` | focus ring | `uFocusRing()` |
 | `success` / `successForeground` | вдалося: заливка і текст на ній | — |
 | `warning` / `warningForeground` | потребує уваги | — |
 | `info` / `infoForeground` | нейтральна інформація | — |
@@ -76,7 +76,7 @@ val tuning by collectThemeTuning()   // State<ThemeTuning> — поточний 
 це перевіряє `ThemeContrastTest` у `demo/shell-ui-kit`. Через це в темній темі
 `destructiveForeground` темний (дорівнює `background`).
 
-«—» = токен є, але в UI ще не використовується. Це не привід плодити новий токен під свою
+«—» = токен є, але компоненти кіта його не беруть. Це не привід плодити новий токен під свою
 задачу: спершу перевір, чи підходить наявний.
 
 `ThemeTokens.entries()` віддає всі 30, спершу набір shadcn — їм ітеруються свотчі у демо, тож новий
@@ -88,9 +88,8 @@ val tuning by collectThemeTuning()   // State<ThemeTuning> — поточний 
    `primary`. Активний таб/кнопку фарбують `primary`, рядок під курсором — `accent`.
 2. **`muted` == `secondary`** за значенням в обох режимах. Не будуй на різниці між ними; різниця
    лише семантична.
-3. **`primaryForeground` — це і є `background`.** У коді вже пишуть `c.background` як текст на
-   `primary` (`test.ui.kt:168, 411`). Для нового коду краще `c.primaryForeground` — пара
-   очевидна, значення те саме.
+3. **`primaryForeground` — це і є `background`** за значенням. Для тексту на `primary` пиши
+   `primaryForeground`: пара очевидна.
 4. **`border`/`input` у dark — напівпрозорі й тоновані** (L `0.62`/`0.68`, `alpha 0.22`/`0.28`).
    Вони лягають *поверх* поверхні, тому їх не можна підставляти як `background`, і не можна
    очікувати однакового вигляду на різних поверхнях. У light — суцільні.
@@ -108,8 +107,8 @@ val tuning by collectThemeTuning()   // State<ThemeTuning> — поточний 
    ~0.042 chroma для зеленого (hue 126°) і ~0.051 для синього (253°). Тому всі кольори йдуть
    через `Color.oklchFitted` (зберігає L і h, підрізає chroma), а «зробити явніше» — це
    `tuning.lift`, не підняття cap-у: cap вище ~0.05 сам по собі нічого не змінює.
-9. Для тексту на довільному свотчі є хелпер `textOn(swatch, theme)` у `test.ui.kt` (грубий
-   luminance-proxy). Це демо-хак, не привід рахувати контраст у проді — бери `XForeground`.
+9. Для тексту на довільному кольорі порівнюй `contrastRatio(текст, колір.over(фон))`, як свотчі в
+   демо. Для пар теми бери `XForeground`.
 10. **Другий hue — не завжди.** `secondHue` є тільки якщо в шпалері є кластер ≥ 40° від
     домінантного з `c ≥ 0.02`. Не вигадуй другий hue «для краси»: монохромні шпалери мають
     давати монохромний UI.

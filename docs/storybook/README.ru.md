@@ -15,14 +15,14 @@ atlas/core    DSL stories, модель args, runner, UI каталога, ко�
 atlas/plugin  Gradle-плагин dev.knshell.atlas: compilation и таски      ← included build
 atlas/mcp     Rust-демон atlas-mcp (MCP)                              ← Gradle-модуль :atlas:mcp (cargo)
 headless-compositor  Wayland-композитор без экрана                    ← Gradle-модуль (cargo)
-shell-app     compilation linuxX64Atlas: stories и точка входа        ← приложение
+shell-ui-kit  compilation linuxX64Atlas: stories и точка входа        ← пример (demo/shell-ui-kit)
 ```
 
 - **`atlas:core`** (`atlas/core/`) — `group`/`story`/`variants`, типы args (`Arg`), `LiveArgs`,
   `CellArgs`, `AtlasHostService`, `resolveStory`, `parseStorySpec`, `atlasMain`, UI каталога
   (`runner/ui`). Пакет `dev.knshell.atlas`.
-- **Stories** живут в `shell-app`, в compilation `linuxX64Atlas` (`demo/shell-app/src/linuxX64Atlas/kotlin/atlas/`).
-  Compilation и таски добавляет плагин `dev.knshell.atlas`. Она зависит от `:atlas:core`, поэтому обычный `main` (шелл) stories не содержит.
+- **Stories** живут в модуле, который показывает свои компоненты, в compilation `linuxX64Atlas`; в этом репозитории это кит (`demo/shell-ui-kit/src/linuxX64Atlas/kotlin/`).
+  Compilation и таски добавляет плагин `dev.knshell.atlas`. Она зависит от `:atlas:core`, поэтому обычная сборка модуля stories не содержит.
   Точка входа — `fun main(args: Array<String>)` в `atlas/main.kt`, она вызывает `atlasMain(...)`.
 - Runner — не отдельный модуль и не Rust-процесс: Atlas — обычный Kotlin/Native executable
   (`atlas`, debug), in-process. Rust-демон `atlas/mcp` только управляет этим executable со стороны
@@ -169,20 +169,20 @@ val buttonStories = group("Button") {
 ## Запуск
 
 ```bash
-./gradlew :demo:shell-app:runAtlas
+./gradlew :demo:shell-ui-kit:runAtlas
 ```
 
 Выбрать story при старте:
 
 ```bash
 # через Gradle
-./gradlew :demo:shell-app:runAtlas -Pstory="Button/Primary"
+./gradlew :demo:shell-ui-kit:runAtlas -Pstory="UButton/Keyboard"
 # или то же через переменную окружения
-KN_ATLAS_STORY="Button/Primary" ./gradlew :demo:shell-app:runAtlas
+KN_ATLAS_STORY="UButton/Keyboard" ./gradlew :demo:shell-ui-kit:runAtlas
 # бинарник
-demo/shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "Button/Size X State"
+demo/shell-ui-kit/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "UButton/Variants"
 # или переменная окружения
-KN_ATLAS_STORY="Button/Primary" demo/shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
+KN_ATLAS_STORY="UButton/Keyboard" demo/shell-ui-kit/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
 ```
 
 - `--story Group/Entry` или `--story=Group/Entry` имеет приоритет над `KN_ATLAS_STORY`.
