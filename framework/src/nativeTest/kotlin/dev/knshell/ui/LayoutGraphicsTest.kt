@@ -47,4 +47,18 @@ class LayoutGraphicsTest {
         val right = button.x + button.width - label.x - label.width
         assertTrue(button.width == 300 && kotlin.math.abs(left - right) <= 1, "left $left, right $right in $button")
     }
+
+    @Test
+    fun `a width in characters wraps wrapped text and cuts a single line`() = uiTest({
+        val text = "one two three four five six seven eight nine ten eleven twelve thirteen"
+        Column(modifier = Modifier.align(h = Align.Start, v = Align.Start)) {
+            Label(text, modifier = Modifier.testTag("line"), maxWidthChars = 20)
+            Label(text, modifier = Modifier.testTag("lines"), wrap = true, maxWidthChars = 20)
+        }
+    }) {
+        val line = node("line").bounds
+        val lines = node("lines").bounds
+        assertTrue(lines.height > 2 * line.height, "$lines against $line")
+        assertTrue(lines.width < 250, "$lines")
+    }
 }

@@ -79,6 +79,9 @@ import kn.gtk.gtk_widget_queue_draw
 
 internal class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
     private var lastText: String = ""
+    private var wraps = false
+    private var ellipsizes = false
+    private var maxChars = -1
 
     fun setText(text: String) {
         lastText = text
@@ -97,11 +100,20 @@ internal class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
     }
 
     fun setWrap(wrap: Boolean) {
+        wraps = wrap
         gtk_label_set_wrap(widget.reinterpret<GtkLabel>(), if (wrap) 1 else 0)
+        applyEllipsize()
     }
 
     fun setEllipsize(enabled: Boolean) {
-        val mode = if (enabled) PangoEllipsizeMode.PANGO_ELLIPSIZE_END else PangoEllipsizeMode.PANGO_ELLIPSIZE_NONE
+        ellipsizes = enabled
+        applyEllipsize()
+    }
+
+    /** A single line limited in width ends with "…"; wrapped text goes on to the next line instead. */
+    private fun applyEllipsize() {
+        val cut = ellipsizes || (maxChars >= 0 && !wraps)
+        val mode = if (cut) PangoEllipsizeMode.PANGO_ELLIPSIZE_END else PangoEllipsizeMode.PANGO_ELLIPSIZE_NONE
         gtk_label_set_ellipsize(widget.reinterpret<GtkLabel>(), mode)
     }
 
@@ -116,18 +128,14 @@ internal class GtkLabelNode : GtkNode(gtk_label_new("")!!) {
     }
 
     /**
-     * Clamps the label width in average characters and enables end-ellipsis.
-     * Unlike pixel clamps this follows the label's own font, so "…" appears exactly where
-     * the text stops fitting — no manual per-font tuning. Pass -1 to disable.
+     * Clamps the label width in average characters. Unlike pixel clamps this follows the label's
+     * own font: a single line ends with "…" exactly where the text stops fitting, and wrapped
+     * text breaks there. Pass -1 to disable.
      */
     fun setMaxWidthChars(chars: Int) {
+        maxChars = chars
         gtk_label_set_max_width_chars(widget.reinterpret<GtkLabel>(), chars)
-        if (chars >= 0) {
-            gtk_label_set_ellipsize(
-                widget.reinterpret<GtkLabel>(),
-                PangoEllipsizeMode.PANGO_ELLIPSIZE_END,
-            )
-        }
+        applyEllipsize()
     }
 }
 

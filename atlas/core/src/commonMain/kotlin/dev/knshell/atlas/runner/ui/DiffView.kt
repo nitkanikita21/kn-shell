@@ -82,7 +82,7 @@ private fun DiffCase(golden: GoldenController, story: String, case: CaseResult) 
     Column(spacing = 8, modifier = Modifier.align(h = Align.Start).testTag("diff:case:${case.id}")) {
         Row(spacing = 12) {
             // What tells this case from the others of the story: environment, cell, state or snapshot.
-            val caption = case.id.replaceFirst(story, "").replace("//", "/").trim('/')
+            val caption = case.id.replaceFirst(story, "").replace("//", "/").trim('/').replace("/@", " @")
             Label(caption.ifEmpty { story }, modifier = chromeText(AtlasTheme.fg))
             Label(describe(case), modifier = chromeText(case.status.badge().second))
             if (golden.report?.acceptable(one)?.isNotEmpty() == true) {

@@ -206,8 +206,8 @@ private fun CenterRegion(slot: CenterSlot, content: @Composable () -> Unit) {
  * `<span foreground="#ff0000">`, `<big>`, `<small>`, …); [wrap] allows multi-line text,
  * [ellipsize] truncates it with an ellipsis when the width is constrained, [align] is the
  * horizontal text alignment inside the label (0 = left, 0.5 = center, 1 = right),
- * [maxWidthChars] clamps the width in characters and forces end-ellipsis (font-aware,
- * unlike pixel clamps).
+ * [maxWidthChars] clamps the width in characters (font-aware, unlike pixel clamps): without
+ * [wrap] the text ends with an ellipsis there, with it the text breaks into lines.
  */
 @Composable
 fun Label(
