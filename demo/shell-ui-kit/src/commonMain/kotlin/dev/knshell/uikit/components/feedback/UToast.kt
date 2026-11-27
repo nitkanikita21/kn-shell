@@ -274,6 +274,8 @@ internal fun ToastCardBody(
                             caretColor = tokens.colors.foreground,
                             selectionBackground = tokens.colors.primary,
                             selectionColor = tokens.colors.primaryForeground,
+                            transitionMs = tokens.motion.themeMs,
+                            placeholderColor = tokens.colors.mutedForeground,
                         )
                         .padding(horizontal = tokens.spacing.sm, vertical = tokens.spacing.xs)
                         .semantics(Semantics(role = Role.TextBox, label = reply.placeholder))

@@ -148,6 +148,7 @@ fun UInput(
                     selectionBackground = set.fill,
                     selectionColor = set.onFill,
                     transitionMs = tokens.motion.themeMs,
+                    placeholderColor = tokens.colors.mutedForeground,
                 )
                 .uFill(clear)
                 .then(themed.input)

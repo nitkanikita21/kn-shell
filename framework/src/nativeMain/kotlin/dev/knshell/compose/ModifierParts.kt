@@ -43,8 +43,9 @@ fun Modifier.labelStyle(
 ): Modifier = with(LabelStyleElement(color, fontFamily, fontSize, transitionMs))
 
 /**
- * The text field of an `Entry`: text colour, the caret, and the selection (background and text).
- * The field itself keeps its own [background] and [border].
+ * The text field of an `Entry`: text colour, the caret, the selection (background and text) and the
+ * placeholder, which without [placeholderColor] is a faded [textColor]. The field itself keeps its
+ * own [background] and [border].
  */
 fun Modifier.entryStyle(
     textColor: Color,
@@ -52,7 +53,10 @@ fun Modifier.entryStyle(
     selectionBackground: Color,
     selectionColor: Color,
     transitionMs: Int = 0,
-): Modifier = with(EntryStyleElement(textColor, caretColor, selectionBackground, selectionColor, transitionMs))
+    placeholderColor: Color? = null,
+): Modifier = with(
+    EntryStyleElement(textColor, caretColor, selectionBackground, selectionColor, transitionMs, placeholderColor),
+)
 
 /**
  * The knob of a `Switch`: a square of [size] CSS pixels with [radius] corners, in [color] when off

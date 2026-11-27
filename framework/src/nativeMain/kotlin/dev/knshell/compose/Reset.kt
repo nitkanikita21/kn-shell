@@ -256,6 +256,12 @@ entry.kn-plain > text:disabled {
     font-weight: inherit;
 }
 
+/* The hint of an empty field: the theme would colour it for its own background. */
+entry.kn-plain > text > placeholder {
+    color: inherit;
+    opacity: 0.55;
+}
+
 /* --- switches: the track and the knob (`slider`) ------------------------------ */
 switch.kn-plain,
 switch.kn-plain:hover,

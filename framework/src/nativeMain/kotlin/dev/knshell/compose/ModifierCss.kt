@@ -303,6 +303,11 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
                 rules += " > text > selection" to
                     "background-color: ${element.selectionBackground.toCss()}; " +
                     "color: ${element.selectionColor.toCss()};"
+                // Without a colour of its own the reset's faded `inherit` applies.
+                element.placeholderColor?.let { color ->
+                    rules += " > text > placeholder" to "color: ${color.toCss()}; opacity: 1;"
+                    transition(" > text > placeholder", element.transitionMs, "color")
+                }
                 transition(" > text", element.transitionMs, "color", "caret-color")
             }
 

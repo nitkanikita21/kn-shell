@@ -170,6 +170,7 @@ internal data class EntryStyleElement(
     val selectionBackground: Color,
     val selectionColor: Color,
     val transitionMs: Int,
+    val placeholderColor: Color? = null,
 ) : ModifierElement
 
 /** Knob of a `Switch` (`Modifier.switchKnob`). */
