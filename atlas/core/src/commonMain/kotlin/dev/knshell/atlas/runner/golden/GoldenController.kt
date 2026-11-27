@@ -42,19 +42,24 @@ fun storyStatuses(report: GoldenReport): Map<String, CaseStatus> {
         .mapValues { (_, cases) -> worst.first { status -> cases.any { it.status == status } } }
 }
 
+private val STATUS_NAMES = listOf(
+    CaseStatus.Changed to "змінено",
+    CaseStatus.New to "нових",
+    CaseStatus.Error to "з помилкою",
+    CaseStatus.PlayFailed to "сценаріїв упало",
+    CaseStatus.Orphan to "зайвих",
+)
+
+/** What differs after a run, one line per kind: `змінено: 2`. Empty when everything matches. */
+fun differences(report: GoldenReport): List<Pair<CaseStatus, String>> = STATUS_NAMES
+    .filter { report.count(it.first) > 0 }
+    .map { (status, name) -> status to "$name: ${report.count(status)}" }
+
 /** One line that says how a run went. */
 fun summaryText(report: GoldenReport): String {
     if (!report.finished) return "${report.cases.size}/${report.total}"
-    val names = listOf(
-        CaseStatus.Changed to "змінено",
-        CaseStatus.New to "нових",
-        CaseStatus.Error to "з помилкою",
-        CaseStatus.PlayFailed to "сценаріїв упало",
-        CaseStatus.Orphan to "зайвих",
-    )
-    val differences = names.filter { report.count(it.first) > 0 }
-        .joinToString(" · ") { (status, name) -> "$name: ${report.count(status)}" }
-    return differences.ifEmpty { "без змін: ${report.count(CaseStatus.Same)}" }
+    return differences(report).joinToString(" · ") { it.second }
+        .ifEmpty { "без змін: ${report.count(CaseStatus.Same)}" }
 }
 
 class GoldenController(

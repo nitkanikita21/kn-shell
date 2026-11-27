@@ -66,22 +66,24 @@ fun Sidebar(
     }
 
     Column(modifier = frame) {
-        if (environments.size > 1) {
-            Row(spacing = 6, modifier = with(AtlasTheme) { Modifier.hExpand().padding(all = 8) }) {
-                environments.forEach { choice ->
-                    ActionButton(choice.name, "environment:${choice.name}", active = choice === environment) {
-                        onEnvironment(choice)
-                    }
-                }
+        GoldenPanel(golden) {
+            if (environments.size > 1) {
+                Segmented(
+                    options = environments,
+                    selected = environment,
+                    title = { it.name },
+                    tag = { "environment:${it.name}" },
+                    onSelect = onEnvironment,
+                )
             }
         }
-        GoldenPanel(golden)
         Scroll(modifier = Modifier.weight()) {
             Column(modifier = Modifier.hExpand()) {
                 // Categories in the order the catalog first names them.
                 groups.groupBy { it.category }.forEach { (category, members) ->
                     val visible = members.map { group ->
-                        group to group.entries.filter { !onlyChanged || "${group.title}/${it.name}" in statuses }
+                        group to sidebarOrder(group.entries)
+                            .filter { !onlyChanged || "${group.title}/${it.name}" in statuses }
                     }.filter { it.second.isNotEmpty() }
                     if (category != null && visible.isNotEmpty()) {
                         key("category:$category") {
@@ -103,6 +105,9 @@ fun Sidebar(
         }
     }
 }
+
+/** How the tree lists the entries of a group: stories, then matrices, each as the catalog declares them. */
+internal fun sidebarOrder(entries: List<StoryEntry>): List<StoryEntry> = entries.sortedBy { it is Variants }
 
 @Composable
 private fun StoryGroupRow(
@@ -185,14 +190,20 @@ private fun StoryRow(
         active = active,
         onClick = { onSelect(group, story) },
     ) {
-        Icon(Lucide.Bookmark, size = 16, color = AtlasTheme.dim)
+        EntryIcon { Icon(Lucide.Bookmark, modifier = Modifier.align(Align.Center), size = 16, color = AtlasTheme.dim) }
     }
+}
+
+/** The same room for the icon of every entry, so that all names start on one line. */
+@Composable
+private fun EntryIcon(content: @Composable () -> Unit) {
+    Stack(Modifier.size(width = 20, height = 18)) { content() }
 }
 
 /** The matrix icon with a badge in its corner that tells which view the matrix is shown in. */
 @Composable
 private fun MatrixIcon(view: MatrixView) {
-    Stack(Modifier.size(width = 20, height = 18)) {
+    EntryIcon {
         Icon(Lucide.Grid2X2, modifier = Modifier.align(h = Align.Start, v = Align.Start), size = 15, color = AtlasTheme.dim)
         Box(
             Modifier
