@@ -117,26 +117,28 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
 
             BoldElement -> rules += "" to "font-weight: 700;"
 
+            // Layout elements add up along the chain: an axis one of them leaves out keeps what an
+            // earlier one said, so `width(40).height(12)` is both.
             is SizeElement -> {
-                width = element.width
-                height = element.height
+                width = element.width ?: width
+                height = element.height ?: height
             }
 
             is RequiredSizeElement -> {
-                width = element.width
-                height = element.height
-                requiredWidth = element.width != null
-                requiredHeight = element.height != null
+                width = element.width ?: width
+                height = element.height ?: height
+                requiredWidth = requiredWidth || element.width != null
+                requiredHeight = requiredHeight || element.height != null
             }
 
             is ExpandElement -> {
-                hexpand = element.horizontal
-                vexpand = element.vertical
+                hexpand = hexpand == true || element.horizontal
+                vexpand = vexpand == true || element.vertical
             }
 
             is AlignElement -> {
-                halign = element.horizontal
-                valign = element.vertical
+                halign = element.horizontal ?: halign
+                valign = element.vertical ?: valign
             }
 
             // Weight is a property of the CONTAINER's layout manager, not of the widget: it is

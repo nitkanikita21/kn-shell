@@ -99,6 +99,10 @@ sub-node rule never leaks to other widgets and does not outlive its widget.
 
 A child added later to a `Stack` or `Overlay` paints at its place in composition order.
 
+Size, alignment and expand modifiers of one chain add up: `width(40).height(12)` is both, and
+`align(h = …).align(v = …)` sets both axes. The only child of a `Button` is given the button's whole
+width and places itself in it with its alignment.
+
 ### Animated size (Compose-owned)
 
 The size animation is a **`Modifier`** — there is no dedicated component. `animatedWidth` /

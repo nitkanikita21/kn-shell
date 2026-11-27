@@ -9,6 +9,7 @@ import dev.knshell.compose.Box
 import dev.knshell.compose.Column
 import dev.knshell.compose.Label
 import dev.knshell.compose.Modifier
+import dev.knshell.compose.Orientation
 import dev.knshell.compose.Role
 import dev.knshell.compose.Semantics
 import dev.knshell.compose.SemanticsRef
@@ -52,6 +53,7 @@ class AccessibilityGraphicsTest {
                         selected = selected,
                         checked = Tristate.Mixed,
                         expanded = false,
+                        orientation = Orientation.Vertical,
                         valueNow = 4.0,
                         valueText = "four",
                         labelledBy = title,
@@ -89,6 +91,8 @@ class AccessibilityGraphicsTest {
             mismatch(GtkAccessibleState.GTK_ACCESSIBLE_STATE_CHECKED, GtkAccessibleTristate.GTK_ACCESSIBLE_TRISTATE_MIXED.value.toInt()),
         )
         assertEquals(null, mismatch(GtkAccessibleState.GTK_ACCESSIBLE_STATE_SELECTED, 1))
+        assertTrue(hasProperty(GtkAccessibleProperty.GTK_ACCESSIBLE_PROPERTY_ORIENTATION))
+        assertEquals("vertical", node("tab").states["orientation"])
     }
 
     /** `null` when GTK holds [expected] for [state], else GTK's description of what it holds. */

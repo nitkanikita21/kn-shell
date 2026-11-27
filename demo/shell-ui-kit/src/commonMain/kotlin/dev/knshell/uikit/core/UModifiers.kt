@@ -17,6 +17,7 @@ import dev.knshell.compose.opacity
 import dev.knshell.compose.pointerCursor
 import dev.knshell.compose.pressedBackground
 import dev.knshell.compose.radius
+import dev.knshell.compose.rawStyle
 import dev.knshell.compose.textColor
 import dev.knshell.uikit.theme.UTheme
 
@@ -60,6 +61,12 @@ fun Modifier.uVariant(style: UVariantStyle, radius: Int, interactive: Boolean = 
         painted.radius(radius)
     }
 }
+
+/**
+ * Fills the widget with [color] while it has the focus. For the items of a menu or a list, where the
+ * focused one must stand out whether the keyboard or the code put the focus there.
+ */
+fun Modifier.uFocusFill(color: Color): Modifier = rawStyle(":focus", "background-color: ${color.toCss()};")
 
 private const val DISABLED_OPACITY = 0.45f
 

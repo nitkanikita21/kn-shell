@@ -84,7 +84,8 @@ fun UBadge(
   `Modifier.uRovingItem(state, key, keys, selected, orientation, onMove = …)`.
 - `Modifier.onKey { event -> … }` повертає `true`, лише якщо клавішу використано.
 - Недоступний контрол: `Modifier.enabled(false)` + `uDimmed(true)` + `disabled = true` у semantics.
-- Рамка фокуса: `Modifier.uFocusRing()` на кожному фокусовному.
+- Рамка фокуса: `Modifier.uFocusRing()` на кожному фокусовному. Пункти меню й списку додатково
+  заливаються `Modifier.uFocusFill(color)`: у popover-і рамки `:focus-visible` GTK не малює.
 - Поле форми: контрол застосовує `Modifier.uFieldControl(Semantics(…))` замість `semantics` і
   `uInvalid(invalid)` для вигляду; тоді `UFormField` сам зв'язує назву, опис і помилку.
 

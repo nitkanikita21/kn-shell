@@ -233,7 +233,7 @@ internal class SemanticsState(private val widget: CPointer<GtkWidget>) {
             } else {
                 GtkOrientation.GTK_ORIENTATION_HORIZONTAL
             }
-            g_value_set_enum(value, gtk.value.toInt())
+            g_value_set_int(value, gtk.value.toInt())
         }
 
         flagState(GtkAccessibleState.GTK_ACCESSIBLE_STATE_EXPANDED, before.expanded, now.expanded)
@@ -302,7 +302,12 @@ internal class SemanticsState(private val widget: CPointer<GtkWidget>) {
             val name = alloc<GtkAccessibleProperty.Var>()
             name.value = key
             val value = alloc<GValue>()
-            gtk_accessible_property_init_value(key, value.ptr)
+            // Like the states in INT_STATES: initialised as an enum, read back as an int.
+            if (key == GtkAccessibleProperty.GTK_ACCESSIBLE_PROPERTY_ORIENTATION) {
+                g_value_init(value.ptr, g_type_from_name("gint"))
+            } else {
+                gtk_accessible_property_init_value(key, value.ptr)
+            }
             write(value.ptr, now)
             gtk_accessible_update_property_value(accessible, 1, name.ptr, value.ptr)
             g_value_unset(value.ptr)

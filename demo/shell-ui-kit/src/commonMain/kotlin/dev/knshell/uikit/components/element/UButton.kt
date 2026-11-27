@@ -88,6 +88,8 @@ fun UButton(
             .minHeight(metrics.height - 2)
             // The padding makes an icon alone the middle of a square.
             .padding(horizontal = if (iconOnly) (metrics.height - 2 - metrics.icon) / 2 else metrics.paddingX)
+            // Its natural width, also where a column would stretch it; `Modifier.hExpand()` fills.
+            .align(h = Align.Start)
             .uFocusRing()
             .uDimmed(disabled)
             .enabled(!disabled)

@@ -33,6 +33,9 @@ import kn.gtk.gtk_box_append
 import kn.gtk.gtk_box_insert_child_after
 import kn.gtk.gtk_box_new
 import kn.gtk.gtk_box_remove
+import kn.gtk.gtk_widget_get_next_sibling
+import kn.gtk.gtk_widget_get_first_child
+import kn.gtk.gtk_box_set_homogeneous
 import kn.gtk.gtk_button_new
 import kn.gtk.gtk_button_new_with_label
 import kn.gtk.gtk_button_set_child
@@ -192,14 +195,27 @@ internal class GtkButtonContainerNode : GtkNode(gtk_button_new()!!) {
     override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
         val previous = children.getOrNull(index - 1)?.widget
         gtk_box_insert_child_after(contentBox.reinterpret<GtkBox>(), child, previous)
+        giveOnlyChildTheWidth()
     }
 
     override fun attachChild(child: CPointer<GtkWidget>) {
         gtk_box_append(contentBox.reinterpret<GtkBox>(), child)
+        giveOnlyChildTheWidth()
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {
         gtk_box_remove(contentBox.reinterpret<GtkBox>(), child)
+        giveOnlyChildTheWidth()
+    }
+
+    /**
+     * A single child gets the whole width of a stretched button, as in a stock GtkButton, and places
+     * itself there with its alignment. Several children keep their own widths, side by side.
+     */
+    private fun giveOnlyChildTheWidth() {
+        val first = gtk_widget_get_first_child(contentBox)
+        val single = first != null && gtk_widget_get_next_sibling(first) == null
+        gtk_box_set_homogeneous(contentBox.reinterpret<GtkBox>(), if (single) 1 else 0)
     }
 }
 
