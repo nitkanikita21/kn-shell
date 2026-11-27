@@ -27,6 +27,9 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
 
     internal val children = mutableListOf<GtkNode>()
 
+    /** What the inspector lists below this node: the children, plus content shown on a surface of its own. */
+    internal open val inspectableChildren: List<GtkNode> get() = children
+
     /** Per-widget style provider used by modifier-based styling. */
     internal val inlineStyle = InlineStyle(widget)
 
@@ -100,8 +103,13 @@ open class GtkNode(val widget: CPointer<GtkWidget>) {
         }
     }
 
-    /** Stops any in-flight animation; called before the widget leaves the tree. */
+    /**
+     * Stops any in-flight animation and drops everything that points at the widget from outside;
+     * called before the widget leaves the tree.
+     */
     internal open fun cancelAnimations() {
+        inlineStyle.input.release()
+        inlineStyle.semantics.release()
         children.forEach { it.cancelAnimations() }
     }
 

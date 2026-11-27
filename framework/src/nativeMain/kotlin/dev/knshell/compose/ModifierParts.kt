@@ -24,15 +24,23 @@ enum class BorderSide {
  * of [background] it paints no fill, so it works alone:
  * `Modifier.border(color, sides = setOf(BorderSide.Bottom))` is a hairline under a row.
  */
-fun Modifier.border(color: Color, width: Int = 1, sides: Set<BorderSide> = BorderSide.ALL): Modifier =
-    with(BorderElement(color, width, sides))
+fun Modifier.border(
+    color: Color,
+    width: Int = 1,
+    sides: Set<BorderSide> = BorderSide.ALL,
+    transitionMs: Int = 0,
+): Modifier = with(BorderElement(color, width, sides, transitionMs))
 
 /**
  * Colour and font of the `label` nodes inside the widget. The application stylesheet sizes bare
  * labels, so these are set on the nodes themselves. [fontFamily] is a family name without quotes.
  */
-fun Modifier.labelStyle(color: Color, fontFamily: String? = null, fontSize: Int? = null): Modifier =
-    with(LabelStyleElement(color, fontFamily, fontSize))
+fun Modifier.labelStyle(
+    color: Color,
+    fontFamily: String? = null,
+    fontSize: Int? = null,
+    transitionMs: Int = 0,
+): Modifier = with(LabelStyleElement(color, fontFamily, fontSize, transitionMs))
 
 /**
  * The text field of an `Entry`: text colour, the caret, and the selection (background and text).
@@ -43,7 +51,8 @@ fun Modifier.entryStyle(
     caretColor: Color,
     selectionBackground: Color,
     selectionColor: Color,
-): Modifier = with(EntryStyleElement(textColor, caretColor, selectionBackground, selectionColor))
+    transitionMs: Int = 0,
+): Modifier = with(EntryStyleElement(textColor, caretColor, selectionBackground, selectionColor, transitionMs))
 
 /**
  * The knob of a `Switch`: a square of [size] CSS pixels with [radius] corners, in [color] when off

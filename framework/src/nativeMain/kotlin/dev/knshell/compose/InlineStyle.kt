@@ -58,6 +58,12 @@ internal class InlineStyle(private val widget: CPointer<GtkWidget>) {
     /** Click/hover/cursor wiring (see Interaction.kt). */
     internal val interaction = InteractionState(widget)
 
+    /** Keys and focus (see Focus.kt). */
+    internal val input = InputState(widget)
+
+    /** What assistive technology is told (see Semantics.kt). */
+    internal val semantics = SemanticsState(widget)
+
     private var provider: CPointer<GtkCssProvider>? = null
     private var sharedProvider: CPointer<GtkCssProvider>? = null
     private var className: String? = null

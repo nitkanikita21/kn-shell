@@ -7,6 +7,7 @@ package dev.knshell.shell
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
+import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
 import dev.knshell.compose.GtkNode
@@ -69,7 +70,13 @@ internal class GtkHoverPopoverNode(
         gtk_box_new(GtkOrientation.GTK_ORIENTATION_VERTICAL, 0)!!
 
     private var composition: Composition? = null
-    private var popoverCssInstalled = false
+    private var contentRoot: GtkNode? = null
+
+    /** The composition the popover is declared in: its content inherits the composition locals. */
+    internal var parentContext: CompositionContext? = null
+
+    override val inspectableChildren: List<GtkNode>
+        get() = children + listOfNotNull(contentRoot.takeIf { shown })
     private var shown = false
     private var showSource = 0u
     private var hideSource = 0u
@@ -159,7 +166,7 @@ internal class GtkHoverPopoverNode(
     /** Called by the composable whenever a new content lambda is available. */
     private fun ensureComposition() {
         if (composition != null) return
-        composition = ShellRuntime.instance().mountCompose(contentBox) {
+        val mounted = ShellRuntime.instance().mountCompose(contentBox, parentContext) {
             contentState.value()
             // The popover surface caches its size from the first presentation; without this
             // a content update (wifi details arriving, changing rates) is clipped inside the
@@ -171,20 +178,8 @@ internal class GtkHoverPopoverNode(
                 gtk_widget_queue_resize(contentBox)
             }
         }
-    }
-
-    /**
-     * The popover frame/shadow is drawn on the `contents` CSS node, and a provider attached
-     * to the popover widget's style context does not reach it reliably. Install the reset on
-     * the display instead (once), like the app-wide plain reset.
-     */
-    private fun installPopoverCss(popoverWidget: CPointer<GtkWidget>) {
-        if (popoverCssInstalled) return
-        val display = gtk_widget_get_display(popoverWidget) ?: return
-        val provider = gtk_css_provider_new() ?: return
-        gtk_css_provider_load_from_string(provider, POPOVER_CSS)
-        gtk_style_context_add_provider_for_display(display, provider.reinterpret(), 700u)
-        popoverCssInstalled = true
+        composition = mounted.composition
+        contentRoot = mounted.root
     }
 
     private fun attachClick(target: CPointer<GtkWidget>) {
@@ -318,6 +313,7 @@ internal class GtkHoverPopoverNode(
         // on the first presentation, so a later show with fresh data must mount anew.
         composition?.dispose()
         composition = null
+        contentRoot = null
     }
 
     private fun onClosedByUser() {
@@ -327,6 +323,7 @@ internal class GtkHoverPopoverNode(
         // open negotiates its size from scratch.
         composition?.dispose()
         composition = null
+        contentRoot = null
     }
 
 }

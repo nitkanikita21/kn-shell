@@ -36,6 +36,7 @@ import kn.gtk.gtk_overlay_add_overlay
 import kn.gtk.gtk_overlay_new
 import kn.gtk.gtk_overlay_remove_overlay
 import kn.gtk.gtk_overlay_set_measure_overlay
+import kn.gtk.gtk_widget_insert_before
 import kn.gtk.gtk_widget_add_css_class
 import kn.gtk.gtk_widget_set_halign
 import kn.gtk.gtk_widget_set_valign
@@ -165,6 +166,13 @@ internal abstract class GtkOverlayBaseNode(
         }
         gtk_overlay_add_overlay(overlay, child)
         gtk_overlay_set_measure_overlay(overlay, child, if (measureChildren) 1 else 0)
+    }
+
+    /** Paint order follows composition order, also for a child composed later than its siblings. */
+    override fun attachChildAt(index: Int, child: CPointer<GtkWidget>) {
+        attachChild(child)
+        val next = children.getOrNull(index + 1)?.widget
+        if (next != null) gtk_widget_insert_before(child, widget, next)
     }
 
     override fun detachChild(child: CPointer<GtkWidget>) {

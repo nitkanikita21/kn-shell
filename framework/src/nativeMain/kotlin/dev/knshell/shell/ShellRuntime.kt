@@ -8,6 +8,7 @@ package dev.knshell.shell
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Composition
+import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.Recomposer
 import androidx.compose.runtime.snapshots.Snapshot
 import dev.knshell.compose.Color
@@ -66,6 +67,9 @@ import kn.gtk.gtk_window_set_child
 import kn.gtk.gtk_window_set_decorated
 import kn.gtk.gtk_window_set_default_size
 import kn.gtk.gtk_window_set_title
+
+/** A composition mounted into a widget and the node at its root. */
+internal class MountedComposition(val composition: Composition, val root: GtkNode)
 
 /**
  * The single runtime shared by every window of the shell.
@@ -376,19 +380,19 @@ internal class ShellRuntime private constructor() {
      * popovers). The returned composition is parented to the same [Recomposer] as the
      * windows, so services and state updates reach it on the shared frame.
      *
-     * The caller owns the returned composition and may dispose it when the container is
-     * torn down.
+     * With [parent] (see `rememberCompositionContext`) the content sees the composition locals of the
+     * place that opens it. The caller owns the returned composition and may dispose it when the
+     * container is torn down.
      */
     internal fun mountCompose(
         container: CPointer<GtkWidget>,
+        parent: CompositionContext? = null,
         content: @Composable () -> Unit,
-    ): Composition {
+    ): MountedComposition {
         ensureGtk()
-        val composition = Composition(
-            applier = GtkApplier(GtkBoxNode(container)),
-            parent = recomposer,
-        )
+        val root = GtkBoxNode(container)
+        val composition = Composition(applier = GtkApplier(root), parent = parent ?: recomposer)
         composition.setContent(content)
-        return composition
+        return MountedComposition(composition, root)
     }
 }

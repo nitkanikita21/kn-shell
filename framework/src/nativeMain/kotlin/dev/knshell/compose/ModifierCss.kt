@@ -61,6 +61,19 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var cursorName: String? = null
     var scrollHandler: ((Double, Double) -> Unit)? = null
     var dragHandlers: DragElement? = null
+    val keyHandlers = mutableListOf<KeyElement>()
+    var focusable: FocusableElement? = null
+    var focusRequester: FocusRequester? = null
+    var focusChange: ((Boolean) -> Unit)? = null
+    var semanticsRef: SemanticsRef? = null
+    // Colour transitions per selector: several modifiers may ask, and CSS keeps only one
+    // `transition` declaration, so they are merged into one at the end.
+    val transitions = mutableMapOf<String, MutableMap<String, Int>>()
+    fun transition(selector: String, ms: Int, vararg properties: String) {
+        if (ms <= 0) return
+        val declared = transitions.getOrPut(selector) { linkedMapOf() }
+        properties.forEach { declared[it] = ms }
+    }
     var valign: UInt? = null
     var inputRegion = false
     val rules = mutableListOf<Pair<String, String>>()
@@ -83,23 +96,17 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
                     if (element.borderWidth > 0 && element.borderColor != null) {
                         append("border: ${element.borderWidth}px solid ${element.borderColor.toCss()};")
                     }
-                    if (element.transitionMs > 0) {
-                        append(
-                            "transition: background-color ${element.transitionMs}ms ease, color ${element.transitionMs}ms ease;",
-                        )
-                    }
                 }
                 rules += "" to declarations
+                transition("", element.transitionMs, "background-color", "color")
+                if (element.borderWidth > 0) transition("", element.transitionMs, "border-color")
             }
 
             is HoverBackgroundElement -> rules += ":hover" to "background-color: ${element.color.toCss()};"
 
             is TextColorElement -> {
-                val d = buildString {
-                    append("color: ${element.color.toCss()};")
-                    if (element.transitionMs > 0) append(" transition: color ${element.transitionMs}ms ease;")
-                }
-                rules += "" to d
+                rules += "" to "color: ${element.color.toCss()};"
+                transition("", element.transitionMs, "color")
             }
 
             is FontSizeElement -> rules += "" to "font-size: ${element.px}px;"
@@ -187,6 +194,10 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
                     rules += " trough" to "min-height: ${height}px; border-radius: ${height / 2}px;"
                 }
 
+                listOf(" trough", " highlight", " slider").forEach {
+                    transition(it, element.transitionMs, "background-color")
+                }
+
                 element.highlightColor?.let { color ->
                     val radius = element.troughHeight?.let { it / 2 } ?: 3
                     rules += " highlight" to
@@ -233,7 +244,9 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is GlowElement -> rules += "" to
                 "box-shadow: 0 0 ${element.blur}px ${element.spread}px ${element.color.toCss()};"
 
-            is TransitionElement -> rules += "" to "transition: color ${element.ms}ms ease, background-color ${element.ms}ms ease, border-color ${element.ms}ms ease, box-shadow ${element.ms}ms ease, opacity ${element.ms}ms ease;"
+            is TransitionElement -> transition(
+                "", element.ms, "color", "background-color", "border-color", "box-shadow", "opacity",
+            )
 
             is SelectionElement ->
                 rules += " selection" to "background-color: ${element.background.toCss()}; color: ${element.color.toCss()};"
@@ -247,6 +260,13 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
 
             is CursorElement -> cursorName = element.name
             is ScrollElement -> scrollHandler = element.handler
+            is KeyElement -> keyHandlers += element
+            is FocusableElement -> focusable = element
+            is FocusRequesterElement -> focusRequester = element.requester
+            is FocusChangeElement -> focusChange = element.handler
+            // Read from the chain as a whole (mergedSemantics), below.
+            is SemanticsElement -> Unit
+            is SemanticsRefElement -> semanticsRef = element.ref
             is DragElement -> dragHandlers = element
             is InputRegionElement -> inputRegion = true
 
@@ -259,12 +279,16 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
 
             is BorderElement -> if (element.sides.isNotEmpty()) {
                 rules += "" to borderDeclarations(element.width, element.color, element.sides)
+                transition("", element.transitionMs, "border-color")
             }
 
-            is LabelStyleElement -> rules += " label" to buildString {
-                append("color: ${element.color.toCss()};")
-                element.fontFamily?.let { append(" font-family: \"$it\";") }
-                element.fontSize?.let { append(" font-size: ${it}px;") }
+            is LabelStyleElement -> {
+                rules += " label" to buildString {
+                    append("color: ${element.color.toCss()};")
+                    element.fontFamily?.let { append(" font-family: \"$it\";") }
+                    element.fontSize?.let { append(" font-size: ${it}px;") }
+                }
+                transition(" label", element.transitionMs, "color")
             }
 
             is EntryStyleElement -> {
@@ -274,6 +298,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
                 rules += " > text > selection" to
                     "background-color: ${element.selectionBackground.toCss()}; " +
                     "color: ${element.selectionColor.toCss()};"
+                transition(" > text", element.transitionMs, "color", "caret-color")
             }
 
             is SwitchKnobElement -> {
@@ -378,7 +403,14 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
         setFieldWritten(widget, OPACITY_KEY, false)
     }
 
+    transitions.forEach { (selector, properties) ->
+        rules += selector to properties.entries.joinToString(", ", "transition: ", ";") { (property, ms) ->
+            "$property ${ms}ms ease"
+        }
+    }
     inlineStyle.setRules(rules)
+    inlineStyle.input.bind(keyHandlers, focusable, focusRequester, focusChange)
+    inlineStyle.semantics.bind(modifier.mergedSemantics(), semanticsRef)
     inlineStyle.interaction.bind(clickHandler, hoverEnter, hoverExit, cursorName, scrollHandler, dragHandlers)
 
     // Marks the widget for the window's input-region shaping (`dev.knshell.shell.InputRegion`).

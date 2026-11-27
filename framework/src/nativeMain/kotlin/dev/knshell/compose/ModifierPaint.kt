@@ -145,7 +145,8 @@ fun Modifier.slider(
     highlightColor: Color? = null,
     knobColor: Color? = null,
     knobSize: Int? = null,
-): Modifier = with(SliderThemeElement(troughColor, troughHeight, highlightColor, knobColor, knobSize))
+    transitionMs: Int = 0,
+): Modifier = with(SliderThemeElement(troughColor, troughHeight, highlightColor, knobColor, knobSize, transitionMs))
 
 /** Text selection colours inside a label: `Modifier.selection(Catppuccin.Base, Catppuccin.Mauve)`. */
 fun Modifier.selection(color: Color, background: Color): Modifier = with(SelectionElement(background, color))

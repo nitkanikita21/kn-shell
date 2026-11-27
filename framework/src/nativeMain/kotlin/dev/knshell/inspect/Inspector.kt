@@ -163,15 +163,17 @@ class Inspector internal constructor(
         val window = gtk_widget_get_root(rootNode.widget)?.reinterpret<GtkWidget>()
             ?: throw InspectException("the composition root is not inside a window")
         val target = if (id == null) rootNode else actionable(id)
-        val width = gtk_widget_get_width(window)
-        val height = gtk_widget_get_height(window)
+        // A node in a popup lives on a surface of its own, rendered by itself.
+        val surface = gtk_widget_get_native(target.widget)?.reinterpret<GtkWidget>() ?: window
+        val width = gtk_widget_get_width(surface)
+        val height = gtk_widget_get_height(surface)
         if (width <= 0 || height <= 0) throw InspectException("the window has no size yet (${width}x$height)")
-        val area = boundsIn(target.widget, window)
+        val area = boundsIn(target.widget, surface)
             ?: throw InspectException("node #${target.id} has no position in the window yet")
         if (area.width <= 0 || area.height <= 0) {
             throw InspectException("node #${target.id} has an empty size (${area.width}x${area.height})")
         }
-        return renderPng(window, width, height, area)
+        return renderPng(surface, width, height, area)
     }
 
     /**
@@ -200,7 +202,7 @@ class Inspector internal constructor(
         root() ?: throw InspectException("no window is mounted")
 
     /** All nodes of the tree, depth first, root included. */
-    private fun GtkNode.allNodes(): List<GtkNode> = listOf(this) + children.flatMap { it.allNodes() }
+    private fun GtkNode.allNodes(): List<GtkNode> = listOf(this) + inspectableChildren.flatMap { it.allNodes() }
 
     private fun GtkNode.isTarget(target: String): Boolean =
         id == target.toIntOrNull() || modifier.testTagName() == target

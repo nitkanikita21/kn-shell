@@ -1,7 +1,18 @@
 // Reset stylesheet for the popover surface: strips GTK's frame, shadow, padding and arrow,
 // so the content composable can own the whole look.
 
+@file:OptIn(ExperimentalForeignApi::class)
+
 package dev.knshell.shell
+
+import kotlinx.cinterop.CPointer
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.reinterpret
+import kn.gtk.GtkWidget
+import kn.gtk.gtk_css_provider_load_from_string
+import kn.gtk.gtk_css_provider_new
+import kn.gtk.gtk_style_context_add_provider_for_display
+import kn.gtk.gtk_widget_get_display
 
 /** CSS class added to the popover widget so the reset rules below can target it. */
 internal const val POPOVER_CLASS = "kn-popover"
@@ -39,3 +50,19 @@ popover.$POPOVER_CLASS arrow {
     margin: 0;
 }
 """.trimIndent()
+
+private var popoverCssInstalled = false
+
+/**
+ * The popover frame/shadow is drawn on the `contents` CSS node, and a provider attached to the
+ * popover widget's style context does not reach it reliably. Install the reset on the display
+ * instead (once), like the app-wide plain reset.
+ */
+internal fun installPopoverCss(popoverWidget: CPointer<GtkWidget>) {
+    if (popoverCssInstalled) return
+    val display = gtk_widget_get_display(popoverWidget) ?: return
+    val provider = gtk_css_provider_new() ?: return
+    gtk_css_provider_load_from_string(provider, POPOVER_CSS)
+    gtk_style_context_add_provider_for_display(display, provider.reinterpret(), 700u)
+    popoverCssInstalled = true
+}

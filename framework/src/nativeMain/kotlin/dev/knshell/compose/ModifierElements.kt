@@ -101,6 +101,7 @@ internal data class SliderThemeElement(
     val highlightColor: Color?,
     val knobColor: Color?,
     val knobSize: Int?,
+    val transitionMs: Int,
 ) : ModifierElement
 
 /** Italic text (`font-style: italic`). */
@@ -151,10 +152,16 @@ internal data class TestTagElement(val name: String) : ModifierElement
 internal data object StyleResetElement : ModifierElement
 
 /** Border on some or all sides (`Modifier.border`). */
-internal data class BorderElement(val color: Color, val width: Int, val sides: Set<BorderSide>) : ModifierElement
+internal data class BorderElement(val color: Color, val width: Int, val sides: Set<BorderSide>, val transitionMs: Int) :
+    ModifierElement
 
 /** Colour and font of the label nodes inside the widget (`Modifier.labelStyle`). */
-internal data class LabelStyleElement(val color: Color, val fontFamily: String?, val fontSize: Int?) : ModifierElement
+internal data class LabelStyleElement(
+    val color: Color,
+    val fontFamily: String?,
+    val fontSize: Int?,
+    val transitionMs: Int,
+) : ModifierElement
 
 /** Text field of an `Entry` (`Modifier.entryStyle`). */
 internal data class EntryStyleElement(
@@ -162,6 +169,7 @@ internal data class EntryStyleElement(
     val caretColor: Color,
     val selectionBackground: Color,
     val selectionColor: Color,
+    val transitionMs: Int,
 ) : ModifierElement
 
 /** Knob of a `Switch` (`Modifier.switchKnob`). */

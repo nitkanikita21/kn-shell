@@ -8,6 +8,16 @@
 
 package dev.knshell.inspect
 
+import dev.knshell.compose.Semantics
+import dev.knshell.compose.SemanticsRef
+import dev.knshell.compose.mergedSemantics
+import kn.gtk.g_type_name_from_instance
+import kn.gtk.gtk_accessible_get_accessible_role
+import kn.gtk.gtk_widget_get_first_child
+import kn.gtk.gtk_widget_get_next_sibling
+import kn.gtk.gtk_widget_get_root
+import kn.gtk.gtk_window_get_focus
+import kn.gtk.gtk_widget_is_ancestor
 import dev.knshell.compose.GtkButtonNode
 import dev.knshell.compose.GtkDropDownNode
 import dev.knshell.compose.GtkEntryNode
@@ -66,6 +76,15 @@ data class InspectNode(
     val visible: Boolean,
     val sensitive: Boolean,
     val children: List<InspectNode>,
+    /** The ARIA role GTK reports, such as `tab` or `menuitem`. */
+    val role: String = "generic",
+    /** The accessible name: what a screen reader calls the widget. */
+    val name: String? = null,
+    val description: String? = null,
+    /** ARIA states and values the widget declares, such as `selected` to `true`. */
+    val states: Map<String, String> = emptyMap(),
+    /** Whether the keyboard focus is on this widget (or inside it, for a widget without child nodes). */
+    val focused: Boolean = false,
 )
 
 /** The interaction states [Inspector.setState] can force on a widget. */
@@ -95,8 +114,79 @@ internal fun GtkNode.describe(root: CPointer<GtkWidget>): InspectNode = InspectN
     options = (this as? GtkDropDownNode)?.items,
     visible = gtk_widget_is_visible(widget) != 0,
     sensitive = gtk_widget_is_sensitive(widget) != 0,
-    children = children.map { it.describe(root) },
+    children = inspectableChildren.map { it.describe(root) },
+    role = roleOf(widget),
+    name = accessibleName(),
+    description = modifier.mergedSemantics()?.let { it.description ?: it.describedBy?.text() },
+    states = modifier.mergedSemantics()?.states().orEmpty(),
+    focused = isFocused(),
 )
+
+/** `GTK_ACCESSIBLE_ROLE_MENU_ITEM` as ARIA writes it: `menuitem`. */
+private fun roleOf(widget: CPointer<GtkWidget>): String =
+    gtk_accessible_get_accessible_role(widget.reinterpret()).name.removePrefix("GTK_ACCESSIBLE_ROLE_")
+        .replace("_", "").lowercase()
+
+/** The roles that take their name from the text inside them. */
+private val NAMED_BY_CONTENT = setOf(
+    "button", "tab", "menuitem", "menuitemcheckbox", "menuitemradio", "checkbox", "switch", "radio",
+    "option", "link", "tooltip", "heading", "togglebutton",
+)
+
+/** `aria-label`, else the labelling widget's text, else the widget's own or contained text. */
+private fun GtkNode.accessibleName(): String? {
+    val semantics = modifier.mergedSemantics()
+    semantics?.label?.let { return it }
+    semantics?.labelledBy?.text()?.let { return it }
+    textOf()?.takeUnless { this is GtkEntryNode }?.let { return it }
+    if (roleOf(widget) !in NAMED_BY_CONTENT) return null
+    return contentText().takeIf { it.isNotEmpty() }
+}
+
+private fun GtkNode.contentText(): String =
+    (listOfNotNull(textOf()) + children.map { it.contentText() }).filter { it.isNotEmpty() }.joinToString(" ")
+
+/** The text of the label behind a handle, or of the first label inside it. */
+private fun SemanticsRef.text(): String? = widget?.let(::labelText)
+
+private fun labelText(widget: CPointer<GtkWidget>): String? {
+    val type = typeNameOf(widget)
+    if (type == "GtkLabel") return gtk_label_get_text(widget.reinterpret<GtkLabel>())?.toKString()
+    var child = gtk_widget_get_first_child(widget)
+    while (child != null) {
+        labelText(child)?.let { return it }
+        child = gtk_widget_get_next_sibling(child)
+    }
+    return null
+}
+
+private fun typeNameOf(widget: CPointer<GtkWidget>): String? =
+    g_type_name_from_instance(widget.reinterpret())?.toKString()
+
+private fun Semantics.states(): Map<String, String> = listOfNotNull(
+    checked?.let { "checked" to it.name.lowercase() },
+    pressed?.let { "pressed" to it.name.lowercase() },
+    expanded?.let { "expanded" to it.toString() },
+    selected?.let { "selected" to it.toString() },
+    disabled?.let { "disabled" to it.toString() },
+    busy?.let { "busy" to it.toString() },
+    hidden?.let { "hidden" to it.toString() },
+    invalid?.let { "invalid" to it.toString() },
+    required?.let { "required" to it.toString() },
+    modal?.let { "modal" to it.toString() },
+    hasPopup?.let { "haspopup" to it.toString() },
+    orientation?.let { "orientation" to it.name.lowercase() },
+    valueNow?.let { "valuenow" to it.toString() },
+    valueMin?.let { "valuemin" to it.toString() },
+    valueMax?.let { "valuemax" to it.toString() },
+    valueText?.let { "valuetext" to it },
+).toMap()
+
+private fun GtkNode.isFocused(): Boolean {
+    val window = gtk_widget_get_root(widget) ?: return false
+    val focus = gtk_window_get_focus(window.reinterpret()) ?: return false
+    return focus == widget || (inspectableChildren.isEmpty() && gtk_widget_is_ancestor(focus, widget) != 0)
+}
 
 /** Whether GTK shows the widget: it and every ancestor are visible. */
 internal fun CPointer<GtkWidget>.isShown(): Boolean = gtk_widget_is_visible(this) != 0

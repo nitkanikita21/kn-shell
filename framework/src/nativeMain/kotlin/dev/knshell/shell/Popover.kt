@@ -6,6 +6,7 @@ package dev.knshell.shell
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposeNode
+import androidx.compose.runtime.rememberCompositionContext
 import dev.knshell.compose.GtkApplier
 import dev.knshell.compose.Modifier
 
@@ -68,6 +69,7 @@ fun Popover(
     content: @Composable () -> Unit,
     anchor: @Composable () -> Unit,
 ) {
+    val context = rememberCompositionContext()
     ComposeNode<GtkHoverPopoverNode, GtkApplier>(
         factory = {
             GtkHoverPopoverNode(delayMs, hideDelayMs, openOnHover, openOnClick).also { node ->
@@ -77,6 +79,7 @@ fun Popover(
             }
         },
         update = {
+            set(context) { value -> parentContext = value }
             set(modifier) { value -> applyModifier(value) }
             set(content) { value -> contentState.value = value }
         },
