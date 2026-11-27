@@ -49,6 +49,32 @@ internal val AtlasTools: JsonArray = JsonArray(
             required = listOf("view"),
         ),
         tool(
+            "search_stories",
+            "Find stories by words that occur in their category, group or name, ignoring case.",
+            mapOf("query" to field("string", "Words, such as \"button key\"")),
+            listOf("query"),
+        ),
+        tool(
+            "check_story",
+            "Compare one story or a whole group with its golden pictures and run its play script, on a " +
+                "private display. Without arguments, the selected story. Answers when done, or after 45 s " +
+                "with running=true: then call check_status.",
+            mapOf(
+                "story" to field("string", "\"Group/Entry\" name of the story"),
+                "group" to field("string", "Group title, to check all its stories"),
+            ),
+        ),
+        tool(
+            "check_status",
+            "The result of the latest check, waiting up to 45 s while it still runs.",
+        ),
+        tool(
+            "set_width",
+            "Hold the preview to a width, to see how a story takes a narrow place.",
+            mapOf("width" to field("integer", "320, 640, or 0 for the free width")),
+            listOf("width"),
+        ),
+        tool(
             "set_environment",
             "Show the stories in another environment of the catalog, such as its light theme.",
             mapOf("name" to field("string", "Environment name, as the sidebar shows it")),

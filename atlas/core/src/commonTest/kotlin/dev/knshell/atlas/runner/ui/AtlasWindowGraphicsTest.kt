@@ -66,7 +66,7 @@ fun atlasUiTest(catalog: List<StoryGroup>, script: suspend AtlasUi.() -> Unit) {
             closeComposeWindows()
         }
     }
-    runComposeWindow("atlas ui test", width = 1200, height = 800, windowModifier = shortcuts(service)) {
+    runComposeWindow("atlas ui test", width = 1200, height = 800, windowModifier = shortcuts(service, golden)) {
         AtlasWindow(service, golden)
     }
     failure?.let { throw it }

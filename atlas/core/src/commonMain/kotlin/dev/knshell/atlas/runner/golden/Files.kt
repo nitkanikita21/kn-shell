@@ -2,6 +2,7 @@
 
 package dev.knshell.atlas.runner.golden
 
+import platform.posix.time
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.UnsafeNumber
 import kotlinx.cinterop.addressOf
@@ -66,6 +67,9 @@ internal fun writeBytes(path: String, content: ByteArray) {
     }
     check(written == content.size && rename(part, path) == 0) { "cannot write $path" }
 }
+
+/** The time now, in seconds since the epoch. */
+internal fun epochSeconds(): Long = time(null).convert()
 
 internal fun readText(path: String): String? = readBytes(path)?.decodeToString()
 

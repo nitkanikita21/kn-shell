@@ -9,7 +9,7 @@ sealed interface AcceptScope {
 
 /** The cases of [scope] that have a new picture to take over. */
 fun GoldenReport.acceptable(scope: AcceptScope): List<CaseResult> = cases.filter { case ->
-    (case.status == CaseStatus.Changed || case.status == CaseStatus.New) && when (scope) {
+    !case.stale && (case.status == CaseStatus.Changed || case.status == CaseStatus.New) && when (scope) {
         is AcceptScope.Case -> case.id == scope.id
         is AcceptScope.Story -> case.story == scope.story
         AcceptScope.All -> true

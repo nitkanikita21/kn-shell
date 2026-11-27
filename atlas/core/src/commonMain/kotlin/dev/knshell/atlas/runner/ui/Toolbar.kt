@@ -4,6 +4,7 @@
 
 package dev.knshell.atlas.runner.ui
 
+import dev.knshell.atlas.runner.golden.GoldenController
 import androidx.compose.runtime.Composable
 import dev.knshell.atlas.runner.MainTab
 import dev.knshell.atlas.runner.PREVIEW_WIDTHS
@@ -31,7 +32,15 @@ private val barModifier: Modifier
 
 /** The first bar: the panels at its ends, the [tabs] that have something to show between them. */
 @Composable
-internal fun MainBar(view: ViewState, tabs: List<Pair<MainTab, String>>, shown: MainTab) {
+internal fun MainBar(
+    view: ViewState,
+    tabs: List<Pair<MainTab, String>>,
+    shown: MainTab,
+    golden: GoldenController,
+    /** The open story as `Group/Entry`, and its group: what the check buttons check. */
+    story: String,
+    group: String,
+) {
     Row(spacing = 8, modifier = barModifier.background(AtlasTheme.panel, transitionMs = 0)) {
         ToolButton(
             "",
@@ -47,6 +56,13 @@ internal fun MainBar(view: ViewState, tabs: List<Pair<MainTab, String>>, shown: 
             onSelect = { view.tab = it.first },
         )
         Box(Modifier.weight())
+        if (golden.running) {
+            ToolButton(golden.progress ?: "запуск…", "check:progress", icon = Lucide.LoaderCircle, enabled = false) {}
+        } else {
+            Label("Перевірити:", modifier = dim.align(v = Align.Center))
+            ToolButton("story", "check:story", icon = Lucide.Play, enabled = golden.available) { golden.check(story) }
+            ToolButton("групу", "check:group", icon = Lucide.Play, enabled = golden.available) { golden.check(group) }
+        }
         ToolButton(
             "",
             "view:args",

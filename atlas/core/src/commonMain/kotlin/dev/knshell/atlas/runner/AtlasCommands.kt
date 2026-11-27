@@ -8,6 +8,8 @@
 
 package dev.knshell.atlas.runner
 
+import dev.knshell.atlas.runner.golden.CaseStatus
+import dev.knshell.atlas.runner.golden.GoldenController
 import kotlinx.coroutines.delay
 import dev.knshell.inspect.VirtualKeyboard
 import dev.knshell.compose.Key
@@ -42,6 +44,8 @@ class AtlasCommands(
     private val idle: suspend () -> Unit = inspector::awaitIdle,
     /** Present when the atlas runs under headless-compositor, which can press keys. */
     private val keyboard: VirtualKeyboard? = VirtualKeyboard.fromEnvironment(),
+    /** The golden check of this atlas; `null` where it cannot run one. */
+    private val golden: GoldenController? = null,
 ) {
     /** One request line in, one answer line out (compact JSON, no raw newline). Never throws except on cancellation. */
     suspend fun handle(line: String): String {
@@ -92,6 +96,10 @@ class AtlasCommands(
         "reset_args" -> resetArgs()
         "set_view" -> setView(args)
         "set_environment" -> setEnvironment(args)
+        "search_stories" -> searchStories(args)
+        "check_story" -> checkStory(args)
+        "check_status" -> checkStatus()
+        "set_width" -> setWidth(args)
         "focus" -> act(args) { id -> inspector.focus(id) }
         "press" -> press(args)
         "type" -> typeText(args)
@@ -194,6 +202,92 @@ class AtlasCommands(
         service.environment = found
         idle()
         return json(buildJsonObject { put("environment", found.name) })
+    }
+
+    private fun searchStories(args: JsonObject): List<JsonObject> {
+        val found = sidebarSections(service.groups, searchWords(args.str("query")))
+        return json(
+            JsonArray(
+                found.flatMap { section ->
+                    section.groups.flatMap { listed ->
+                        listed.entries.map { entry ->
+                            buildJsonObject {
+                                put("name", "${listed.group.title}/${entry.name}")
+                                put("kind", if (entry is Variants) "variants" else "story")
+                                section.category?.let { put("category", it) }
+                            }
+                        }
+                    }
+                },
+            ),
+        )
+    }
+
+    private suspend fun checkStory(args: JsonObject): List<JsonObject> {
+        val controller = checker()
+        val story = args["story"].stringOrNull()
+        val group = args["group"].stringOrNull()
+        val filter = when {
+            story != null -> resolveStory(service.groups, story)
+                ?.let { "${it.group.title}/${it.entry.name}" }
+                ?: throw ToolError("unknown story \"$story\"; known stories: ${storyNames()}")
+            group != null -> service.groups.firstOrNull { it.title.equals(group, ignoreCase = true) }?.title
+                ?: throw ToolError("unknown group \"$group\"")
+            else -> requireSelection().let { "${it.group.title}/${it.entry.name}" }
+        }
+        if (controller.running) throw ToolError("a check is already running; call check_status")
+        controller.check(filter)
+        return checkStatus()
+    }
+
+    /** Waits for a running check, but not so long that the caller gives up on the atlas. */
+    private suspend fun checkStatus(): List<JsonObject> {
+        val controller = checker()
+        var waited = 0L
+        while (controller.running && waited < CHECK_WAIT_MS) {
+            delay(CHECK_POLL_MS)
+            waited += CHECK_POLL_MS
+        }
+        val filter = controller.lastFilter
+        val cases = controller.report?.cases.orEmpty().filter { case ->
+            filter == null || case.story == filter || case.story.substringBefore('/') == filter
+        }
+        return json(
+            buildJsonObject {
+                put("running", controller.running)
+                controller.progress?.let { put("progress", it) }
+                filter?.let { put("checked", it) }
+                controller.problem?.let { put("problem", it) }
+                if (!controller.running) {
+                    put("same", cases.count { it.status == CaseStatus.Same })
+                    put(
+                        "differences",
+                        JsonArray(
+                            cases.filter { it.status != CaseStatus.Same }.map { case ->
+                                buildJsonObject {
+                                    put("id", case.id)
+                                    put("status", case.status.name)
+                                    case.error?.let { put("error", it) }
+                                }
+                            },
+                        ),
+                    )
+                }
+            },
+        )
+    }
+
+    private fun checker(): GoldenController = golden?.takeIf { it.available }
+        ?: throw ToolError("this atlas has no golden configuration: build it through Gradle")
+
+    private suspend fun setWidth(args: JsonObject): List<JsonObject> {
+        val width = args.int("width")
+        if (width != 0 && width !in PREVIEW_WIDTHS) {
+            throw ToolError("\"width\" must be one of ${PREVIEW_WIDTHS.joinToString()} or 0 for free")
+        }
+        service.view.width = width.takeIf { it != 0 }
+        idle()
+        return json(buildJsonObject { put("width", width) })
     }
 
     private suspend fun press(args: JsonObject): List<JsonObject> {
@@ -386,6 +480,10 @@ class AtlasCommands(
     private fun json(value: JsonElement): List<JsonObject> =
         listOf(text(Json.encodeToString(JsonElement.serializer(), value)))
 }
+
+/** How long a call waits for a check; well under the daemon's limit for one request. */
+private const val CHECK_WAIT_MS = 45_000L
+private const val CHECK_POLL_MS = 200L
 
 /** How long a key press needs to reach the widgets. */
 private const val KEY_TRAVEL_MS = 40L

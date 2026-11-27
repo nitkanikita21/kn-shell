@@ -11,9 +11,13 @@ data class GoldenConfig(
     /** The environment the pictures are drawn in. */
     val environment: Map<String, String>,
 ) {
-    /** The check of the atlas executable [binary], on a private display without a screen. */
-    fun command(binary: String): List<String> =
-        listOf(compositor, "--", binary, "--golden=$goldens", "--golden-out=$output")
+    /**
+     * The check of the atlas executable [binary], on a private display without a screen, with its
+     * pictures in [into]. [filter] narrows it to one group or story.
+     */
+    fun command(binary: String, into: String = output, filter: String? = null): List<String> =
+        listOf(compositor, "--", binary, "--golden=$goldens", "--golden-out=$into") +
+            listOfNotNull(filter?.let { "--story=$it" })
 
     companion object {
         const val FILE_NAME = "atlas-golden.properties"

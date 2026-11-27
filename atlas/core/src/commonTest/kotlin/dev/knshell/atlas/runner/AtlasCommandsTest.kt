@@ -76,6 +76,34 @@ class AtlasCommandsTest {
     }
 
     @Test
+    fun `search finds stories by words`() {
+        val result = Harness().commands.tool("search_stories", """{"query":"button matr"}""")
+
+        assertFalse(isError(result))
+        assertContains(result.toString(), "Button/Matrix")
+        assertFalse("Button/Primary" in result.toString())
+    }
+
+    @Test
+    fun `set width takes the preset widths only`() {
+        val harness = Harness()
+
+        assertFalse(isError(harness.commands.tool("set_width", """{"width":320}""")))
+        assertEquals(320, harness.service.view.width)
+        assertTrue(isError(harness.commands.tool("set_width", """{"width":321}""")))
+        harness.commands.tool("set_width", """{"width":0}""")
+        assertNull(harness.service.view.width)
+    }
+
+    @Test
+    fun `checking needs a golden configuration`() {
+        val result = Harness().commands.tool("check_story", """{"story":"Button/Primary"}""")
+
+        assertTrue(isError(result))
+        assertContains(result.toString(), "golden configuration")
+    }
+
+    @Test
     fun `unknown tool is reported as an error result`() {
         val result = Harness().commands.tool("no_such_tool")
 

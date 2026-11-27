@@ -72,6 +72,38 @@ class PlayScopeTest {
     }
 
     @Test
+    fun `the log keeps what was done and expected and ends at the failure`() {
+        val scope = PlayScope(driver)
+
+        assertFailsWith<PlayFailure> {
+            runBlocking {
+                scope.click("a")
+                scope.expect("a").role("tab").selected()
+                scope.snapshot("shown")
+                scope.expect("b").selected()
+                scope.press(Key.Right)
+            }
+        }
+
+        assertEquals(
+            listOf("click a", "expect a: role tab", "expect a: selected true", "snapshot «shown»", "expect b: selected true"),
+            scope.log.map { it.text },
+        )
+        assertEquals("shown", scope.log[3].snapshot)
+        assertEquals(listOf(null, null, null, null, "b: expected selected true, got false"), scope.log.map { it.error })
+    }
+
+    @Test
+    fun `a step on a missing widget is logged as the step that failed`() {
+        val scope = PlayScope(driver)
+
+        assertFailsWith<PlayFailure> { runBlocking { scope.click("nope") } }
+
+        assertEquals("click nope", scope.log.single().text)
+        assertContains(scope.log.single().error!!, "nothing is tagged nope")
+    }
+
+    @Test
     fun `an unknown tag and a refused action fail the script`() {
         assertContains(failure { click("nope") }, "nothing is tagged nope; tags: a, b")
         assertContains(failure { focus("a") }, "takes no focus")

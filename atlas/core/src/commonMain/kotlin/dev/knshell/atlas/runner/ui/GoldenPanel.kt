@@ -45,7 +45,7 @@ internal fun GoldenPanel(golden: GoldenController, leading: @Composable () -> Un
             Box(Modifier.weight())
             ToolButton(
                 // While it runs, the button itself tells how far it is.
-                text = if (golden.running) report?.let(::summaryText) ?: "запуск…" else "Перевірити",
+                text = if (golden.running) golden.progress ?: "запуск…" else "Все",
                 tag = "golden:check",
                 icon = if (golden.running) Lucide.LoaderCircle else Lucide.Play,
                 enabled = golden.available && !golden.running,

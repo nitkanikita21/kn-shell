@@ -56,8 +56,8 @@ internal fun safeName(name: String): String {
 }
 
 /**
- * Every case of the catalog, once per environment. [filter] narrows it to one story (`Group/Entry`,
- * all its cells), one cell (`Group/Entry/caption`) or one case id, ignoring case. Throws
+ * Every case of the catalog, once per environment. [filter] narrows it to one group, one story
+ * (`Group/Entry`, all its cells), one cell (`Group/Entry/caption`) or one case id, ignoring case. Throws
  * [IllegalArgumentException] when the filter matches nothing or two cases would share a file.
  */
 fun goldenCases(
@@ -84,7 +84,9 @@ fun goldenCases(
     }
     if (filter == null) return all
     val chosen = all.filter { case ->
-        listOf(case.story, case.subject, case.id).any { it.equals(filter, ignoreCase = true) }
+        val group = case.group.title
+        val inEnvironment = listOfNotNull(case.environment?.name, group).joinToString("/")
+        listOf(group, inEnvironment, case.story, case.subject, case.id).any { it.equals(filter, ignoreCase = true) }
     }
     require(chosen.isNotEmpty()) {
         "no story matches \"$filter\"; known: ${all.map { it.story }.distinct().joinToString()}"

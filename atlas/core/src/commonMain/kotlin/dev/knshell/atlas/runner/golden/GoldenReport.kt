@@ -5,6 +5,8 @@
 
 package dev.knshell.atlas.runner.golden
 
+import kotlinx.serialization.json.long
+import dev.knshell.atlas.play.PlayStep
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -49,6 +51,12 @@ data class CaseResult(
     val expectedWidth: Int = 0,
     val expectedHeight: Int = 0,
     val error: String? = null,
+    /** What the `play` script of the story did, on the case of its first picture. */
+    val steps: List<PlayStep> = emptyList(),
+    /** When the case was checked, in seconds since the epoch; 0 when not known. */
+    val checkedAt: Long = 0,
+    /** From a check of an earlier build, kept beside newer results: shown, never accepted. */
+    val stale: Boolean = false,
 ) {
     private val stem: String get() = path.removeSuffix(".png")
 
@@ -127,6 +135,21 @@ data class GoldenReport(
                             put("expectedWidth", case.expectedWidth)
                             put("expectedHeight", case.expectedHeight)
                             case.error?.let { put("error", it) }
+                            if (case.checkedAt != 0L) put("checkedAt", case.checkedAt)
+                            if (case.stale) put("stale", true)
+                            if (case.steps.isNotEmpty()) {
+                                putJsonArray("steps") {
+                                    case.steps.forEach { step ->
+                                        add(
+                                            buildJsonObject {
+                                                put("text", step.text)
+                                                step.error?.let { put("error", it) }
+                                                step.snapshot?.let { put("snapshot", it) }
+                                            },
+                                        )
+                                    }
+                                }
+                            }
                         },
                     )
                 }
@@ -161,6 +184,12 @@ data class GoldenReport(
                         expectedWidth = case.int("expectedWidth"),
                         expectedHeight = case.int("expectedHeight"),
                         error = case.string("error"),
+                        steps = (case["steps"] as? JsonArray)?.map { item ->
+                            val step = item.jsonObject
+                            PlayStep(step.string("text")!!, step.string("error"), step.string("snapshot"))
+                        }.orEmpty(),
+                        checkedAt = case["checkedAt"]?.jsonPrimitive?.long ?: 0,
+                        stale = case["stale"]?.jsonPrimitive?.boolean == true,
                     )
                 },
             )

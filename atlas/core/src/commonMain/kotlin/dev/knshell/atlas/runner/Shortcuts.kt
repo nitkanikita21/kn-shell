@@ -5,24 +5,29 @@
 
 package dev.knshell.atlas.runner
 
+import dev.knshell.atlas.runner.golden.GoldenController
 import dev.knshell.compose.Key
 import dev.knshell.compose.KeyEvent
 import dev.knshell.compose.Modifier
 import dev.knshell.compose.onKey
 
 /** The modifier of the atlas window that carries its shortcuts. */
-internal fun shortcuts(service: AtlasHostService): Modifier = Modifier
+internal fun shortcuts(service: AtlasHostService, golden: GoldenController): Modifier = Modifier
     // Chords come before whatever has the focus, a story included.
-    .onKey(capture = true) { handleChord(service, it) }
+    .onKey(capture = true) { handleChord(service, golden, it) }
     // A plain key is a shortcut only when nothing used it: a text field keeps what is typed.
     .onKey { handlePlainKey(service, it) }
 
-private fun handleChord(service: AtlasHostService, event: KeyEvent): Boolean {
+private fun handleChord(service: AtlasHostService, golden: GoldenController, event: KeyEvent): Boolean {
     if (!event.ctrl || event.alt || event.meta) return false
-    when (event.latin) {
-        'k' -> service.focusSearch()
-        'b' -> service.view.sidebarHidden = !service.view.sidebarHidden
-        'j' -> service.view.argsHidden = !service.view.argsHidden
+    when {
+        event.latin == 'k' -> service.focusSearch()
+        event.latin == 'b' -> service.view.sidebarHidden = !service.view.sidebarHidden
+        event.latin == 'j' -> service.view.argsHidden = !service.view.argsHidden
+        event.key == Key.Enter -> {
+            val selected = service.selection.value ?: return false
+            golden.check("${selected.group.title}/${selected.entry.name}")
+        }
         else -> return false
     }
     return true

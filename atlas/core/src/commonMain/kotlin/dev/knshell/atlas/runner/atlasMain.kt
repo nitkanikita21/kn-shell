@@ -70,11 +70,13 @@ fun atlasMain(
     val opened = if (spec == null) memory.story?.let { resolveStory(stories, it) } ?: initial else initial
     opened?.let { service.select(it.group, it.entry) }
 
+    val golden = GoldenController.forThisProcess()
+
     // сокет інспектора тільки за --inspect / KN_ATLAS_INSPECT; без них процес поводиться як раніше
     inspectPath?.let { path ->
         // інакше скріншот одразу після зміни ловить середину CSS-переходу
         disableUiTransitions()
-        val server = LineSocketServer(path, AtlasCommands(service, windowInspector())::handle)
+        val server = LineSocketServer(path, AtlasCommands(service, windowInspector(), golden = golden)::handle)
         if (server.start()) {
             inspectServer = server
         } else {
@@ -82,14 +84,12 @@ fun atlasMain(
         }
     }
 
-    val golden = GoldenController.forThisProcess()
-
     runComposeWindow(
         "KN Atlas - $title",
         width = 1200,
         height = 800,
         windowBackground = AtlasTheme.bg,
-        windowModifier = shortcuts(service),
+        windowModifier = shortcuts(service, golden),
     ) {
         AtlasWindow(service, golden)
         memoryPath?.let { Remember(service, it) }

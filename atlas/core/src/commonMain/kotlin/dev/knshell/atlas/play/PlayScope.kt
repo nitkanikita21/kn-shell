@@ -15,6 +15,15 @@ fun interface Play {
     suspend fun PlayScope.run()
 }
 
+/** One thing a script did or expected, as the report keeps it. */
+data class PlayStep(
+    val text: String,
+    /** Why it did not hold; `null` when it did. */
+    val error: String? = null,
+    /** The name of the picture the step took. */
+    val snapshot: String? = null,
+)
+
 /** A step or an expectation of a play script did not hold. */
 class PlayFailure(message: String) : Exception(message)
 
@@ -50,6 +59,13 @@ class PlayScope internal constructor(private val driver: PlayDriver) {
     private var steps = 0
     private var last = "the start"
 
+    /** What the script has done and expected so far, the step that failed last. */
+    val log: List<PlayStep> get() = recorded
+    private val recorded = mutableListOf<PlayStep>()
+
+    /** What is being tried, for the step a failure is recorded as. */
+    private var trying = "the script"
+
     suspend fun press(
         key: Key,
         shift: Boolean = false,
@@ -79,17 +95,35 @@ class PlayScope internal constructor(private val driver: PlayDriver) {
      * A golden picture at this point, named after the case and [name]: of the stage, or of the widget
      * tagged [target], which is the way to picture the content of a popup.
      */
-    suspend fun snapshot(name: String, target: String? = null) =
+    suspend fun snapshot(name: String, target: String? = null) {
+        trying = "snapshot «$name»"
         driver.snapshot(name, target?.let { find(it).id })
-
-    /** Assertions on the widget tagged [target]. */
-    fun expect(target: String): Expectation = Expectation(this, target, find(target))
-
-    fun expectAbsent(target: String) {
-        if (nodes().any { it.testTag == target }) fail("expected no $target")
+        recorded += PlayStep(trying, snapshot = name)
     }
 
-    internal fun fail(message: String): Nothing = throw PlayFailure("after $last: $message")
+    /** Assertions on the widget tagged [target]. */
+    fun expect(target: String): Expectation {
+        trying = "expect $target"
+        return Expectation(this, target, find(target))
+    }
+
+    fun expectAbsent(target: String) {
+        trying = "expect no $target"
+        if (nodes().any { it.testTag == target }) fail("expected no $target")
+        recorded += PlayStep(trying)
+    }
+
+    internal fun fail(message: String): Nothing {
+        recorded += PlayStep(trying, error = message)
+        throw PlayFailure("after $last: $message")
+    }
+
+    /** Records an expectation, and fails it with [problem] when there is one. */
+    internal fun expected(what: String, problem: String?) {
+        trying = what
+        if (problem != null) fail(problem)
+        recorded += PlayStep(what)
+    }
 
     /** The focused widgets, named by their tag or type, for failure messages. */
     internal fun focusedNodes(): String = nodes().filter { it.focused }
@@ -99,12 +133,14 @@ class PlayScope internal constructor(private val driver: PlayDriver) {
     private suspend fun step(what: String, action: () -> Unit) {
         steps++
         last = "step $steps ($what)"
+        trying = what
         try {
             action()
         } catch (e: InspectException) {
             fail(e.message.orEmpty())
         }
         driver.settle()
+        recorded += PlayStep(what)
     }
 
     private fun nodes(): List<InspectNode> {
@@ -132,7 +168,10 @@ class Expectation internal constructor(
     private val node: InspectNode,
 ) {
     private fun check(what: String, expected: Any?, actual: Any?): Expectation {
-        if (expected != actual) scope.fail("$target: expected $what $expected, got $actual")
+        scope.expected(
+            "expect $target: " + if (expected == null) "no $what" else "$what $expected",
+            "$target: expected $what $expected, got $actual".takeIf { expected != actual },
+        )
         return this
     }
 
@@ -145,9 +184,14 @@ class Expectation internal constructor(
     fun text(text: String) = check("text", text, node.text)
 
     fun focused(focused: Boolean = true): Expectation {
-        if (focused != node.focused) {
-            scope.fail("$target: expected focused $focused, got ${node.focused}; focus is on ${scope.focusedNodes()}")
-        }
+        scope.expected(
+            "expect $target: " + if (focused) "focused" else "not focused",
+            if (focused == node.focused) {
+                null
+            } else {
+                "$target: expected focused $focused, got ${node.focused}; focus is on ${scope.focusedNodes()}"
+            },
+        )
         return this
     }
 

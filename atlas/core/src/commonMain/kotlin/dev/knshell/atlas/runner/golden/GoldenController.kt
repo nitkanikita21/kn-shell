@@ -25,6 +25,9 @@ import platform.posix.getpid
 import platform.posix.readlink
 
 private const val POLL_MS = 200L
+
+/** Below the output directory: where a check of a few stories puts its pictures first. */
+private const val PARTIAL = "partial"
 private const val PATH_BYTES = 4096
 
 /** How the differing pictures of a case are shown. */
@@ -54,6 +57,22 @@ private val STATUS_NAMES = listOf(
 fun differences(report: GoldenReport): List<Pair<CaseStatus, String>> = STATUS_NAMES
     .filter { report.count(it.first) > 0 }
     .map { (status, name) -> status to "$name: ${report.count(status)}" }
+
+/**
+ * [previous] with what a check of a few stories, [partial], found: their results are replaced, the
+ * rest is kept. Results of an earlier build stay on show as stale ones.
+ */
+internal fun mergeReports(previous: GoldenReport?, partial: GoldenReport, goldens: String, output: String): GoldenReport {
+    val fresh = partial.copy(goldens = goldens, output = output)
+    val old = previous?.takeIf { it.goldens == goldens && !it.record } ?: return fresh
+    val replaced = partial.cases.map { it.story }.toSet()
+    val outdated = old.binary != partial.binary
+    // A check of a few stories does not look for orphans, so the known ones remain.
+    val kept = old.cases.filter { it.story !in replaced || it.status == CaseStatus.Orphan }
+        .map { if (outdated) it.copy(stale = true) else it }
+    val cases = kept + partial.cases
+    return fresh.copy(cases = cases, total = cases.size)
+}
 
 /** One line that says how a run went. */
 fun summaryText(report: GoldenReport): String {
@@ -90,29 +109,49 @@ class GoldenController(
     init {
         // The result of an earlier check is still worth showing; `blocker` says when it is stale.
         config()?.let { current ->
-            report = read(current)?.takeIf { !it.record && it.finished && it.goldens == current.goldens }
+            report = read(current.output)?.takeIf { !it.record && it.finished && it.goldens == current.goldens }
         }
     }
 
-    /** Starts a check in a process of its own and follows its report. */
-    fun check() {
+    /** How far the running check is, as `12/37`. */
+    var progress by mutableStateOf<String?>(null)
+        private set
+
+    /** What the latest check was asked for; `null` for the whole catalog. */
+    var lastFilter by mutableStateOf<String?>(null)
+        private set
+
+    /**
+     * Starts a check in a process of its own and follows its report. With [filter], a group or a
+     * story, only that is checked and its results join the ones already there.
+     */
+    fun check(filter: String? = null) {
         val current = config() ?: return
         if (running) return
         running = true
+        lastFilter = filter
+        progress = null
         problem = null
-        report = null
+        val previous = report
+        // The whole catalog replaces the report; a part keeps it on show until it is done.
+        if (filter == null) report = null
+        val output = if (filter == null) current.output else "${current.output}/$PARTIAL"
         launchOnUiThread {
             try {
-                removeFile("${current.output}/$REPORT_FILE")
-                val process = ChildProcess.start(current.command(ownBinary), current.environment)
+                removeFile("$output/$REPORT_FILE")
+                val process = ChildProcess.start(current.command(ownBinary, output, filter), current.environment)
                 try {
                     while (process.isRunning) {
                         delay(POLL_MS)
-                        read(current)?.let { report = it }
+                        read(output)?.let { follow(it, filter) }
                     }
-                    report = read(current)
-                    if (report?.finished != true) {
+                    val done = read(output)
+                    if (done?.finished != true) {
                         problem = "прогін не завершився (код ${process.exitStatus}), деталі у виводі атласу"
+                    } else if (filter == null) {
+                        report = done
+                    } else {
+                        report = keep(mergeReports(previous, done, current.goldens, current.output), done, output)
                     }
                 } finally {
                     process.close()
@@ -121,9 +160,26 @@ class GoldenController(
                 problem = e.message
             } finally {
                 running = false
+                progress = null
                 generation++
             }
         }
+    }
+
+    private fun follow(latest: GoldenReport, filter: String?) {
+        progress = "${latest.cases.map { it.id.substringBefore('@') }.distinct().size}/${latest.total}"
+        if (filter == null) report = latest
+    }
+
+    /** Moves the pictures of [partial] out of [from] to the others and writes [merged] there. */
+    private fun keep(merged: GoldenReport, partial: GoldenReport, from: String): GoldenReport {
+        partial.cases.filter { it.status != CaseStatus.Same }.forEach { case ->
+            listOf(case.expectedFile, case.actualFile, case.diffFile).forEach { file ->
+                readBytes("$from/$file")?.let { writeBytes("${merged.output}/$file", it) }
+            }
+        }
+        writeText("${merged.output}/$REPORT_FILE", merged.toJson())
+        return merged
     }
 
     /** Why [scope] cannot be accepted now, or `null` when it can. */
@@ -145,8 +201,8 @@ class GoldenController(
         generation++
     }
 
-    private fun read(config: GoldenConfig): GoldenReport? =
-        readText("${config.output}/$REPORT_FILE")?.let(GoldenReport::parse)
+    private fun read(output: String): GoldenReport? =
+        readText("$output/$REPORT_FILE")?.let(GoldenReport::parse)
 
     companion object {
         /** The controller of the running atlas, configured by the file beside its executable. */

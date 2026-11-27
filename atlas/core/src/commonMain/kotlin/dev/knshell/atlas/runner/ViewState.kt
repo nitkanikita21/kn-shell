@@ -5,7 +5,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
 /** What the area beside the tree shows. */
-enum class MainTab { Preview, Diff }
+enum class MainTab { Preview, Script, Diff }
 
 /** The widths the preview can be held to, in pixels. */
 val PREVIEW_WIDTHS: List<Int> = listOf(320, 640)

@@ -5,6 +5,7 @@
 
 package dev.knshell.atlas.runner.golden
 
+import dev.knshell.atlas.play.PlayStep
 import dev.knshell.inspect.comparePng
 import dev.knshell.shell.CompositionFailedException
 import kotlinx.coroutines.CancellationException
@@ -21,6 +22,8 @@ class CaseShots(
     /** Further pictures by suffix: a forced state (`hover`) or a snapshot of the script. */
     val extra: List<Pair<String, ByteArray>> = emptyList(),
     val playFailure: String? = null,
+    /** What the script did and expected. */
+    val steps: List<PlayStep> = emptyList(),
 )
 
 data class GoldenOptions(
@@ -40,6 +43,8 @@ class GoldenSession(
     /** What draws the pictures; asked once something was captured. */
     private val environment: () -> RenderEnvironment,
     private val log: (String) -> Unit = ::println,
+    /** Seconds since the epoch, kept with every result. */
+    private val now: () -> Long = ::epochSeconds,
 ) {
     private val recorded: RenderEnvironment? =
         readText("${options.goldens}/$ENVIRONMENT_FILE")?.let(RenderEnvironment::parse)
@@ -63,7 +68,8 @@ class GoldenSession(
             } catch (e: Throwable) {
                 listOf(failed(case, e))
             }
-            results += found
+            val checkedAt = now()
+            results += found.map { it.copy(checkedAt = checkedAt) }
             found.forEach { result ->
                 log("golden: [${index + 1}/${cases.size}] ${result.status.name.lowercase()} ${result.id}" +
                     (result.error?.let { ": $it" } ?: ""))
@@ -83,7 +89,7 @@ class GoldenSession(
 
     private fun judgeAll(case: GoldenCase, shots: CaseShots): List<CaseResult> {
         val stem = case.path.removeSuffix(".png")
-        val judged = listOf(judge(case.id, case.story, case.path, shots.base)) +
+        val judged = listOf(judge(case.id, case.story, case.path, shots.base).copy(steps = shots.steps)) +
             shots.extra.map { (suffix, picture) ->
                 judge("${case.id}@$suffix", case.story, "$stem@${safeName(suffix)}.png", picture)
             }

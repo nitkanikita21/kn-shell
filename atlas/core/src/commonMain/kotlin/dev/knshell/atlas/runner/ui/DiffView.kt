@@ -127,12 +127,12 @@ private fun DiffCase(golden: GoldenController, story: String, case: CaseResult) 
     }
 }
 
-private class Shot(val title: String, val path: String, val width: Int, val height: Int)
+internal class Shot(val title: String, val path: String, val width: Int, val height: Int)
 
 @Composable
-private fun Picture(golden: GoldenController, shot: Shot, modifier: Modifier = Modifier) {
+internal fun Picture(golden: GoldenController, shot: Shot, modifier: Modifier = Modifier) {
     Column(spacing = 4, modifier = modifier.align(h = Align.Start, v = Align.Start)) {
-        Label(shot.title, align = 0f, modifier = chromeText(AtlasTheme.dim))
+        if (shot.title.isNotEmpty()) Label(shot.title, align = 0f, modifier = chromeText(AtlasTheme.dim))
         // The frame is around the picture, not on it: a border on the image would scale it down.
         Box(with(AtlasTheme) { Modifier.framed() }.align(h = Align.Start)) {
             // The same path holds other pixels after another run, and an Image reads a path once.

@@ -1,13 +1,13 @@
 # Atlas і UI-кіт: стан роботи (передача на інший комп'ютер)
 
-Знімок на 2026-11-27, гілка `ui-kit` (від `atlas`), не запушена. Опис атласу — у
+Знімок на 2026-11-27, гілка `atlas-ux` (від `ui-kit`), обидві не запушені. Опис атласу — у
 [`README.uk.md`](README.uk.md), кіта — у [`demo/shell-ui-kit/README.md`](../../demo/shell-ui-kit/README.md);
 тут лише те, що потрібно, щоб продовжити.
 
 ## Запуск на новій машині
 
 ```bash
-git checkout ui-kit
+git checkout atlas-ux
 
 ./gradlew :demo:shell-ui-kit:runAtlas                      # каталог кіта у вікні
 KN_SHELL_DEMO=1 ./scripts/run.sh                           # бар і вікно-демо кіта
@@ -44,6 +44,13 @@ GTK-тести завжди йдуть під `headless-compositor`: на роб
 - Атлас: `play { }`, кадри станів, середовища (Dark/Light), категорії, `docs`.
 - Кіт: 23 компоненти, сторіси, еталони в `demo/shell-ui-kit/atlas-goldens/`.
 - `shell-app` перейшов на кіт; його каталог і кореневу `atlas-goldens/` прибрано.
+
+## Що зроблено в гілці `atlas-ux`
+
+Пошук і клавіші; панель над превʼю (ширина, вимірювання, GTK Inspector), ховання панелей, памʼять
+стану; перевірка однієї story чи групи, вкладка «Сценарій»; MCP-інструменти `search_stories`,
+`check_story`, `check_status`, `set_width`. Мокап: `docs/storybook/mockups/atlas-ux.html`. Свідомо не
+робились: панель і перевірка доступності, журнал подій.
 
 ### Виправлені баги `framework` (перевірити бар `shell-app`)
 

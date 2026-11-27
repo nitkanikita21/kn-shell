@@ -89,15 +89,26 @@ private fun Main(current: Selection, golden: GoldenController, previewFocus: Foc
     val story = "${current.group.title}/${current.entry.name}"
     val differing = golden.report?.cases.orEmpty().filter { it.story == story && it.status != CaseStatus.Same }
     // Only a story with something to show has the tab of differences.
+    val failed = differing.any { it.status == CaseStatus.PlayFailed }
     val tabs = buildList {
         add(MainTab.Preview to "Preview")
+        add(MainTab.Script to if (failed) "Сценарій ▷" else "Сценарій")
         if (differing.isNotEmpty() && !golden.running) add(MainTab.Diff to "Різниця (${differing.size})")
     }
     val shown = view.tab.takeIf { wanted -> tabs.any { it.first == wanted } } ?: MainTab.Preview
 
     Column(modifier = Modifier.weight().fillAll()) {
-        MainBar(view, tabs, shown)
+        MainBar(view, tabs, shown, golden, story, current.group.title)
         when (shown) {
+            MainTab.Script -> ScriptView(
+                golden = golden,
+                story = story,
+                entry = current.entry,
+                environments = service.environments,
+                environment = service.environment,
+                onEnvironment = { service.environment = it },
+                modifier = Modifier.weight().fillAll(),
+            )
             MainTab.Diff -> DiffView(golden, story, differing, Modifier.weight().fillAll())
             MainTab.Preview -> {
                 PreviewBar(view)

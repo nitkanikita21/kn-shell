@@ -8,6 +8,7 @@
 
 package dev.knshell.atlas.runner.golden
 
+import dev.knshell.atlas.play.PlayStep
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -151,6 +152,7 @@ internal suspend fun shoot(inspector: Inspector, keyboard: VirtualKeyboard?, cas
     val base = capture(inspector, stage)
     val extra = mutableListOf<Pair<String, ByteArray>>()
     var failure: String? = null
+    var steps = emptyList<PlayStep>()
     val driver = StageDriver(inspector, keyboard, stage) { name, picture -> extra += name to picture }
     try {
         for (state in case.entry.states) {
@@ -162,13 +164,20 @@ internal suspend fun shoot(inspector: Inspector, keyboard: VirtualKeyboard?, cas
             inspector.setState(target.id, state, false)
             driver.settle()
         }
-        case.entry.play?.let { play -> with(play) { PlayScope(driver).run() } }
+        case.entry.play?.let { play ->
+            val scope = PlayScope(driver)
+            try {
+                with(play) { scope.run() }
+            } finally {
+                steps = scope.log
+            }
+        }
     } catch (e: PlayFailure) {
         failure = e.message
     } catch (e: InspectException) {
         failure = e.message
     }
-    return CaseShots(base, extra, failure)
+    return CaseShots(base, extra, failure, steps)
 }
 
 private fun InspectNode.find(tag: String): InspectNode? =
