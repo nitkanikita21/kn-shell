@@ -37,6 +37,8 @@ import kn.gtk.gtk_event_controller_key_new
 import kn.gtk.gtk_event_controller_set_propagation_phase
 import kn.gtk.gtk_widget_add_controller
 import kn.gtk.gtk_widget_get_mapped
+import kn.gtk.gtk_widget_child_focus
+import kn.gtk.GtkDirectionType
 import kn.gtk.g_type_name_from_instance
 import kn.gtk.gtk_widget_get_can_focus
 import kn.gtk.gtk_widget_get_first_child
@@ -60,6 +62,24 @@ class FocusRequester {
 
     /** Whether the widget, or something inside it, has the focus. */
     val hasFocus: Boolean get() = widget?.containsFocus() == true
+
+    /**
+     * Focuses the widget Tab would reach from this one, or Shift+Tab with [backwards]. For a menu or
+     * popover that Tab closes: the focus goes on from its trigger.
+     */
+    fun moveFocus(backwards: Boolean = false) {
+        val direction = if (backwards) GtkDirectionType.GTK_DIR_TAB_BACKWARD else GtkDirectionType.GTK_DIR_TAB_FORWARD
+        launchOnUiThread {
+            retryUntilOnScreen {
+                val target = widget ?: return@retryUntilOnScreen false
+                if (!target.containsFocus() && gtk_widget_grab_focus(target) == 0) return@retryUntilOnScreen false
+                val window = gtk_widget_get_root(target)?.reinterpret<GtkWidget>() ?: return@retryUntilOnScreen false
+                // The window answers "no" at its last stop; asked again, it starts over.
+                if (gtk_widget_child_focus(window, direction) == 0) gtk_widget_child_focus(window, direction)
+                true
+            }
+        }
+    }
 
     /**
      * Focuses the widget once the current changes have reached the screen, so it may be called right
@@ -224,6 +244,7 @@ fun FocusScope(
     trap: Boolean = false,
     autoFocus: Boolean = true,
     restoreFocus: Boolean = true,
+    onTabOut: ((backwards: Boolean) -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     // Taken during composition, before any widget of the scope can have taken the focus.
@@ -233,6 +254,7 @@ fun FocusScope(
         update = {
             set(restoreFocus) { restores = it }
             set(trap) { traps = it }
+            set(onTabOut) { tabOut = it }
             set(modifier) { value -> applyModifier(value) }
         },
         content = content,
@@ -263,6 +285,7 @@ internal class GtkFocusScopeNode(private val previous: PreviousFocus, private va
 
     var restores = true
     var traps = false
+    var tabOut: ((Boolean) -> Unit)? = null
     private var appeared = false
 
     init {
@@ -273,11 +296,13 @@ internal class GtkFocusScopeNode(private val previous: PreviousFocus, private va
         // The trap sees Tab before the focused widget moves the focus by itself.
         super.applyModifier(
             modifier.onKey(capture = true) { event ->
-                if (!traps || event.key != Key.Tab || event.ctrl || event.alt) {
-                    false
-                } else {
-                    cycle(backwards = event.shift)
-                    true
+                when {
+                    event.key != Key.Tab || event.ctrl || event.alt -> false
+                    traps -> {
+                        cycle(backwards = event.shift)
+                        true
+                    }
+                    else -> leave(backwards = event.shift)
                 }
             },
         )
@@ -287,6 +312,17 @@ internal class GtkFocusScopeNode(private val previous: PreviousFocus, private va
                 launchOnUiThread { retryUntilOnScreen { widget.containsFocus() || focusFirstNow(widget) } }
             }
         }
+    }
+
+    /** Tells [tabOut] when Tab would take the focus past an end of the scope. */
+    private fun leave(backwards: Boolean): Boolean {
+        val handler = tabOut ?: return false
+        val stops = focusableWidgets(widget)
+        val end = if (backwards) stops.firstOrNull() else stops.lastOrNull()
+        // A container that holds the focus itself still has its content ahead.
+        val atEnd = end == null || (end.containsFocus() && (backwards || stops.none { it != end && it.isInside(end) }))
+        if (atEnd) handler(backwards)
+        return atEnd
     }
 
     private fun cycle(backwards: Boolean) {
@@ -306,6 +342,9 @@ internal class GtkFocusScopeNode(private val previous: PreviousFocus, private va
         super.cancelAnimations()
     }
 }
+
+private fun CPointer<GtkWidget>.isInside(other: CPointer<GtkWidget>): Boolean =
+    gtk_widget_is_ancestor(this, other) != 0
 
 /** The focused widget of the active window, else of any window that has one. */
 internal fun focusedWidget(): CPointer<GtkWidget>? {

@@ -330,6 +330,7 @@ fun Entry(
     value: String,
     modifier: Modifier = Modifier,
     placeholder: String = "",
+    password: Boolean = false,
     onValueChange: (String) -> Unit,
 ) {
     ComposeNode<GtkEntryNode, GtkApplier>(
@@ -337,6 +338,7 @@ fun Entry(
         update = {
             set(value) { text -> setText(text) }
             set(placeholder) { hint -> setPlaceholder(hint) }
+            set(password) { hidden -> setPassword(hidden) }
             set(onValueChange) { fn -> onChange = fn }
             set(modifier) { m -> applyModifier(m) }
         },

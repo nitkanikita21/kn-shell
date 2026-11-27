@@ -137,4 +137,40 @@ class FocusGraphicsTest {
             listOf(tab(shift = true), tab(shift = true), tab(shift = true)),
         )
     }
+
+    @Test
+    fun `moveFocus goes on from a widget and a scope reports Tab past its ends`() {
+        val from = FocusRequester()
+        val left = mutableListOf<Boolean>()
+        uiTest({
+            Column {
+                Box(Modifier.testTag("before").focusable(autofocus = true)) { Label("before") }
+                Box(Modifier.testTag("trigger").focusRequester(from).focusable()) { Label("trigger") }
+                FocusScope(autoFocus = false, restoreFocus = false, onTabOut = { left.add(it) }) {
+                    Box(Modifier.testTag("first").focusable()) { Label("first") }
+                    Box(Modifier.testTag("last").focusable()) { Label("last") }
+                }
+            }
+        }) {
+            from.moveFocus()
+            settle()
+            assertEquals(listOf("first"), focused())
+            keyboard.press(Key.Tab)
+            settle()
+            assertEquals(listOf("last"), focused())
+            assertEquals(emptyList(), left)
+
+            keyboard.press(Key.Tab)
+            settle()
+            assertEquals(listOf("last"), focused())
+            keyboard.press(Key.Tab, shift = true)
+            keyboard.press(Key.Tab, shift = true)
+            settle()
+            assertEquals(listOf(false, true), left)
+
+            from.moveFocus(backwards = true)
+            settle()
+            assertEquals(listOf("before"), focused())
+        }
+    }
 }

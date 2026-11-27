@@ -177,6 +177,11 @@ data class MotionTokens(
     val panelMs: Int = 220,
     /** How long colours take to change when the theme changes. */
     val themeMs: Int = 220,
+    /**
+     * Whether things that move by themselves (pulsing skeletons, running countdowns, indeterminate
+     * progress) do so. `false` holds them still, for reduced motion and for pictures.
+     */
+    val animate: Boolean = true,
 )
 
 data class IconTokens(

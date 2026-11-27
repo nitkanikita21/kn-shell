@@ -28,6 +28,7 @@ import kn.gtk.gtk_drop_down_set_selected
 import kn.gtk.gtk_editable_get_text
 import kn.gtk.gtk_editable_set_text
 import kn.gtk.gtk_entry_new
+import kn.gtk.gtk_entry_set_visibility
 import kn.gtk.gtk_entry_set_placeholder_text
 import kn.gtk.gtk_string_list_append
 import kn.gtk.gtk_string_list_new
@@ -82,6 +83,11 @@ internal class GtkEntryNode : GtkNode(gtk_entry_new()!!) {
         programmaticUpdate = true
         gtk_editable_set_text(editable, text)
         programmaticUpdate = false
+    }
+
+    /** Shows dots instead of the characters. */
+    fun setPassword(hidden: Boolean) {
+        gtk_entry_set_visibility(widget.reinterpret(), if (hidden) 0 else 1)
     }
 
     fun setPlaceholder(text: String) {

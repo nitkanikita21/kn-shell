@@ -42,7 +42,7 @@ container to pick, and what GTK cannot express — are in [`docs/layout-model.md
 
 | Composable | GTK widget | Callback | Notes |
 | --- | --- | --- | --- |
-| `Entry(value, modifier, placeholder, onValueChange)` | `GtkEntry` | `(String) -> Unit`, after every user edit | `value` is written back only when it differs from the field text, so the cursor does not jump |
+| `Entry(value, modifier, placeholder, password, onValueChange)` | `GtkEntry` | `(String) -> Unit`, after every user edit | `value` is written back only when it differs from the field text, so the cursor does not jump |
 | `Switch(checked, modifier, onCheckedChange)` | `GtkSwitch` | `(Boolean) -> Unit`, user toggles only | programmatic `checked` does not fire it |
 | `DropDown(items, selected, modifier, onSelect)` | `GtkDropDown` over a `GtkStringList` | `(Int) -> Unit`, index of the picked item | `selected` is an index; it is re-applied after `items` changes |
 
@@ -87,8 +87,8 @@ sub-node rule never leaks to other widgets and does not outlive its widget.
 | `Modifier.onKey(capture) { event -> Boolean }` | Key presses reaching the widget or its descendants; `true` consumes. `capture` runs before the children. `KeyEvent(key, character, shift, ctrl, alt, meta)`. |
 | `Modifier.enabled(enabled)` | `false`: no clicks, no focus, `:disabled`, announced as unavailable. |
 | `Modifier.focusable(focusable, autofocus)` | Puts a widget in (or, with `false`, takes it out of) the Tab order. Roving focus is one `focusable(true)` item among `false` ones. |
-| `FocusRequester`, `Modifier.focusRequester(r)`, `Modifier.onFocusChange { }` | Moving focus from code and following it. |
-| `FocusScope(modifier, trap, autoFocus, restoreFocus) { }` | A group that focuses its first widget, optionally keeps Tab inside, and gives the focus back when it leaves the composition. |
+| `FocusRequester`, `Modifier.focusRequester(r)`, `Modifier.onFocusChange { }` | Moving focus from code and following it; `requestFocus()`, and `moveFocus(backwards)` for the stop after or before the widget. |
+| `FocusScope(modifier, trap, autoFocus, restoreFocus, onTabOut) { }` | A group that focuses its first widget, optionally keeps Tab inside, and gives the focus back when it leaves the composition. Without `trap`, `onTabOut` hears Tab pressed past an end. |
 
 ### Layers and popups
 

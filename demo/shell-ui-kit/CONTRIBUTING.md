@@ -93,6 +93,11 @@ fun UBadge(
 - Меню, список, popover, tooltip: `dev.knshell.shell.Popup(open, onDismiss, side = side.toPopupSide(),
   align = align.toPopupAlign(), content = { UPopupSurface { … } }) { trigger() }`. Escape і клік
   зовні викликають `onDismiss`; фокус повертається сам.
+- Тригер меню, popover чи tooltip — слот `trigger: @Composable (UTrigger) -> Unit`. Компонент віддає в
+  `UTrigger.modifier` ARIA-стан, клавіші й фокус, а в `UTrigger.onClick` — дію; викликач застосовує
+  обидва до фокусовного віджета.
+- Tab у меню чи списку: закрити й `triggerRequester.moveFocus(backwards = event.shift)`. У popover-і:
+  `FocusScope(autoFocus = false, restoreFocus = false, onTabOut = { backwards -> … })`.
 - Діалог і тости: `Portal { … }` (потрібен `OverlayHost` вище; атлас його дає).
 - Вміст popover-а й порталу бачить тему місця, де його оголошено.
 
@@ -104,7 +109,11 @@ fun UBadge(
   `hExpand()`; вирівнювання — `Modifier.align(h = …, v = …)`.
 - Модифікатори: `framework/src/nativeMain/kotlin/dev/knshell/compose/Modifier*.kt`. Іконки:
   `Icon(Lucide.Name, size = …, color = …)`; потрібні іконки пакуються з джерел самі.
-- Жодних нескінченних анімацій у сторісах: кадр golden має заспокоїтися.
+- `Entry` (`GtkEntry`) сам обробляє Enter і Escape: щоб почути їх, `onKey(capture = true)`.
+  `password = true` ховає символи.
+- Усе, що рухається саме (пульс, відлік, невизначений прогрес), перевіряє
+  `UTheme.tokens.motion.animate` і при `false` стоїть: у сторісах він `false`, бо кадр golden має
+  заспокоїтися. Кадри анімації: `LaunchedEffect(key) { while (true) withFrameNanos { … } }`.
 
 ## Стандарт сторісів
 

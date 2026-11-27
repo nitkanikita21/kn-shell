@@ -20,7 +20,11 @@ fun samplePalette(hue: Float = 150f): WallpaperPalette = WallpaperPalette(
 fun sampleTokens(isDark: Boolean, hue: Float = 150f): DesignTokens {
     val tokens = DesignTokens.default()
     val palette = samplePalette(hue)
-    return tokens.copy(colors = if (isDark) ThemeScale.dark(palette) else ThemeScale.light(palette))
+    return tokens.copy(
+        colors = if (isDark) ThemeScale.dark(palette) else ThemeScale.light(palette),
+        // Golden pictures must come to rest, so nothing in the catalog moves by itself.
+        motion = tokens.motion.copy(animate = false),
+    )
 }
 
 private fun environment(name: String, isDark: Boolean) = AtlasEnvironment(name) { story ->
