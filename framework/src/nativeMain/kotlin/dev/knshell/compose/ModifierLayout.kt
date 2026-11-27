@@ -26,7 +26,14 @@ fun Modifier.padding(all: Int): Modifier = with(PaddingElement(all, all))
  * background, between this widget and its siblings.
  */
 fun Modifier.margin(horizontal: Int = 0, vertical: Int = 0): Modifier =
-    with(MarginElement(horizontal, vertical))
+    with(MarginElement(horizontal, vertical, horizontal, vertical))
+
+/**
+ * Outer spacing side by side. With `align(Start, Start)` it places a widget at a point of a
+ * `Stack`: `margins(start = x, top = y)`.
+ */
+fun Modifier.margins(start: Int = 0, top: Int = 0, end: Int = 0, bottom: Int = 0): Modifier =
+    with(MarginElement(start, top, end, bottom))
 
 /**
  * Size request in CSS pixels; `null` leaves an axis to the content.

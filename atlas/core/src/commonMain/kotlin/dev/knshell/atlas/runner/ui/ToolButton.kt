@@ -51,7 +51,9 @@ internal fun ToolButton(
     Button(modifier = shape.then(fill).testTag(tag), onClick = { if (enabled) onClick() }) {
         Row(spacing = 6, modifier = Modifier.align(Align.Center)) {
             icon?.let { Icon(it, Modifier.align(v = Align.Center), size = ICON_SIZE, color = tint, transitionMs = 0) }
-            Label(text, modifier = with(AtlasTheme) { Modifier.themedText().textColor(tint, transitionMs = 0) })
+            if (text.isNotEmpty()) {
+                Label(text, modifier = with(AtlasTheme) { Modifier.themedText().textColor(tint, transitionMs = 0) })
+            }
         }
     }
 }

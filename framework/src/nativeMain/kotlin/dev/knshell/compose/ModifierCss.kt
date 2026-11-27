@@ -44,8 +44,7 @@ internal fun borderDeclarations(width: Int, color: Color, sides: Set<BorderSide>
 
 /** Applies all modifiers of [modifier] to [widget]. */
 internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inlineStyle: InlineStyle) {
-    var marginHorizontal = 0
-    var marginVertical = 0
+    var margin = MarginElement(0, 0, 0, 0)
     var width: Int? = null
     var height: Int? = null
     var maxWidth: Int? = null
@@ -63,6 +62,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     var cursorName: String? = null
     var scrollHandler: ((Double, Double) -> Unit)? = null
     var dragHandlers: DragElement? = null
+    var moveHandler: ((Double, Double) -> Unit)? = null
     val keyHandlers = mutableListOf<KeyElement>()
     var focusable: FocusableElement? = null
     var focusRequester: FocusRequester? = null
@@ -85,10 +85,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is PaddingElement ->
                 rules += "" to "padding: ${element.vertical}px ${element.horizontal}px;"
 
-            is MarginElement -> {
-                marginHorizontal = element.horizontal
-                marginVertical = element.vertical
-            }
+            is MarginElement -> margin = element
 
             is BackgroundElement -> {
                 val declarations = buildString {
@@ -273,6 +270,7 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
             is SemanticsElement -> Unit
             is SemanticsRefElement -> semanticsRef = element.ref
             is DragElement -> dragHandlers = element
+            is PointerMoveElement -> moveHandler = element.handler
             is InputRegionElement -> inputRegion = true
 
             is AnimatedSizeElement -> applyAnimatedSizeModifier(widget, element)
@@ -340,10 +338,10 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
         }
     }
 
-    gtk_widget_set_margin_start(widget, marginHorizontal)
-    gtk_widget_set_margin_end(widget, marginHorizontal)
-    gtk_widget_set_margin_top(widget, marginVertical)
-    gtk_widget_set_margin_bottom(widget, marginVertical)
+    gtk_widget_set_margin_start(widget, margin.start)
+    gtk_widget_set_margin_end(widget, margin.end)
+    gtk_widget_set_margin_top(widget, margin.top)
+    gtk_widget_set_margin_bottom(widget, margin.bottom)
 
     if (width != null || height != null) {
         // GTK size requests are minimums, so a max can only cap what we ask for
@@ -429,7 +427,9 @@ internal fun applyModifiers(widget: CPointer<GtkWidget>, modifier: Modifier, inl
     inlineStyle.setRules(rules)
     inlineStyle.input.bind(keyHandlers, focusable, focusRequester, focusChange)
     inlineStyle.semantics.bind(modifier.mergedSemantics(), semanticsRef)
-    inlineStyle.interaction.bind(clickHandler, hoverEnter, hoverExit, cursorName, scrollHandler, dragHandlers)
+    inlineStyle.interaction.bind(
+        clickHandler, hoverEnter, hoverExit, cursorName, scrollHandler, dragHandlers, moveHandler,
+    )
 
     // Marks the widget for the window's input-region shaping (`dev.knshell.shell.InputRegion`).
     // Like every other field here, a chain that no longer mentions it has to clear it.

@@ -19,6 +19,8 @@ class AtlasHostService(
 ) {
     val sidebar = SidebarState(groups)
 
+    val view = ViewState()
+
     /** The environment the preview shows stories in; `null` when the catalog supplies none. */
     var environment by mutableStateOf(environments.firstOrNull())
 
@@ -46,10 +48,46 @@ class AtlasHostService(
     }
 
     fun focusSearch() {
+        view.sidebarHidden = false
         sidebar.searchFocus.requestFocus()
     }
 
+    /** What to bring back next time, with [selected] open. */
+    fun memory(selected: Selection?): AtlasMemory = AtlasMemory(
+        story = selected?.let { "${it.group.title}/${it.entry.name}" },
+        environment = environment?.name,
+        views = matrices().filter { viewByEntry[it.second] != null }
+            .associate { (name, matrix) -> name to viewOf(matrix).name },
+        closedGroups = sidebar.closedGroups,
+        closedCells = matrices().flatMap { (name, matrix) ->
+            collapsed.filter { it.key.first === matrix && it.value }.map { "$name/${it.key.second}" }
+        }.sorted(),
+        sidebarHidden = view.sidebarHidden,
+        argsHidden = view.argsHidden,
+        width = view.width,
+    )
+
+    /** Puts [memory] back; what the catalog no longer has is skipped. The selection is the caller's. */
+    fun restore(memory: AtlasMemory) {
+        environments.firstOrNull { it.name == memory.environment }?.let { environment = it }
+        matrices().forEach { (name, matrix) ->
+            val kept = matrix.views.firstOrNull { it.name == memory.views[name] }
+            if (kept != null) viewByEntry[matrix] = kept
+            memory.closedCells.filter { it.startsWith("$name/") }
+                .forEach { collapsed[matrix to it.removePrefix("$name/")] = true }
+        }
+        sidebar.close(memory.closedGroups)
+        view.sidebarHidden = memory.sidebarHidden
+        view.argsHidden = memory.argsHidden
+        view.width = memory.width?.takeIf { it in PREVIEW_WIDTHS }
+    }
+
+    private fun matrices(): List<Pair<String, Variants>> = groups.flatMap { group ->
+        group.entries.filterIsInstance<Variants>().map { "${group.title}/${it.name}" to it }
+    }
+
     fun select(group: StoryGroup, entry: StoryEntry) {
+        view.pointer = null
         _selection.value = Selection(group, entry)
     }
 

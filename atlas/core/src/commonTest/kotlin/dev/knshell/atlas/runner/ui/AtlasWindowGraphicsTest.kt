@@ -135,4 +135,40 @@ class AtlasWindowGraphicsTest {
         settle()
         assertEquals(null, find("story:Button/Playground"))
     }
+
+    @Test
+    fun `panels hide the preview takes a width and a widget is measured`() = atlasUiTest(catalog) {
+        keyboard.chord('b', ctrl = true)
+        keyboard.chord('j', ctrl = true)
+        settle()
+        assertEquals(null, find("sidebar"))
+        assertEquals(null, find("args-panel"))
+        keyboard.chord('k', ctrl = true)
+        settle()
+        assertEquals(listOf("search"), focused())
+        keyboard.press(Key.Escape)
+        settle()
+
+        inspector.click(node("width:320").id)
+        settle()
+        assertEquals(320, node("preview:width").bounds.width)
+        inspector.click(node("width:0").id)
+        settle()
+        assertEquals(null, find("preview:width"))
+
+        keyboard.type("m")
+        settle()
+        val story = nodes().first { it.text == "button" }.bounds
+        val overlay = node("measure:capture").bounds
+        service.view.pointer = (story.x - overlay.x + 2) to (story.y - overlay.y + 2)
+        settle()
+        settle()
+        val outline = node("measure:outline").bounds
+        assertEquals(story, outline)
+        assertEquals(true, nodes().any { it.text == "${story.width} × ${story.height}" })
+
+        keyboard.press(Key.Escape)
+        settle()
+        assertEquals(null, find("measure:card"))
+    }
 }

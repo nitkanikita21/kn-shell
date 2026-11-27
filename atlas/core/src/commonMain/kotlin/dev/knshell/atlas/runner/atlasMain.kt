@@ -1,5 +1,11 @@
 package dev.knshell.atlas.runner
 
+import dev.knshell.atlas.runner.golden.writeText
+import dev.knshell.atlas.runner.golden.readText
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -52,10 +58,20 @@ fun atlasMain(
         }
     } ?: defaultSelection(stories)
 
-    initial?.let { service.select(it.group, it.entry) }
+    val inspectPath = parseInspectPath(args, getenv(INSPECT_ENV)?.toKString())
+    // An atlas a tool drives neither takes the user's place nor overwrites it.
+    val memoryPath = if (inspectPath != null) null else GoldenController.executablePath()?.let { executable ->
+        memoryFile(executable, getenv("XDG_STATE_HOME")?.toKString(), getenv("HOME")?.toKString())
+    }
+    val memory = memoryPath?.let(::readText)?.let(AtlasMemory::parse) ?: AtlasMemory()
+    service.restore(memory)
+
+    // A story named on the command line wins over the remembered one.
+    val opened = if (spec == null) memory.story?.let { resolveStory(stories, it) } ?: initial else initial
+    opened?.let { service.select(it.group, it.entry) }
 
     // сокет інспектора тільки за --inspect / KN_ATLAS_INSPECT; без них процес поводиться як раніше
-    parseInspectPath(args, getenv(INSPECT_ENV)?.toKString())?.let { path ->
+    inspectPath?.let { path ->
         // інакше скріншот одразу після зміни ловить середину CSS-переходу
         disableUiTransitions()
         val server = LineSocketServer(path, AtlasCommands(service, windowInspector())::handle)
@@ -76,6 +92,22 @@ fun atlasMain(
         windowModifier = shortcuts(service),
     ) {
         AtlasWindow(service, golden)
+        memoryPath?.let { Remember(service, it) }
+    }
+}
+
+/** How long the window has to stay as it is before that is written down. */
+private const val REMEMBER_AFTER_MS = 400L
+
+/** Writes the memory of [service] to [path] whenever it changes. */
+@Composable
+internal fun Remember(service: AtlasHostService, path: String) {
+    val selection by service.selection.collectAsState()
+    val memory = service.memory(selection)
+    LaunchedEffect(memory) {
+        delay(REMEMBER_AFTER_MS)
+        // Not worth stopping for: a state directory that cannot be written only loses the place.
+        runCatching { writeText(path, memory.toJson()) }
     }
 }
 

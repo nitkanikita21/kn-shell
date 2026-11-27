@@ -7,7 +7,7 @@
 package dev.knshell.compose
 
 internal data class PaddingElement(val horizontal: Int, val vertical: Int) : ModifierElement
-internal data class MarginElement(val horizontal: Int, val vertical: Int) : ModifierElement
+internal data class MarginElement(val start: Int, val top: Int, val end: Int, val bottom: Int) : ModifierElement
 internal data class BackgroundElement(
     val color: Color,
     val radius: Int,

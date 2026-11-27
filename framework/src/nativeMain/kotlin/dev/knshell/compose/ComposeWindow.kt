@@ -2,6 +2,7 @@
 
 package dev.knshell.compose
 
+import kn.gtk.gtk_window_set_interactive_debugging
 import androidx.compose.runtime.Composable
 import dev.knshell.shell.BarAnchor
 import dev.knshell.shell.BarWindowSpec
@@ -71,6 +72,9 @@ scale {
 }
 .kn-panel { padding: 8px 12px; }
 """
+
+/** Opens GTK's own inspector: the widget tree, CSS and layout of the running application. */
+fun openStyleInspector() = gtk_window_set_interactive_debugging(1)
 
 /**
  * Closes every window, which makes [runComposeWindow] return. For code that drives windows from the

@@ -1,5 +1,6 @@
 package dev.knshell.atlas.runner.ui
 
+import dev.knshell.compose.testTag
 import androidx.compose.runtime.Composable
 import dev.knshell.atlas.core.arg.ArgValues
 import dev.knshell.atlas.core.entry.Story
@@ -28,7 +29,7 @@ fun StoryView(story: Story, args: ArgValues, modifier: Modifier = Modifier) {
         Row(modifier = Modifier.hExpand()) {
             // Equal spacers left and right share the surplus width.
             Box(Modifier.weight())
-            Decorated(LocalAtlasEnvironment.current, Modifier.align(Align.Center)) {
+            Decorated(LocalAtlasEnvironment.current, Modifier.align(Align.Center).testTag(STORY_CONTENT)) {
                 story.render(args)
             }
             Box(Modifier.weight())

@@ -30,6 +30,9 @@ internal data class HoverElement(
     val onExit: (() -> Unit)?,
 ) : ModifierElement
 
+/** `Modifier.onPointerMove { x, y -> }`: where the pointer is, in the widget's coordinates. */
+internal data class PointerMoveElement(val handler: (Double, Double) -> Unit) : ModifierElement
+
 /** `Modifier.cursor("pointer")` — GTK does not support the CSS `cursor` property. */
 internal data class CursorElement(val name: String?) : ModifierElement
 
@@ -49,6 +52,7 @@ internal class InteractionState(private val widget: CPointer<GtkWidget>) {
     private var hoverEnter: (() -> Unit)? = null
     private var hoverExit: (() -> Unit)? = null
     private var scrollHandler: ((Double, Double) -> Unit)? = null
+    private var moveHandler: ((Double, Double) -> Unit)? = null
     private var drag: DragElement? = null
 
     private var clickGesture: CPointer<GtkGesture>? = null
@@ -68,6 +72,7 @@ internal class InteractionState(private val widget: CPointer<GtkWidget>) {
         cursor: String?,
         scroll: ((Double, Double) -> Unit)? = null,
         dragHandlers: DragElement? = null,
+        move: ((Double, Double) -> Unit)? = null,
     ) {
         clickHandler = click
         hoverEnter = enter
@@ -76,7 +81,8 @@ internal class InteractionState(private val widget: CPointer<GtkWidget>) {
         drag = dragHandlers
 
         if (click != null) ensureClickGesture()
-        if (enter != null || exit != null) ensureMotionController()
+        moveHandler = move
+        if (enter != null || exit != null || move != null) ensureMotionController()
         if (scroll != null) ensureScrollController()
         if (dragHandlers != null) ensureDragGesture()
         bindCursor(cursor)
@@ -164,10 +170,25 @@ internal class InteractionState(private val widget: CPointer<GtkWidget>) {
         val motion = gtk_event_controller_motion_new() ?: return
         motionController = motion
         val ref = selfRef
-        val enter = staticCFunction { _: COpaquePointer?, _: Double, _: Double, data: COpaquePointer? ->
-            data?.asStableRef<InteractionState>()?.get()?.hoverEnter?.invoke()
+        val enter = staticCFunction { _: COpaquePointer?, x: Double, y: Double, data: COpaquePointer? ->
+            data?.asStableRef<InteractionState>()?.get()?.let {
+                it.hoverEnter?.invoke()
+                it.moveHandler?.invoke(x, y)
+            }
             Unit
         }
+        val moved = staticCFunction { _: COpaquePointer?, x: Double, y: Double, data: COpaquePointer? ->
+            data?.asStableRef<InteractionState>()?.get()?.moveHandler?.invoke(x, y)
+            Unit
+        }
+        g_signal_connect_data(
+            instance = motion.reinterpret(),
+            detailed_signal = "motion",
+            c_handler = moved.reinterpret(),
+            data = ref.asCPointer(),
+            destroy_data = null,
+            connect_flags = 0u,
+        )
         val leave = staticCFunction { _: COpaquePointer?, data: COpaquePointer? ->
             data?.asStableRef<InteractionState>()?.get()?.hoverExit?.invoke()
             Unit
@@ -207,6 +228,9 @@ fun Modifier.onHover(
     onEnter: (() -> Unit)? = null,
     onExit: (() -> Unit)? = null,
 ): Modifier = with(HoverElement(onEnter, onExit))
+
+/** Hears every move of the pointer over the widget, in the widget's coordinates. */
+fun Modifier.onPointerMove(handler: (x: Double, y: Double) -> Unit): Modifier = with(PointerMoveElement(handler))
 
 /** Sets the mouse cursor while hovering the widget: `"pointer"`, `"default"`, `"text"`, … */
 fun Modifier.cursor(name: String): Modifier = with(CursorElement(name))

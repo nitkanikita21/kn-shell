@@ -85,7 +85,6 @@ class GoldenController(
     var generation by mutableStateOf(0)
         private set
     var onlyChanged by mutableStateOf(false)
-    var showDiff by mutableStateOf(false)
     var mode by mutableStateOf(DiffMode.Side)
 
     init {
@@ -163,7 +162,7 @@ class GoldenController(
             )
         }
 
-        private fun executablePath(): String? = memScoped {
+        internal fun executablePath(): String? = memScoped {
             val buffer = allocArray<ByteVar>(PATH_BYTES)
             val length = readlink("/proc/self/exe", buffer, (PATH_BYTES - 1).convert()).toInt()
             if (length <= 0) return@memScoped null

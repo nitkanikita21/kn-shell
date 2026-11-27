@@ -190,7 +190,7 @@ private fun Preview(variants: Variants, combo: ArgSnapshot, args: ArgValues) {
         ) {
             // a table cell is as tall as its row: the weight claims that height, so the story can
             // sit in the middle of it
-            Decorated(LocalAtlasEnvironment.current, Modifier.weight().align(Align.Center)) {
+            Decorated(LocalAtlasEnvironment.current, Modifier.weight().align(Align.Center).testTag(STORY_CONTENT)) {
                 variants.render(cellArgs)
             }
         }
