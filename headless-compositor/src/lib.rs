@@ -7,9 +7,11 @@
 //! freezes after the first frame and nothing recomposes or lays out. `linux-dmabuf` (see [`dmabuf`])
 //! is what lets it render on the GPU.
 //!
-//! No input devices are advertised; the client is driven through its inspector instead.
+//! There is no pointer: the client is driven through its inspector. The one input device is a virtual
+//! keyboard (see [`keyboard`]), pressed through the control socket [`Compositor::keys_socket`].
 
 use std::io;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -38,9 +40,11 @@ use wayland_server::protocol::wl_subcompositor::{self, WlSubcompositor};
 use wayland_server::protocol::wl_subsurface::WlSubsurface;
 use wayland_server::protocol::wl_surface::{self, WlSurface};
 use wayland_server::protocol::wl_touch::WlTouch;
+use wayland_server::backend::ClientId;
 use wayland_server::{Client, DataInit, Dispatch, Display, DisplayHandle, GlobalDispatch, ListeningSocket, New, Resource};
 
 mod dmabuf;
+mod keyboard;
 
 /// Size of the single virtual monitor.
 const OUTPUT_WIDTH: i32 = 1920;
@@ -54,6 +58,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(4);
 /// A running compositor. Dropping it disconnects the clients and removes the socket.
 pub struct Compositor {
     socket_name: String,
+    keys_socket: PathBuf,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -66,19 +71,29 @@ impl Compositor {
         let socket = ListeningSocket::bind(socket_name).map_err(io::Error::other)?;
         let state = State { dmabuf: dmabuf::Dmabuf::detect(), ..State::default() };
         create_globals(&display.handle(), &state);
+        // `ListeningSocket::bind` has already required the runtime directory.
+        let runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_default();
+        let keys_socket = runtime.join(format!("{socket_name}.keys"));
+        let control = keyboard::Control::bind(&keys_socket)?;
 
         let stop = Arc::new(AtomicBool::new(false));
         let stop_flag = stop.clone();
         let thread = thread::Builder::new()
             .name("headless-compositor".to_owned())
-            .spawn(move || serve(display, socket, state, &stop_flag))?;
+            .spawn(move || serve(display, socket, control, state, &stop_flag))?;
 
-        Ok(Self { socket_name: socket_name.to_owned(), stop, thread: Some(thread) })
+        Ok(Self { socket_name: socket_name.to_owned(), keys_socket, stop, thread: Some(thread) })
     }
 
     /// The value clients need in `WAYLAND_DISPLAY`.
     pub fn socket_name(&self) -> &str {
         &self.socket_name
+    }
+
+    /// The control socket of the virtual keyboard: send `key <Name> [shift] [ctrl] [alt] [super]` or
+    /// `type <text>` lines, each answered with `ok` or `error: …`.
+    pub fn keys_socket(&self) -> &Path {
+        &self.keys_socket
     }
 }
 
@@ -92,7 +107,13 @@ impl Drop for Compositor {
     }
 }
 
-fn serve(mut display: Display<State>, socket: ListeningSocket, mut state: State, stop: &AtomicBool) {
+fn serve(
+    mut display: Display<State>,
+    socket: ListeningSocket,
+    mut control: keyboard::Control,
+    mut state: State,
+    stop: &AtomicBool,
+) {
     let started = Instant::now();
     let mut last_frame = Instant::now();
 
@@ -121,8 +142,22 @@ fn serve(mut display: Display<State>, socket: ListeningSocket, mut state: State,
                 callback.done(time);
             }
         }
+        let time = started.elapsed().as_millis() as u32;
+        let answers: Vec<_> = control
+            .receive()
+            .into_iter()
+            .map(|(client, line)| {
+                let result = keyboard::parse_command(&line)
+                    .and_then(|strokes| strokes.into_iter().try_for_each(|stroke| state.keyboard.press(stroke, time)));
+                (client, result)
+            })
+            .collect();
         if let Err(error) = display.flush_clients() {
             eprintln!("[compositor] flush failed: {error}");
+        }
+        // Answered after the flush: the events have left by the time the caller reads `ok`.
+        for (client, result) in answers {
+            control.answer(client, result);
         }
         thread::sleep(POLL_INTERVAL);
     }
@@ -148,6 +183,7 @@ struct State {
     /// Frame callbacks of committed surfaces, answered on the next frame tick.
     frames: Vec<WlCallback>,
     serial: u32,
+    keyboard: keyboard::Keyboard,
 }
 
 impl State {
@@ -169,6 +205,8 @@ struct Pending {
     frames: Vec<WlCallback>,
     /// A role that still waits for its first `configure`.
     unconfigured: Option<Role>,
+    /// Whether this is a window (not a popup), which gets the keyboard once it shows a picture.
+    window: bool,
 }
 
 enum Role {
@@ -212,10 +250,14 @@ impl Positioner {
 type XdgData = WlSurface;
 
 impl Dispatch<WlSurface, Surface> for State {
+    fn destroyed(state: &mut Self, _: ClientId, resource: &WlSurface, _: &Surface) {
+        state.keyboard.forget(resource);
+    }
+
     fn request(
         state: &mut Self,
         _: &Client,
-        _: &WlSurface,
+        resource: &WlSurface,
         request: wl_surface::Request,
         surface: &Surface,
         _: &DisplayHandle,
@@ -229,6 +271,9 @@ impl Dispatch<WlSurface, Surface> for State {
                 if let Some(buffer) = pending.buffer.take() {
                     // The pixels are never read, so the client can reuse the buffer right away.
                     buffer.release();
+                    if pending.window {
+                        state.keyboard.window_mapped(resource);
+                    }
                 }
                 state.frames.append(&mut pending.frames);
                 match pending.unconfigured.take() {
@@ -269,13 +314,21 @@ impl Dispatch<XdgSurface, XdgData> for State {
             _ => return,
         };
         if let Some(data) = surface.data::<Surface>() {
-            data.pending.lock().expect("surface lock").unconfigured = Some(role);
+            let mut pending = data.pending.lock().expect("surface lock");
+            pending.window = matches!(role, Role::Toplevel(..));
+            pending.unconfigured = Some(role);
         }
     }
 }
 
 /// A popup keeps its `xdg_surface` to answer repositioning requests.
 impl Dispatch<XdgPopup, XdgSurface> for State {
+    fn destroyed(state: &mut Self, _: ClientId, _: &XdgPopup, xdg: &XdgSurface) {
+        if let Some(surface) = xdg.data::<XdgData>() {
+            state.keyboard.release(surface);
+        }
+    }
+
     fn request(
         state: &mut Self,
         _: &Client,
@@ -285,7 +338,11 @@ impl Dispatch<XdgPopup, XdgSurface> for State {
         _: &DisplayHandle,
         _: &mut DataInit<'_, Self>,
     ) {
-        if let xdg_popup::Request::Reposition { positioner, token } = request {
+        if let xdg_popup::Request::Grab { .. } = request {
+            if let Some(surface) = xdg.data::<XdgData>() {
+                state.keyboard.grab(surface);
+            }
+        } else if let xdg_popup::Request::Reposition { positioner, token } = request {
             let place = positioner.data::<Positioner>().map(Positioner::placement).unwrap_or_default();
             popup.repositioned(token);
             popup.configure(place.x, place.y, place.width, place.height);
@@ -409,7 +466,7 @@ impl Dispatch<WlShmPool, ()> for State {
 
 impl Dispatch<WlSeat, ()> for State {
     fn request(
-        _: &mut Self,
+        state: &mut Self,
         _: &Client,
         _: &WlSeat,
         request: wl_seat::Request,
@@ -422,7 +479,8 @@ impl Dispatch<WlSeat, ()> for State {
                 data_init.init(id, ());
             }
             wl_seat::Request::GetKeyboard { id } => {
-                data_init.init(id, ());
+                let device = data_init.init(id, ());
+                state.keyboard.add_device(device);
             }
             wl_seat::Request::GetTouch { id } => {
                 data_init.init(id, ());
@@ -508,7 +566,7 @@ impl GlobalDispatch<WlShm, ()> for State {
 impl GlobalDispatch<WlSeat, ()> for State {
     fn bind(_: &mut Self, _: &DisplayHandle, _: &Client, resource: New<WlSeat>, _: &(), data_init: &mut DataInit<'_, Self>) {
         let seat = data_init.init(resource, ());
-        seat.capabilities(wl_seat::Capability::empty());
+        seat.capabilities(wl_seat::Capability::Keyboard);
         if seat.version() >= 2 {
             seat.name("headless".to_owned());
         }

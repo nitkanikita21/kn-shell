@@ -3,7 +3,8 @@
 //! - `headless-compositor [<socket-name>]` serves until killed; start clients with that
 //!   `WAYLAND_DISPLAY`.
 //! - `headless-compositor [<socket-name>] -- <command> [<args>…]` runs the command as a client of a
-//!   private display and exits with the command's status.
+//!   private display and exits with the command's status. `HEADLESS_COMPOSITOR_KEYS` names the
+//!   control socket through which it can press keys.
 //!
 //! Without `XDG_RUNTIME_DIR` (a CI container, a bare shell) a private one is made and removed again.
 
@@ -76,6 +77,7 @@ fn serve(name: &str, command: Option<Vec<OsString>>) -> ExitCode {
         .args(&command[1..])
         .env("WAYLAND_DISPLAY", compositor.socket_name())
         .env("GDK_BACKEND", "wayland")
+        .env("HEADLESS_COMPOSITOR_KEYS", compositor.keys_socket())
         // The client must not reach the desktop the caller may be sitting in.
         .env_remove("DISPLAY")
         .env_remove("HYPRLAND_INSTANCE_SIGNATURE")
