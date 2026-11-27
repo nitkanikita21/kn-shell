@@ -4,11 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
-import dev.knshell.app.theme.DesignTokens
-import dev.knshell.app.theme.ThemeMode
+import dev.knshell.uikit.theme.DesignTokens
+import dev.knshell.uikit.theme.ThemeMode
 import dev.knshell.app.theme.ThemeService
-import dev.knshell.app.theme.ThemeTuning
-import dev.knshell.app.theme.WallpaperPalette
+import dev.knshell.uikit.theme.ThemeTuning
+import dev.knshell.uikit.theme.WallpaperPalette
 
 @Composable
 fun collectTheme(): State<DesignTokens> {

@@ -5,12 +5,12 @@ The split is the shadcn one: **something reads the picture, something decides th
 - `palette-core` (Rust) answers *what colour is the wallpaper*: dominant clusters (each with
   lightness, chroma, hue and its share of the image), a suggested hue, a suggested chroma, a
   suggested mode. It knows nothing about the UI.
-- `shell-app/.../theme/WallpaperPalette.kt` (Kotlin) is that reply as a design input: one hue,
+- `demo/shell-ui-kit/.../theme/WallpaperPalette.kt` (Kotlin) is that reply as a design input: one hue,
   how saturated *that hue family* gets, an optional second family, and how bright the wallpaper
   is overall.
-- `shell-app/.../theme/ThemeScale.kt` (Kotlin) owns *how the UI looks*: the full semantic token
+- `demo/shell-ui-kit/.../theme/ThemeScale.kt` (Kotlin) owns *how the UI looks*: the full semantic token
   set, derived from the palette plus the user's dark/light choice.
-- `shell-app/.../theme/ThemeTuning.kt` (Kotlin) owns *how loud* the result is.
+- `demo/shell-ui-kit/.../theme/ThemeTuning.kt` (Kotlin) owns *how loud* the result is.
 
 Nothing about the UI can be changed in Rust, and nothing about the wallpaper is re-derived in
 Kotlin.
@@ -34,6 +34,12 @@ would be on the web:
 | `border` | hairlines between surfaces |
 | `input` | form-control outlines (slightly stronger than `border`) |
 | `ring` | focus ring |
+| `success` / `successForeground` | something worked |
+| `warning` / `warningForeground` | needs attention |
+| `info` / `infoForeground` | neutral information |
+| `primaryText`, `errorText`, `successText`, `warningText`, `infoText` | the family as text on the window or a faint tint of itself |
+
+Text pairs stay at 4.5:1 for every wallpaper (`ThemeContrastTest` in `demo/shell-ui-kit`).
 
 `chart-*` and `sidebar-*` are deliberately absent: the shell has neither charts nor a sidebar,
 and an unused token is a token nobody keeps correct.

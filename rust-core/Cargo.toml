@@ -34,7 +34,7 @@ demo-extensions = []
 
 # Dev loop: the debug staticlib is linked into the Kotlin/Native executable and
 # then re-linked every time any Kotlin file changes. A 138 MB DWARF-laden archive
-# makes the final link slow and bloats shell-app/build, so for debug we drop
+# makes the final link slow and bloats demo/shell-app/build, so for debug we drop
 # debug info, parallelise codegen and skip the inline table. Release keeps full
 # debug info + thin LTO (only used by `./scripts/run.sh`).
 [profile.dev]

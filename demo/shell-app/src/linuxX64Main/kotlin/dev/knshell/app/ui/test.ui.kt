@@ -5,11 +5,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import dev.knshell.app.theme.ThemeMode
+import dev.knshell.uikit.theme.ThemeMode
 import dev.knshell.app.theme.ThemeService
-import dev.knshell.app.theme.ThemeTokens
-import dev.knshell.app.theme.ThemeTuning
-import dev.knshell.app.theme.WallpaperPalette
+import dev.knshell.uikit.theme.ThemeTokens
+import dev.knshell.uikit.theme.ThemeTuning
+import dev.knshell.uikit.theme.WallpaperPalette
 import dev.knshell.app.ui.helpers.collectPalette
 import dev.knshell.app.ui.helpers.collectTheme
 import dev.knshell.app.ui.helpers.collectThemeMode

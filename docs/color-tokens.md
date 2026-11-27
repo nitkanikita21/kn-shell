@@ -1,17 +1,18 @@
 # Пам'ятка: кольорові токени
 
 Коротка шпаргалка «який токен брати під яку задачу». Канонічний опис —
-[`docs/theme.md`](theme.md), код — `shell-app/src/linuxX64Main/kotlin/dev/knshell/app/theme/`.
+[`docs/theme.md`](theme.md), код — `demo/shell-ui-kit/src/commonMain/kotlin/dev/knshell/uikit/theme/` (токени й виведення
+кольорів; сервіс і джерела шпалер — у `demo/shell-app`).
 
 ## Хто що володіє
 
 | Шар | Файл | Відповідає за |
 | --- | --- | --- |
 | Rust `palette-core` | `palette-core/src/lib.rs` | читає шпалери → кластери (L/C/h/вага) + `suggested_hue`, `suggested_chroma`, `suggested_mode` |
-| Kotlin `WallpaperPalette` | `shell-app/.../theme/WallpaperPalette.kt` | дизайн-вхід: `hue`, `familyChroma` (макс. у родині), `secondHue`, `dominantLightness` |
-| Kotlin `ThemeScale` | `shell-app/.../theme/ThemeScale.kt` | палітра + режим + `ThemeTuning` → 19 семантичних токенів |
-| Kotlin `ThemeTuning` | `shell-app/.../theme/ThemeTuning.kt` | наскільки явний тон: `tint`/`accent`/`lift`/caps/`secondHue` + пресети |
-| `ThemeService` | `shell-app/.../theme/ThemeService.kt` | `tokens`, `palette`, `mode`, `tuning` як `StateFlow`; `setMode()`, `setTuning()`, `reloadTheme()` |
+| Kotlin `WallpaperPalette` | `demo/shell-ui-kit/.../theme/WallpaperPalette.kt` | дизайн-вхід: `hue`, `familyChroma` (макс. у родині), `secondHue`, `dominantLightness` |
+| Kotlin `ThemeScale` | `demo/shell-ui-kit/.../theme/ThemeScale.kt` | палітра + режим + `ThemeTuning` → 30 семантичних токенів |
+| Kotlin `ThemeTuning` | `demo/shell-ui-kit/.../theme/ThemeTuning.kt` | наскільки явний тон: `tint`/`accent`/`lift`/caps/`secondHue` + пресети |
+| `ThemeService` | `demo/shell-app/.../theme/ThemeService.kt` | `tokens`, `palette`, `mode`, `tuning` як `StateFlow`; `setMode()`, `setTuning()`, `reloadTheme()` |
 | UI | будь-де | **тільки** читає токени, ніколи не рахує колір сам |
 
 Правило: якщо в UI з'являється `Color.oklch(...)`, `Color.hex(0x…)` або `Catppuccin.*` — це баг
@@ -41,7 +42,7 @@ val tuning by collectThemeTuning()   // State<ThemeTuning> — поточний 
 - Тонування: `ThemeTuning.presets` = `off`/`subtle`/`balanced`/`vivid`;
   `ThemeTuning.preset("vivid")` для конфіга/CLI. `tint = 0` дає чисто нейтральний UI.
 
-## 19 токенів
+## 30 токенів
 
 Пара `X` / `XForeground` — завжди разом: `foreground` — це колір, читабельний **на** `X`.
 
@@ -66,11 +67,19 @@ val tuning by collectThemeTuning()   // State<ThemeTuning> — поточний 
 | `border` | хайрлайн між поверхнями | `test.ui.kt:100` `borderColor = c.border`, `test.ui.kt:309` розділювач |
 | `input` | обведення полів вводу, трохи сильніше за `border` | — |
 | `ring` | focus ring | — |
+| `success` / `successForeground` | вдалося: заливка і текст на ній | — |
+| `warning` / `warningForeground` | потребує уваги | — |
+| `info` / `infoForeground` | нейтральна інформація | — |
+| `primaryText`, `errorText`, `successText`, `warningText`, `infoText` | той самий колір як **текст** на фоні чи на легкому тоні (варіанти outline, soft, ghost, link) | — |
+
+Кожна пара з текстом і кожен `*Text` тримають контраст щонайменше 4.5:1 за будь-яких шпалер;
+це перевіряє `ThemeContrastTest` у `demo/shell-ui-kit`. Через це в темній темі
+`destructiveForeground` темний (дорівнює `background`).
 
 «—» = токен є, але в UI ще не використовується. Це не привід плодити новий токен під свою
 задачу: спершу перевір, чи підходить наявний.
 
-`ThemeTokens.entries()` віддає всі 19 у shadcn-порядку — їм ітеруються свотчі у демо, тож новий
+`ThemeTokens.entries()` віддає всі 30, спершу набір shadcn — їм ітеруються свотчі у демо, тож новий
 токен неможливо додати й забути в демо.
 
 ## Пастки

@@ -21,7 +21,7 @@ shell-app     compilation linuxX64Atlas: stories и точка входа       
 - **`atlas:core`** (`atlas/core/`) — `group`/`story`/`variants`, типы args (`Arg`), `LiveArgs`,
   `CellArgs`, `AtlasHostService`, `resolveStory`, `parseStorySpec`, `atlasMain`, UI каталога
   (`runner/ui`). Пакет `dev.knshell.atlas`.
-- **Stories** живут в `shell-app`, в compilation `linuxX64Atlas` (`shell-app/src/linuxX64Atlas/kotlin/atlas/`).
+- **Stories** живут в `shell-app`, в compilation `linuxX64Atlas` (`demo/shell-app/src/linuxX64Atlas/kotlin/atlas/`).
   Compilation и таски добавляет плагин `dev.knshell.atlas`. Она зависит от `:atlas:core`, поэтому обычный `main` (шелл) stories не содержит.
   Точка входа — `fun main(args: Array<String>)` в `atlas/main.kt`, она вызывает `atlasMain(...)`.
 - Runner — не отдельный модуль и не Rust-процесс: Atlas — обычный Kotlin/Native executable
@@ -169,20 +169,20 @@ val buttonStories = group("Button") {
 ## Запуск
 
 ```bash
-./gradlew :shell-app:runAtlas
+./gradlew :demo:shell-app:runAtlas
 ```
 
 Выбрать story при старте:
 
 ```bash
 # через Gradle
-./gradlew :shell-app:runAtlas -Pstory="Button/Primary"
+./gradlew :demo:shell-app:runAtlas -Pstory="Button/Primary"
 # или то же через переменную окружения
-KN_ATLAS_STORY="Button/Primary" ./gradlew :shell-app:runAtlas
+KN_ATLAS_STORY="Button/Primary" ./gradlew :demo:shell-app:runAtlas
 # бинарник
-shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "Button/Size X State"
+demo/shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "Button/Size X State"
 # или переменная окружения
-KN_ATLAS_STORY="Button/Primary" shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
+KN_ATLAS_STORY="Button/Primary" demo/shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
 ```
 
 - `--story Group/Entry` или `--story=Group/Entry` имеет приоритет над `KN_ATLAS_STORY`.

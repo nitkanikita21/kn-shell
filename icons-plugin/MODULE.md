@@ -33,7 +33,7 @@ shell's sources are not a Gradle dependency of the pack (that would be a cycle).
 
 | Rule | Detail |
 | --- | --- |
-| Roots | `iconScanRoots` (default `framework/src`, `shell-app/src`, `icons-packs`), base `scanBaseDir` (repo root) |
+| Roots | `iconScanRoots` (default `framework/src`, `demo/shell-app/src`, `icons-packs`), base `scanBaseDir` (repo root) |
 | Matches | `Object.<Name>` properties and `Object.of("<literal>")` in `*.kt`; `*.svg` not scanned |
 | Inputs | the roots are real `@InputFiles`, so a new `Icon(Lucide.Star)` re-runs codegen |
 | Unknown names | reported as `[icons] <Pack>: N unknown icon reference(s), ignored: …`, build continues |

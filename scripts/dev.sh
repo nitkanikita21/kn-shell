@@ -8,7 +8,7 @@
 #   KN_SHELL_MODE=panel scripts/dev.sh --watch
 #
 # The shell runs in its own process group with its stdout/stderr in
-# shell-app/build/dev.log, which is also streamed to the terminal by default (--no-logs
+# demo/shell-app/build/dev.log, which is also streamed to the terminal by default (--no-logs
 # silences it). The log stays the source of truth because every restart truncates it and
 # --watch keeps exactly one `tail` alive, so Ctrl+C stops the app, the watcher and the
 # follower without leaving orphans.
@@ -20,10 +20,10 @@ if [[ -f .tools/env.sh ]]; then
     source .tools/env.sh
 fi
 
-BIN=shell-app/build/bin/linuxX64/debugExecutable/shell-app.kexe
-LOG=shell-app/build/dev.log
-MARK=shell-app/build/.dev-mark
-mkdir -p shell-app/build
+BIN=demo/shell-app/build/bin/linuxX64/debugExecutable/shell-app.kexe
+LOG=demo/shell-app/build/dev.log
+MARK=demo/shell-app/build/.dev-mark
+mkdir -p demo/shell-app/build
 
 # The Kotlin/Native compiler writes its temporary files into $TMPDIR, and on this machine
 # /tmp is a small tmpfs: when it fills up the build dies with "Disk quota exceeded" from
@@ -107,10 +107,10 @@ build() {
     # Cargo is incremental and Gradle already declares rust-core's `src/` + Cargo.{toml,lock}
     # as inputs (see rust-core/build.gradle.kts), so an edited .rs file invalidates the
     # cargo staticlib and the cinterop/link tasks correctly — no manual clean needed.
-    # The old `rm -rf rust-core/build shell-app/build` wiped the Kotlin/Native
+    # The old `rm -rf rust-core/build demo/shell-app/build` wiped the Kotlin/Native
     # incremental cache on *every* Rust change, forcing a full recompile of the Kotlin
     # modules and turning the dev loop into a ~minutes-long rebuild. We no longer do that.
-    ./gradlew :shell-app:linkDebugExecutableLinuxX64 --console=plain
+    ./gradlew :demo:shell-app:linkDebugExecutableLinuxX64 --console=plain
 }
 
 # Mark BEFORE the build: a file saved while the compiler runs must stay newer than the
@@ -129,7 +129,7 @@ if [[ $WATCH -eq 0 ]]; then
     exit "$RC"
 fi
 
-echo "[dev] watching framework/src, shell-app/src, rust-core/src, palette-core/src (Ctrl+C to stop)"
+echo "[dev] watching framework/src, demo/shell-app/src, demo/shell-ui-kit/src, rust-core/src, palette-core/src (Ctrl+C to stop)"
 while true; do
     sleep 1
     CHANGED=0
@@ -140,7 +140,7 @@ while true; do
     # the first match gives `find` a SIGPIPE, and a `find` error (a missing source dir, as
     # when a module has not been created yet) makes the whole pipeline non-zero — so the
     # watcher silently ignored every edit. `-print -quit` also stops at the first match.
-    if [[ -n "$(find framework/src shell-app/src rust-core/src palette-core/src \
+    if [[ -n "$(find framework/src demo/shell-app/src demo/shell-ui-kit/src rust-core/src palette-core/src \
         \( -name '*.kt' -o -name '*.rs' -o -name '*.c' -o -name '*.h' \) \
         -newer "$MARK" -print -quit 2>/dev/null)" ]]; then
         CHANGED=1

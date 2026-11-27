@@ -24,7 +24,7 @@ import org.gradle.api.tasks.TaskAction
  *   usage scan actually found (tree-shaken: unused icons cost nothing).
  *
  * The scan works on raw file globs, never on project dependencies, so a consumer
- * (:shell-app) can be scanned without depending back on the pack module.
+ * (:demo:shell-app) can be scanned without depending back on the pack module.
  */
 abstract class GenerateIconsTask : DefaultTask() {
 

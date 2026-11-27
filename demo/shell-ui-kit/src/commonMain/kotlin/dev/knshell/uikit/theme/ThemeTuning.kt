@@ -1,4 +1,4 @@
-package dev.knshell.app.theme
+package dev.knshell.uikit.theme
 
 /**
  * How strongly the wallpaper is allowed to colour the UI.

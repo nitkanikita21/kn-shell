@@ -126,7 +126,7 @@ cargo bench                # criterion micro-benchmarks
 Inside this repository `palette-core` is also a first-class Gradle module
 (`:palette-core`), built exactly like `:rust-core` — Gobley's `cargo` plugin drives
 `cargo build`, with the repository-local rustup toolchain and the same cargoBuild
-input-wiring so edits are never silently stale. `:shell-app` binds the hand-written
+input-wiring so edits are never silently stale. `:demo:shell-app` binds the hand-written
 `palette_core.h` via a Kotlin/Native `cinterop` (package `dev.knshell.palette`) and
 links the produced `libpalette_core.a` into the executable; the link task depends on
 `:palette-core`'s `cargoBuild`. This keeps both Rust crates structurally consistent:

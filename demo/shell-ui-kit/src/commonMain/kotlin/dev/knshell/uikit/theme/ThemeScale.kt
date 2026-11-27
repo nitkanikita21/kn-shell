@@ -1,4 +1,4 @@
-package dev.knshell.app.theme
+package dev.knshell.uikit.theme
 
 import dev.knshell.compose.Color
 import kotlin.math.abs
@@ -73,6 +73,20 @@ object ThemeScale {
     /** Hard limit on that nudge: whatever the wallpaper, `destructive` must still read as red. */
     private const val DESTRUCTIVE_MAX_SHIFT = 12f
 
+    /** Lightness of the `*Text` tokens: 4.5:1 on the window and on a faint tint, for every hue. */
+    private const val TEXT_LIGHTNESS_DARK = 0.75f
+    private const val TEXT_LIGHTNESS_LIGHT = 0.43f
+
+    /** A status colour before the wallpaper nudges its hue; [DESTRUCTIVE_PULL] applies to it too. */
+    private class Status(val lightness: Float, val chroma: Float, val hue: Float)
+
+    private val SUCCESS_DARK = Status(0.72f, 0.15f, 150f)
+    private val WARNING_DARK = Status(0.80f, 0.14f, 80f)
+    private val INFO_DARK = Status(0.72f, 0.12f, 245f)
+    private val SUCCESS_LIGHT = Status(0.52f, 0.14f, 150f)
+    private val WARNING_LIGHT = Status(0.75f, 0.15f, 75f)
+    private val INFO_LIGHT = Status(0.54f, 0.15f, 250f)
+
     fun dark(palette: WallpaperPalette, tuning: ThemeTuning = ThemeTuning.Balanced): ThemeTokens {
         val tint = Tints(palette, tuning)
         val pull = tint.lightnessPull
@@ -83,6 +97,9 @@ object ThemeScale {
         // `background` on any tinted wallpaper.
         val card = tint.color(0.225f + lift * 0.9f + pull * 0.7f, tint.neutral)
         val foreground = tint.color(0.985f, 0.004f + tint.neutral * 0.3f, second = true)
+        val success = tint.status(SUCCESS_DARK)
+        val warning = tint.status(WARNING_DARK)
+        val info = tint.status(INFO_DARK)
         return ThemeTokens(
             background = background,
             foreground = foreground,
@@ -101,12 +118,24 @@ object ThemeScale {
             accentForeground = foreground,
             // Warm wallpapers pull the error colour a few degrees; the chroma floor keeps it red.
             destructive = tint.color(0.680f, minOf(maxOf(tint.chroma * 1.5f, 0.15f), 0.21f), hue = tint.destructiveHue),
-            destructiveForeground = foreground,
+            // Dark text: light text on this red is 2.9:1.
+            destructiveForeground = background,
             // Translucent hairlines: the wallpaper shows through the shell's edges. Tinted, so the
             // edge belongs to the same colour family instead of being a grey line.
             border = tint.color(0.62f, tint.neutral * 1.4f, alpha = 0.22f),
             input = tint.color(0.68f, tint.neutral * 1.6f, alpha = 0.28f),
             ring = tint.color(0.556f, minOf(tint.tint * RING_GAIN, RING_MAX_CHROMA), second = true),
+            success = success,
+            successForeground = tint.textOn(success, SUCCESS_DARK),
+            warning = warning,
+            warningForeground = tint.textOn(warning, WARNING_DARK),
+            info = info,
+            infoForeground = tint.textOn(info, INFO_DARK),
+            primaryText = tint.color(TEXT_LIGHTNESS_DARK, tint.brand),
+            errorText = tint.color(TEXT_LIGHTNESS_DARK, tint.errorChroma, hue = tint.destructiveHue),
+            successText = tint.status(SUCCESS_DARK, TEXT_LIGHTNESS_DARK),
+            warningText = tint.status(WARNING_DARK, TEXT_LIGHTNESS_DARK),
+            infoText = tint.status(INFO_DARK, TEXT_LIGHTNESS_DARK),
             isDark = true,
         )
     }
@@ -123,6 +152,9 @@ object ThemeScale {
         val background = tint.color(0.935f - lift * 0.6f + pull * 0.12f, tint.neutral * 0.80f)
         val card = tint.color(0.998f - lift * 0.25f, tint.neutral * 0.45f)
         val foreground = tint.color(0.205f + pull * 0.3f, maxOf(tint.neutral * 0.5f, 0.004f))
+        val success = tint.status(SUCCESS_LIGHT)
+        val warning = tint.status(WARNING_LIGHT)
+        val info = tint.status(INFO_LIGHT)
         return ThemeTokens(
             background = background,
             foreground = foreground,
@@ -130,8 +162,8 @@ object ThemeScale {
             cardForeground = foreground,
             popover = card,
             popoverForeground = foreground,
-            // Darker than the dark theme's brand: on white, lightness 0.55 is what stays legible.
-            primary = tint.color(0.55f, tint.brand),
+            // Darker than the dark theme's brand: above 0.48 the text on it drops under 4.5:1.
+            primary = tint.color(0.48f, tint.brand),
             primaryForeground = background,
             secondary = tint.color(0.905f - lift * 0.9f + pull * 0.15f, maxOf(tint.second * 1.05f, 0.006f), second = true),
             secondaryForeground = foreground,
@@ -139,11 +171,22 @@ object ThemeScale {
             mutedForeground = tint.color(0.50f, minOf(tint.tint, MUTED_FOREGROUND_MAX_CHROMA), second = true),
             accent = tint.color(0.865f - lift * 0.5f, tint.tint * 0.95f),
             accentForeground = foreground,
-            destructive = tint.color(0.577f, minOf(maxOf(tint.chroma * 1.6f, 0.17f), 0.245f), hue = tint.destructiveHue),
+            destructive = tint.color(0.56f, minOf(maxOf(tint.chroma * 1.6f, 0.17f), 0.245f), hue = tint.destructiveHue),
             destructiveForeground = tint.color(0.985f, 0.004f),
             border = tint.color(0.84f, maxOf(tint.neutral, 0.006f)),
             input = tint.color(0.84f, maxOf(tint.neutral, 0.006f)),
             ring = tint.color(0.55f, minOf(tint.tint * RING_GAIN, RING_MAX_CHROMA), second = true),
+            success = success,
+            successForeground = tint.textOn(success, SUCCESS_LIGHT),
+            warning = warning,
+            warningForeground = tint.textOn(warning, WARNING_LIGHT),
+            info = info,
+            infoForeground = tint.textOn(info, INFO_LIGHT),
+            primaryText = tint.color(TEXT_LIGHTNESS_LIGHT, tint.brand),
+            errorText = tint.color(TEXT_LIGHTNESS_LIGHT, tint.errorChroma, hue = tint.destructiveHue),
+            successText = tint.status(SUCCESS_LIGHT, TEXT_LIGHTNESS_LIGHT),
+            warningText = tint.status(WARNING_LIGHT, TEXT_LIGHTNESS_LIGHT),
+            infoText = tint.status(INFO_LIGHT, TEXT_LIGHTNESS_LIGHT),
             isDark = false,
         )
     }
@@ -192,11 +235,31 @@ object ThemeScale {
             PRIMARY_MAX_CHROMA,
         )
 
-        val destructiveHue: Float = run {
-            val delta = signedHueDelta(palette.hue, DESTRUCTIVE_HUE)
-            // Only a warm wallpaper nudges the error colour; a cold one must not drag red to teal.
+        val destructiveHue: Float = nudged(DESTRUCTIVE_HUE)
+
+        /** Chroma of error text. */
+        val errorChroma: Float = minOf(maxOf(palette.chroma * 1.6f, 0.17f), 0.21f)
+
+        /**
+         * A semantic hue shifted by at most [DESTRUCTIVE_MAX_SHIFT] degrees when the wallpaper's hue
+         * is within 90° of it; a distant wallpaper leaves it alone, so that red stays red and green
+         * stays green. The shift is [DESTRUCTIVE_PULL] of the way from the wallpaper's hue to the base,
+         * continued past the base.
+         */
+        private fun nudged(base: Float): Float {
+            val delta = signedHueDelta(hue, base)
             val pull = if (abs(delta) > 90f) 0f else DESTRUCTIVE_PULL * delta
-            normalizeHue(DESTRUCTIVE_HUE + pull.coerceIn(-DESTRUCTIVE_MAX_SHIFT, DESTRUCTIVE_MAX_SHIFT))
+            return normalizeHue(base + pull.coerceIn(-DESTRUCTIVE_MAX_SHIFT, DESTRUCTIVE_MAX_SHIFT))
+        }
+
+        fun status(status: Status, lightness: Float = status.lightness): Color =
+            color(lightness, status.chroma, hue = nudged(status.hue))
+
+        /** Light or dark text, whichever reads better on [fill]. */
+        fun textOn(fill: Color, status: Status): Color {
+            val light = color(0.985f, 0.004f)
+            val ink = color(0.18f, 0.02f, hue = nudged(status.hue))
+            return if (contrastRatio(light, fill) > contrastRatio(ink, fill)) light else ink
         }
 
         /** The wallpaper's mean chroma — how red the error colour is allowed to be. */

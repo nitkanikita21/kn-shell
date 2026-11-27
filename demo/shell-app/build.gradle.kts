@@ -42,6 +42,7 @@ kotlin {
         nativeMain {
             dependencies {
                 implementation(project(":framework"))
+                implementation(project(":demo:shell-ui-kit"))
                 implementation(project(":icons-packs:lucide"))
                 implementation(project(":rust-core"))
                 implementation(libs.kotlinx.datetime)

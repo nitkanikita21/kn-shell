@@ -1,6 +1,6 @@
 # Framework API contract
 
-`framework/` is the reusable library; `shell-app/` is one shell built on it. A third-party
+`framework/` is the reusable library; `demo/shell-app/` is one shell built on it. A third-party
 shell only needs `:framework` (and gets `:rust-core` transitively).
 
 ## Modules
@@ -219,7 +219,7 @@ change would otherwise catch it half way. Compose-driven animations are not affe
 
 ```bash
 ./gradlew :framework:linuxX64Test   # native smoke tests (spectrum, animation, formatting)
-./gradlew :shell-app:run            # build + launch the example shell
+./gradlew :demo:shell-app:run            # build + launch the example shell
 ```
 
 KDoc in the source is the reference for every symbol; this page only fixes the contract.

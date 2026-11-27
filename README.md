@@ -11,13 +11,13 @@ A minimal Wayland desktop shell where:
 The shell runs on the author's Hyprland 0.56 / Wayland session and was verified phase by phase
 (see [Verification log](#verification-log)).
 
-> **Важливо: `shell-app/` — це ПРИКЛАД використання фреймворку, а не частина самого фреймворку.**
-> Усе, що лежить у `shell-app/` (бар, острови, модулі, `PlayerChip`, `CavaEqualizer`, `Palette`,
-> тема й палітра шпалер, а також каталог story `shell-app/src/linuxX64Atlas/`), призначене лише для
-> демонстрації. Цей код не є API фреймворку: його не можна вважати стабільним, його не слід
-> імпортувати з інших модулів і на нього не можна спиратися як на залежність. Згодом `shell-app/`
-> буде винесено в окремий проєкт, тож усі залежності від `framework/` мають іти в один бік
-> (`shell-app` → `framework`), а не навпаки.
+> **Важливо: усе в `demo/` — це ПРИКЛАД використання фреймворку, а не частина самого фреймворку.**
+> `demo/shell-app/` (бар, острови, модулі, сервіс теми й палітра шпалер, story-каталог
+> `demo/shell-app/src/linuxX64Atlas/`) і `demo/shell-ui-kit/` (дизайн-система та UI-кіт цього
+> прикладу) не є API фреймворку: його не можна вважати стабільним, його не слід імпортувати з інших
+> модулів фреймворку і на нього не можна спиратися як на залежність. Згодом `demo/` буде винесено в
+> окремий проєкт, тож залежності йдуть тільки в один бік:
+> `demo/shell-app` → `demo/shell-ui-kit` → `framework`.
 
 ---
 
@@ -62,7 +62,8 @@ The shell runs on the author's Hyprland 0.56 / Wayland session and was verified 
 | `headless-compositor/` | Wayland compositor without a screen (Rust): the private display of `atlas-mcp`, also usable for GTK tests |
 | `atlas/` | component catalog for `framework/`: `core`, Gradle `plugin`, and the `mcp` daemon (Rust) |
 | `framework/` | GTK4 C interop, `GtkApplier`, Compose DSL, Modifier/animation, shell runtime (`Shell.run`, layer-shell), reactive `Services`, UI primitives (`ui/primitives`) — the reusable library, no bar |
-| `shell-app/` | **приклад використання `framework/`** (не частина фреймворку, буде винесено в окремий проєкт): thin entrypoint (`main()` → `startKnShell()`), приклад бару, тема/палітра, story-каталог атласу |
+| `demo/shell-app/` | **приклад використання `framework/`** (не частина фреймворку, буде винесено в окремий проєкт): thin entrypoint, приклад бару, сервіс теми й палітра шпалер, story-каталог атласу |
+| `demo/shell-ui-kit/` | UI-кіт прикладу: дизайн-система (`theme/`: токени, `ThemeScale`, тонування) і компоненти на `framework/` |
 
 ---
 
@@ -118,7 +119,7 @@ so a plain `./gradlew run` works without any manual setup (this also pins JDK 21
 KN_SHELL_MODE=panel ./scripts/dev.sh --watch
 
 # release build — whole-program LTO, slower to link but optimized
-./scripts/run.sh                 # builds only :shell-app:linkReleaseExecutableLinuxX64
+./scripts/run.sh                 # builds only :demo:shell-app:linkReleaseExecutableLinuxX64
 ./gradlew run                    # same, but runs the binary under the Gradle daemon
 
 # everything at once (slow: debug + release + tests)
@@ -126,7 +127,7 @@ KN_SHELL_MODE=panel ./scripts/dev.sh --watch
 ```
 
 `scripts/dev.sh` runs the shell in its own process group with output in
-`shell-app/build/dev.log`, mirrored to the terminal by a single `tail -F` (default;
+`demo/shell-app/build/dev.log`, mirrored to the terminal by a single `tail -F` (default;
 `--no-logs` keeps the file only), so Ctrl+C stops both the watcher and the app — no
 orphaned process, and `--watch` restarts never stack up duplicate followers. It also notices Rust source
 changes and cleans the native build dirs before rebuilding: incremental links were observed to reuse a stale Rust static library, silently
@@ -326,7 +327,7 @@ waybar to see the bar at the very top edge.
    `rust-core/shell-contract`-style output (`rust-core/build/generated/uniffi/...`, package
    `dev.knshell.core`); the Kotlin API is consumed via `project(":rust-core")`. A separate hop would
    require manually re-exporting generated code.
-5. **Kotlin/Native links with `--allow-shlib-undefined`** (see `shell-app/build.gradle.kts`):
+5. **Kotlin/Native links with `--allow-shlib-undefined`** (see `demo/shell-app/build.gradle.kts`):
    the bundled sysroot is older than the host glibc that GTK 4.22 needs; symbols resolve against the
    system glibc at runtime.
 
@@ -394,7 +395,8 @@ committed.
 │       └── services/             # Services: windows/media/audio/workspaces/system
 ├── icons/core/                   # IconRef/IconPack/Icon + librsvg (map: icons/core/MODULE.md)
 ├── icons-plugin/                 # included build: syncIcons + generateIcons (map: icons-plugin/MODULE.md)
-├── shell-app/                    # ПРИКЛАД використання framework (буде винесено в окремий проєкт)
+├── demo/shell-ui-kit/            # ПРИКЛАД: дизайн-система та UI-кіт
+├── demo/shell-app/               # ПРИКЛАД використання framework (буде винесено в окремий проєкт)
 │   └── src/nativeMain/kotlin/dev/knshell/
 │       ├── KnShell.kt           # modes: panel (layer-shell) / windowed
 │       └── ui/

@@ -21,7 +21,7 @@ shell-app     compilation linuxX64Atlas: stories і точка входу       
 - **`atlas:core`** (`atlas/core/`) — `group`/`story`/`variants`, типи args (`Arg`), `LiveArgs`,
   `CellArgs`, `AtlasHostService`, `resolveStory`, `parseStorySpec`, `atlasMain`, UI каталогу
   (`runner/ui`). Пакет `dev.knshell.atlas`.
-- **Stories** живуть у `shell-app`, у compilation `linuxX64Atlas` (`shell-app/src/linuxX64Atlas/kotlin/atlas/`).
+- **Stories** живуть у `shell-app`, у compilation `linuxX64Atlas` (`demo/shell-app/src/linuxX64Atlas/kotlin/atlas/`).
   Compilation і таски додає плагін `dev.knshell.atlas`. Вона залежить від `:atlas:core`, тож звичайний `main` (шелл) stories не містить.
   Точка входу — `fun main(args: Array<String>)` у `atlas/main.kt`, вона викликає `atlasMain(...)`.
 - Runner — не окремий модуль і не Rust-процес: Atlas — звичайний Kotlin/Native executable
@@ -177,20 +177,20 @@ golden. Правила, що явно називають нащадків (`labe
 ## Запуск
 
 ```bash
-./gradlew :shell-app:runAtlas
+./gradlew :demo:shell-app:runAtlas
 ```
 
 Обрати story при старті:
 
 ```bash
 # через Gradle
-./gradlew :shell-app:runAtlas -Pstory="Button/Primary"
+./gradlew :demo:shell-app:runAtlas -Pstory="Button/Primary"
 # або те саме через змінну середовища
-KN_ATLAS_STORY="Button/Primary" ./gradlew :shell-app:runAtlas
+KN_ATLAS_STORY="Button/Primary" ./gradlew :demo:shell-app:runAtlas
 # бінарник
-shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "Button/Size X State"
+demo/shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe --story "Button/Size X State"
 # або змінна середовища
-KN_ATLAS_STORY="Button/Primary" shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
+KN_ATLAS_STORY="Button/Primary" demo/shell-app/build/bin/linuxX64/atlasDebugExecutable/atlas.kexe
 ```
 
 - `--story Group/Entry` або `--story=Group/Entry` має пріоритет над `KN_ATLAS_STORY`.
@@ -229,8 +229,8 @@ KN_ATLAS_INSPECT=/run/user/1000/atlas.sock atlas.kexe
 (еталоном) піксель у піксель, без допуску.
 
 ```bash
-./gradlew :shell-app:atlasGoldenRecord      # зняти або оновити еталони
-./gradlew :shell-app:atlasGoldenCheck       # порівняти; вихід ≠ 0, якщо щось відрізняється
+./gradlew :demo:shell-app:atlasGoldenRecord      # зняти або оновити еталони
+./gradlew :demo:shell-app:atlasGoldenCheck       # порівняти; вихід ≠ 0, якщо щось відрізняється
 ```
 
 | Властивість | Дія |

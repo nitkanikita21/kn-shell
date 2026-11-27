@@ -1,7 +1,7 @@
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import dev.knshell.app.di.initKoin
-import dev.knshell.app.theme.ThemeMode
+import dev.knshell.uikit.theme.ThemeMode
 import dev.knshell.app.theme.ThemeService
 import dev.knshell.app.ui.bar.Workspaces
 import dev.knshell.app.ui.bar.Island

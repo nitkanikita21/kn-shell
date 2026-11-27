@@ -1,4 +1,4 @@
-package dev.knshell.app.theme
+package dev.knshell.uikit.theme
 
 import kotlin.math.abs
 import kotlin.math.max
@@ -108,7 +108,7 @@ data class WallpaperPalette(
  * Hue used when the wallpaper has no chromatic clusters (`palette-core` reports NAN) and for
  * [WallpaperPalette.Achromatic]: cool blue-grey is the least opinionated default.
  */
-internal const val NEUTRAL_HUE = 250f
+const val NEUTRAL_HUE = 250f
 
 /** Hue spread (`±`) that still counts as "the same family" as the dominant hue. */
 private const val FAMILY_HUE_DELTA = 30f

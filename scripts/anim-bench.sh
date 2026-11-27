@@ -322,7 +322,7 @@ trap 'EXIT_CODE=130; exit 130' INT TERM
 # Source gates (read-only greps; no app required)
 # ---------------------------------------------------------------------------
 FRAMEWORK_KT="framework/src/nativeMain/kotlin"
-APP_KT="shell-app/src/nativeMain/kotlin"
+APP_KT="demo/shell-app/src/linuxX64Main/kotlin"
 C_LAYOUT="rust-core/src/kn_box_layout.c"
 
 gate() {
@@ -420,8 +420,8 @@ resolve_binary() {
     fi
     local candidate
     for candidate in \
-        shell-app/build/bin/linuxX64/releaseExecutable/shell-app.kexe \
-        shell-app/build/bin/linuxX64/debugExecutable/shell-app.kexe; do
+        demo/shell-app/build/bin/linuxX64/releaseExecutable/shell-app.kexe \
+        demo/shell-app/build/bin/linuxX64/debugExecutable/shell-app.kexe; do
         if [[ -x "$candidate" ]]; then echo "$candidate"; return 0; fi
     done
     return 1

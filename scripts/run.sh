@@ -11,5 +11,5 @@ if [[ -f .tools/env.sh ]]; then
     source .tools/env.sh
 fi
 
-./gradlew :shell-app:linkReleaseExecutableLinuxX64 --console=plain
-exec shell-app/build/bin/linuxX64/releaseExecutable/shell-app.kexe "$@"
+./gradlew :demo:shell-app:linkReleaseExecutableLinuxX64 --console=plain
+exec demo/shell-app/build/bin/linuxX64/releaseExecutable/shell-app.kexe "$@"

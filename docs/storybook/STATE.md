@@ -8,7 +8,7 @@
 ```bash
 git checkout atlas && git pull
 
-./gradlew :shell-app:runAtlas                              # каталог у вікні
+./gradlew :demo:shell-app:runAtlas                              # каталог у вікні
 cargo install --path atlas/mcp                             # MCP-тулза → ~/.cargo/bin/atlas-mcp
 claude mcp add --scope user atlas -- atlas-mcp             # один раз на машину
 ```
@@ -30,7 +30,7 @@ JDK 21, `pkg-config`. `local.properties` не комітиться (машинн
 ./gradlew :framework:linuxX64Test :atlas:core:linuxX64Test :icons:core:linuxX64Test   # без дисплея
 ./gradlew :framework:linuxX64GraphicsTest :icons:core:linuxX64GraphicsTest            # GTK-тести
 ./gradlew :atlas:mcp:check :headless-compositor:check                                 # cargo test
-./gradlew :shell-app:atlasGoldenCheck                                                 # вигляд stories
+./gradlew :demo:shell-app:atlasGoldenCheck                                                 # вигляд stories
 ```
 
 GTK-тести йдуть у графічній сесії, якщо вона є, а без неї самі запускаються під `headless-compositor`.

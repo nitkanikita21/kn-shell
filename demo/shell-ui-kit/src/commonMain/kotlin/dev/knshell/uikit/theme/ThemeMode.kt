@@ -1,4 +1,4 @@
-package dev.knshell.app.theme
+package dev.knshell.uikit.theme
 
 /**
  * Who decides between the dark and the light scale.

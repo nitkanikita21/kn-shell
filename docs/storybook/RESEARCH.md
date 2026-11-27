@@ -65,7 +65,7 @@
 **Прийняті рішення (чинні, уточнюють пункти вище):**
 - Процес — in-process; out-of-process через Wayland-surface відкладено.
 - Модуль `atlas:core` (каталог `atlas/core`) (DSL, модель args, runner, UI) окремо від `framework`; `framework` не знає про Atlas.
-- Runner — compilation `linuxX64Atlas` у `shell-app` (`shell-app/src/linuxX64Atlas`), а не окремий модуль; executable `atlas` (debug) з точкою входу `atlas.main`.
+- Runner — compilation `linuxX64Atlas` у `shell-app` (`demo/shell-app/src/linuxX64Atlas`), а не окремий модуль; executable `atlas` (debug) з точкою входу `atlas.main`.
 
 ## 8. Headless-дисплей для MCP-демона (прийнято)
 

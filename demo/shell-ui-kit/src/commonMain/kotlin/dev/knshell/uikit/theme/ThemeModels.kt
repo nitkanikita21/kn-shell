@@ -1,6 +1,5 @@
-package dev.knshell.app.theme
+package dev.knshell.uikit.theme
 
-import dev.knshell.app.theme.ThemeScale
 import dev.knshell.compose.Color
 
 data class DesignTokens(
@@ -17,7 +16,7 @@ data class DesignTokens(
             colors = ThemeScale.fallback(isDark = true, tuning = tuning),
             radius = RadiusScale(),
             spacing = SpacingScale(),
-            typography = TypeScale(fontFamily = "sans"),
+            typography = TypeScale(),
             motion = MotionTokens(),
             icon = IconTokens(),
         )
@@ -35,7 +34,7 @@ data class DesignTokens(
                 colors = if (isDark) ThemeScale.dark(palette, tuning) else ThemeScale.light(palette, tuning),
                 radius = RadiusScale(),
                 spacing = SpacingScale(),
-                typography = TypeScale(fontFamily = "sans"),
+                typography = TypeScale(),
                 motion = MotionTokens(),
                 icon = IconTokens(),
             )
@@ -92,10 +91,29 @@ data class ThemeTokens(
     val input: Color,
     /** Focus ring. */
     val ring: Color,
+    /** Something worked. Fill, with [successForeground] on it. */
+    val success: Color,
+    val successForeground: Color,
+    /** Needs attention. */
+    val warning: Color,
+    val warningForeground: Color,
+    /** Neutral information. */
+    val info: Color,
+    val infoForeground: Color,
+    /**
+     * The `*Text` tokens are the same families as text on the window or on a faint tint of
+     * themselves (outline, soft, ghost and link variants), where the fill colour would not be
+     * legible.
+     */
+    val primaryText: Color,
+    val errorText: Color,
+    val successText: Color,
+    val warningText: Color,
+    val infoText: Color,
     val isDark: Boolean,
 ) {
     /**
-     * Every token in shadcn order. The demo swatches iterate this, so a new token cannot be
+     * Every token, shadcn's set first. The demo swatches iterate this, so a new token cannot be
      * added to the theme and silently left out of the specimen.
      */
     fun entries(): List<Pair<String, Color>> = listOf(
@@ -118,6 +136,17 @@ data class ThemeTokens(
         "border" to border,
         "input" to input,
         "ring" to ring,
+        "success" to success,
+        "successForeground" to successForeground,
+        "warning" to warning,
+        "warningForeground" to warningForeground,
+        "info" to info,
+        "infoForeground" to infoForeground,
+        "primaryText" to primaryText,
+        "errorText" to errorText,
+        "successText" to successText,
+        "warningText" to warningText,
+        "infoText" to infoText,
     )
 }
 
@@ -137,12 +166,17 @@ data class SpacingScale(
 )
 
 data class TypeScale(
-    val fontFamily: String
+    /** Family of running text. */
+    val fontFamily: String = "Adwaita Sans",
+    /** Family of code and key caps. */
+    val monoFamily: String = "JetBrainsMono Nerd Font",
 )
 
 data class MotionTokens(
     val hoverMs: Int = 140,
-    val panelMs: Int = 220
+    val panelMs: Int = 220,
+    /** How long colours take to change when the theme changes. */
+    val themeMs: Int = 220,
 )
 
 data class IconTokens(
