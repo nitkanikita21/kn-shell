@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Мокап shell-ui-kit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Палітра: токени ThemeScale. Макет: зміст ліворуч, кожен компонент = зразки + API + клавіші. */
+:root {
+  --background:#e9e9ec; --foreground:#17171a; --card:#fdfdfe; --cardForeground:#17171a;
+  --popover:#fdfdfe; --popoverForeground:#17171a; --primary:#55555c; --primaryForeground:#fff;
+  --secondary:#dedee2; --secondaryForeground:#17171a; --muted:#dedee2; --mutedForeground:#5f5f66;
+  --accent:#d3d3d8; --accentForeground:#17171a; --destructive:#c8282d; --destructiveForeground:#fff;
+  --success:#2c7a3f; --successForeground:#fff; --warning:#e0a21a; --warningForeground:#1c1405;
+  --info:#2c6fb3; --infoForeground:#fff;
+  --primaryText:#4b4b52; --errorText:#9b1c22; --successText:#1f5c2f; --warningText:#6d4a00; --infoText:#1d4f86;
+  --border:#cfcfd4; --input:#cfcfd4; --ring:#6b6b73;
+  --sans:"Adwaita Sans","Inter",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+  --r-sm:4px; --r-md:8px; --r-lg:12px; --r-xl:16px; --motion:220ms;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; --background:#0b0b0d; --foreground:#fbfbfc; --card:#1c1c20; --border:#333339; }
+}
+:root[data-theme="dark"] { color-scheme: dark; --background:#0b0b0d; --foreground:#fbfbfc; --card:#1c1c20; --border:#333339; }
+
+* { box-sizing:border-box; }
+body { margin:0; background:var(--background); color:var(--foreground); font:14px/1.5 var(--sans); }
+body, .u, .card, .swatch, .toolbar { transition: background-color var(--motion), color var(--motion), border-color var(--motion); }
+h1 { font-size:22px; margin:0; text-wrap:balance; } h2 { font-size:18px; margin:0; } h3 { font-size:13px; margin:0 0 6px; color:var(--mutedForeground); font-weight:600; }
+p { margin:4px 0 0; max-width:68ch; color:var(--mutedForeground); }
+code, pre, .mono { font-family:var(--mono); }
+
+.toolbar { position:sticky; top:0; z-index:20; background:var(--background); border-bottom:1px solid var(--border); padding:12px 20px; display:flex; flex-wrap:wrap; gap:16px; align-items:center; }
+.toolbar h1 { margin-right:auto; }
+.control { display:flex; gap:6px; align-items:center; font-size:12px; color:var(--mutedForeground); }
+.seg { display:inline-flex; padding:2px; border-radius:var(--r-md); background:var(--secondary); gap:2px; }
+.seg button { font:500 12px var(--sans); border:0; background:transparent; color:var(--secondaryForeground); padding:4px 10px; border-radius:6px; cursor:pointer; }
+.seg button[aria-pressed="true"] { background:var(--card); box-shadow:0 1px 2px rgb(0 0 0 / .2); }
+input[type=range] { accent-color:var(--primary); width:130px; }
+:focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+
+.layout { display:grid; grid-template-columns:200px minmax(0,1fr); gap:24px; padding:20px; max-width:1280px; margin:0 auto; }
+nav { position:sticky; top:76px; align-self:start; max-height:calc(100vh - 96px); overflow:auto; font-size:13px; }
+nav strong { display:block; margin:12px 0 4px; font-size:12px; color:var(--mutedForeground); }
+nav a { display:block; color:var(--foreground); text-decoration:none; padding:3px 8px; border-radius:6px; }
+nav a:hover { background:var(--accent); }
+main { display:flex; flex-direction:column; gap:20px; min-width:0; }
+.card { background:var(--card); color:var(--cardForeground); border:1px solid var(--border); border-radius:var(--r-lg); padding:18px; scroll-margin-top:84px; min-width:0; }
+.head { display:flex; flex-wrap:wrap; gap:10px; align-items:baseline; }
+.role { font:500 11px var(--mono); padding:2px 8px; border-radius:999px; background:var(--secondary); color:var(--secondaryForeground); }
+.stage { margin-top:14px; padding:16px; border-radius:var(--r-md); background:var(--background); border:1px solid var(--border); display:flex; flex-direction:column; gap:14px; overflow-x:auto; }
+.row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+.row > .cap { width:76px; font:11px var(--mono); color:var(--mutedForeground); }
+.col { display:flex; flex-direction:column; gap:8px; min-width:0; }
+.spec { display:grid; grid-template-columns:minmax(0,3fr) minmax(0,2fr); gap:16px; margin-top:14px; }
+pre { margin:0; font-size:12px; line-height:1.55; background:var(--background); border:1px solid var(--border); border-radius:var(--r-md); padding:12px; overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:12px; }
+td { border-bottom:1px solid var(--border); padding:5px 6px; vertical-align:top; } td:first-child { white-space:nowrap; font-family:var(--mono); font-size:11px; }
+@media (max-width:900px) { .layout { grid-template-columns:minmax(0,1fr); } nav { position:static; max-height:none; display:flex; flex-wrap:wrap; gap:2px 6px; } nav strong { width:100%; } .spec { grid-template-columns:minmax(0,1fr); } }
+@media (prefers-reduced-motion: reduce) { * { transition:none !important; animation:none !important; } }
+
+/* ---------- кольори компонентів: --c заливка, --cf текст на ній, --ct текст по фону ---------- */
+.c-primary { --c:var(--primary); --cf:var(--primaryForeground); --ct:var(--primaryText); }
+.c-secondary { --c:var(--accent); --cf:var(--accentForeground); --ct:var(--foreground); }
+.c-success { --c:var(--success); --cf:var(--successForeground); --ct:var(--successText); }
+.c-info { --c:var(--info); --cf:var(--infoForeground); --ct:var(--infoText); }
+.c-warning { --c:var(--warning); --cf:var(--warningForeground); --ct:var(--warningText); }
+.c-error { --c:var(--destructive); --cf:var(--destructiveForeground); --ct:var(--errorText); }
+.c-neutral { --c:var(--foreground); --cf:var(--background); --ct:var(--foreground); }
+
+.u { font-family:var(--sans); }
+.v-solid { background:var(--c); color:var(--cf); border:1px solid transparent; }
+.v-outline { background:transparent; color:var(--ct); border:1px solid color-mix(in srgb, var(--c) 55%, transparent); }
+.v-soft { background:color-mix(in srgb, var(--ct) 14%, transparent); color:var(--ct); border:1px solid transparent; }
+.v-subtle { background:color-mix(in srgb, var(--ct) 10%, transparent); color:var(--ct); border:1px solid color-mix(in srgb, var(--ct) 30%, transparent); }
+.v-ghost { background:transparent; color:var(--ct); border:1px solid transparent; }
+.v-link { background:transparent; color:var(--ct); border:1px solid transparent; text-decoration:underline; text-underline-offset:3px; }
+
+.s-xs { --h:24px; --fs:11px; --px:8px; --ic:12px; } .s-sm { --h:28px; --fs:12px; --px:10px; --ic:14px; }
+.s-md { --h:34px; --fs:13px; --px:12px; --ic:16px; } .s-lg { --h:40px; --fs:14px; --px:16px; --ic:18px; }
+.s-xl { --h:46px; --fs:16px; --px:20px; --ic:20px; }
+svg.i { width:var(--ic,16px); height:var(--ic,16px); flex:none; fill:none; stroke:currentColor; stroke-width:1.75; stroke-linecap:round; stroke-linejoin:round; }
+
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:6px; height:var(--h); padding:0 var(--px); border-radius:var(--r-md); font-size:var(--fs); font-weight:500; white-space:nowrap; }
+.btn.icon-only { width:var(--h); padding:0; }
+.is-hover.v-solid { filter:brightness(1.12); } .is-hover:not(.v-solid):not(.v-link) { background:color-mix(in srgb, var(--ct) 18%, transparent); }
+.is-pressed { filter:brightness(.88); transform:translateY(1px); }
+.is-focus { outline:2px solid var(--ring); outline-offset:2px; }
+.is-disabled { opacity:.45; }
+.spin { animation:spin 1s linear infinite; } @keyframes spin { to { transform:rotate(360deg); } }
+
+.badge { display:inline-flex; align-items:center; gap:4px; height:calc(var(--h) - 12px); padding:0 calc(var(--px) - 4px); border-radius:6px; font-size:calc(var(--fs) - 1px); font-weight:600; }
+.ucard { border-radius:var(--r-lg); width:260px; overflow:hidden; }
+.ucard.o { border:1px solid var(--border); background:var(--card); } .ucard.so { background:var(--secondary); } .ucard.su { background:var(--secondary); border:1px solid var(--border); }
+.ucard > div { padding:12px 14px; } .ucard > div + div { border-top:1px solid var(--border); }
+.sep { display:flex; align-items:center; gap:10px; width:260px; color:var(--mutedForeground); font-size:12px; }
+.sep::before, .sep::after { content:""; flex:1; height:1px; background:var(--border); }
+.kbd { display:inline-grid; place-items:center; min-width:calc(var(--h) - 10px); height:calc(var(--h) - 10px); padding:0 6px; border-radius:6px; border:1px solid var(--input); border-bottom-width:2px; background:var(--card); font:500 calc(var(--fs) - 2px) var(--mono); }
+.avatar { display:inline-grid; place-items:center; width:var(--h); height:var(--h); border-radius:999px; background:var(--accent); color:var(--accentForeground); font-weight:600; font-size:var(--fs); }
+.progress { width:260px; height:8px; border-radius:99px; background:var(--secondary); overflow:hidden; }
+.progress > i { display:block; height:100%; background:var(--c); border-radius:99px; }
+.progress.ind > i { width:35%; animation:ind 1.4s ease-in-out infinite; } @keyframes ind { from { margin-left:-35%; } to { margin-left:100%; } }
+.skel { background:var(--accent); border-radius:var(--r-md); animation:pulse 1.6s ease-in-out infinite; } @keyframes pulse { 50% { opacity:.45; } }
+.alert { display:flex; gap:10px; width:min(420px,100%); padding:12px 14px; border-radius:var(--r-lg); }
+.alert b { display:block; font-size:13px; } .alert span { font-size:12px; opacity:.9; } .alert .x { margin-left:auto; }
+.field { display:flex; flex-direction:column; gap:4px; width:260px; }
+.field label, .lbl { font-weight:500; font-size:13px; } .help { font-size:12px; color:var(--mutedForeground); } .err { font-size:12px; color:var(--errorText); }
+.req::after { content:" *"; color:var(--errorText); }
+.input { display:flex; align-items:center; gap:8px; height:var(--h); padding:0 10px; border:1px solid var(--input); border-radius:var(--r-md); background:var(--card); font-size:var(--fs); width:260px; max-width:100%; }
+.input .ph { color:var(--mutedForeground); } .input.invalid { border-color:var(--destructive); } .input.focus { border-color:var(--c); box-shadow:0 0 0 1px var(--c); }
+.caret { width:1px; height:1.2em; background:var(--c); margin-left:-6px; }
+.check { display:inline-flex; gap:8px; align-items:flex-start; font-size:var(--fs); }
+.box { width:calc(var(--ic) + 2px); height:calc(var(--ic) + 2px); border-radius:5px; border:1px solid var(--input); background:var(--card); display:grid; place-items:center; flex:none; margin-top:2px; --ic2:11px; }
+.box.on { background:var(--c); border-color:var(--c); color:var(--cf); } .box svg.i { width:calc(var(--ic) - 3px); height:calc(var(--ic) - 3px); stroke-width:3; }
+.radio { border-radius:99px; } .radio.on { background:var(--card); border:5px solid var(--c); }
+.switch { width:calc(var(--ic) * 2 + 6px); height:calc(var(--ic) + 6px); border-radius:99px; background:var(--accent); padding:2px; flex:none; margin-top:1px; }
+.switch i { display:block; width:calc(var(--ic) + 2px); height:calc(var(--ic) + 2px); border-radius:99px; background:var(--foreground); }
+.switch.on { background:var(--c); } .switch.on i { margin-left:auto; background:var(--cf); }
+.slider { position:relative; width:240px; height:20px; display:flex; align-items:center; }
+.slider .tr { position:absolute; left:0; right:0; height:6px; border-radius:9px; background:var(--secondary); }
+.slider .fl { position:absolute; left:0; height:6px; border-radius:9px; background:var(--c); }
+.slider .th { position:absolute; width:16px; height:16px; margin-left:-8px; border-radius:99px; background:var(--card); border:3px solid var(--c); }
+.pop { background:var(--popover); color:var(--popoverForeground); border:1px solid var(--border); border-radius:var(--r-md); box-shadow:0 8px 24px rgb(0 0 0 / .28); padding:4px; font-size:13px; min-width:200px; }
+.item { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px; --ic:14px; }
+.item.active { background:var(--accent); color:var(--accentForeground); } .item .end { margin-left:auto; color:var(--mutedForeground); font:11px var(--mono); } .item.err-i { color:var(--errorText); }
+.menu-sep { height:1px; background:var(--border); margin:4px 0; } .menu-lbl { padding:4px 8px; font-size:11px; color:var(--mutedForeground); font-weight:600; }
+.tabs { display:flex; gap:2px; padding:3px; background:var(--secondary); border-radius:var(--r-md); width:max-content; }
+.tab { padding:5px 14px; border-radius:6px; font-size:13px; font-weight:500; color:var(--mutedForeground); } .tab.on { background:var(--c); color:var(--cf); }
+.tabs.line { background:transparent; border-bottom:1px solid var(--border); border-radius:0; padding:0; }
+.tabs.line .tab { border-radius:0; border-bottom:2px solid transparent; } .tabs.line .tab.on { background:transparent; color:var(--ct); border-color:var(--c); }
+.acc { width:min(380px,100%); border:1px solid var(--border); border-radius:var(--r-lg); background:var(--card); }
+.acc > div { padding:10px 14px; } .acc > div + div { border-top:1px solid var(--border); }
+.acc .h { display:flex; justify-content:space-between; font-weight:500; --ic:16px; } .acc .open svg { transform:rotate(180deg); }
+.tip { display:inline-flex; gap:8px; align-items:center; background:var(--foreground); color:var(--background); border-radius:6px; padding:5px 9px; font-size:12px; }
+.tip .kbd { background:transparent; color:inherit; border-color:currentColor; --h:28px; --fs:12px; }
+.window { position:relative; width:min(560px,100%); height:280px; border-radius:var(--r-xl); border:1px solid var(--border); background:var(--card); overflow:hidden; }
+.window .behind { padding:16px; opacity:.5; display:flex; flex-direction:column; gap:10px; }
+.window .scrim { position:absolute; inset:0; background:rgb(0 0 0 / .5); display:grid; place-items:center; padding:16px; }
+.dialog { background:var(--popover); color:var(--popoverForeground); border:1px solid var(--border); border-radius:var(--r-lg); width:min(380px,100%); box-shadow:0 20px 50px rgb(0 0 0 / .4); }
+.dialog > div { padding:12px 16px; } .dialog > div + div { border-top:1px solid var(--border); }
+.toast { display:flex; gap:10px; width:320px; max-width:100%; background:var(--popover); border:1px solid var(--border); border-radius:var(--r-md); padding:10px 12px; box-shadow:0 8px 24px rgb(0 0 0 / .25); font-size:13px; }
+.toast > svg { color:var(--ct); } .toast .x { margin-left:auto; color:var(--mutedForeground); } .toast b + span { display:block; font-size:12px; color:var(--mutedForeground); }
+.toast { position:relative; overflow:hidden; }
+.toast.timed::after { content:""; position:absolute; left:0; bottom:0; height:2px; width:100%; background:color-mix(in srgb, var(--c) 70%, var(--popover)); transform-origin:left; animation:countdown 8s linear infinite; }
+.toast.timed:hover::after, .toast.timed:focus-within::after, .toast.paused::after { animation-play-state:paused; }
+.toast.paused::after { animation-delay:-3s; }
+@keyframes countdown { from { transform:scaleX(1); } to { transform:scaleX(0); } }
+.toast .body { flex:1; min-width:0; display:flex; flex-direction:column; gap:8px; }
+.toast .top { display:flex; gap:8px; align-items:flex-start; } .toast .top > div { flex:1; min-width:0; }
+.toast .meta { font:11px var(--mono); color:var(--mutedForeground); white-space:nowrap; padding-top:2px; }
+.toast .pic { height:120px; border-radius:var(--r-sm); background:radial-gradient(circle at 72% 30%, #ffd58a 0 14px, transparent 15px), linear-gradient(160deg, transparent 55%, #2f5d50 56%), linear-gradient(200deg, transparent 62%, #3f7a63 63%), linear-gradient(#7fa8c9, #e9c9a8); }
+.toast .reply { display:flex; gap:6px; align-items:center; } .toast .reply .input { width:auto; flex:1; }
+.toast .acts { display:flex; gap:6px; flex-wrap:wrap; }
+.uses { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:20px; align-items:start; }
+.center { display:flex; flex-direction:column; border:1px solid var(--border); border-radius:var(--r-lg); background:var(--card); max-width:360px; }
+.center .toast { width:auto; border:0; border-radius:0; box-shadow:none; background:transparent; }
+.center .toast + .toast, .center .menu-lbl + .toast { border-top:1px solid var(--border); }
+
+
+.tokens { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:10px; margin-top:14px; }
+.swatch { border:1px solid var(--border); border-radius:var(--r-md); padding:10px 12px; font-size:12px; }
+.swatch b { display:block; font:600 12px var(--mono); } .ratio { font:11px var(--mono); }
+.flag { display:inline-block; margin-top:4px; padding:1px 6px; border-radius:99px; background:#b3261e; color:#fff; font:600 10px var(--sans); }
+.pass { opacity:.75; }
+</style>
+</head>
+<body>
+<header class="toolbar">
+  <h1>shell-ui-kit · мокап</h1>
+  <div class="control">Режим <div class="seg" id="mode"><button type="button" data-v="dark">Dark</button><button type="button" data-v="light">Light</button></div></div>
+  <div class="control">Тонування <div class="seg" id="preset"><button type="button" data-v="off">off</button><button type="button" data-v="subtle">subtle</button><button type="button" data-v="balanced">balanced</button><button type="button" data-v="vivid">vivid</button></div></div>
+  <label class="control" for="hue">Тон шпалер <input type="range" id="hue" min="0" max="359" value="150"><span class="mono" id="hueOut"></span></label>
+  <div class="control">Контраст <div class="seg" id="fix"><button type="button" data-v="fixed">виправлений</button><button type="button" data-v="current">як зараз</button></div></div>
+</header>
+
+<div class="layout">
+  <nav id="nav" aria-label="Компоненти"></nav>
+  <main id="main">
+    <section class="card" id="tokens">
+      <div class="head"><h2>Дизайн-система</h2><span class="role">DesignTokens</span></div>
+      <p>Ті самі формули <code>ThemeScale</code>, що в коді. Нові: success, warning, info та текстові відтінки <code>*Text</code> для варіантів, які пишуть кольором по фону. Біля пари вказано контраст за WCAG; позначка «нижче 4.5» означає, що текст читається погано.</p>
+      <div class="tokens" id="swatches"></div>
+      <p>Типографіка: <b style="font-family:var(--sans)">Adwaita Sans</b> для тексту, <span class="mono">JetBrains Mono</span> для коду й клавіш. Радіуси 4 · 8 · 12 · 16, відступи 4 · 8 · 12 · 16 · 24, переходи кольорів <code>themeMs = 220</code>.</p>
+    </section>
+    <section class="card" id="api">
+      <div class="head"><h2>Правила API</h2></div>
+      <div class="spec">
+<pre>UTheme(tokens, UThemeConfig(button = UButtonDefaults(variant = UVariant.Soft))) {
+  UButton("Зберегти", onClick = ::save)          // бере стандарти з теми
+  UButton(
+    "Видалити",
+    onClick = ::delete,
+    color = UColor.Error,                         // enum, а не колір
+    variant = UVariant.Outline,
+    size = USize.Sm,
+    ui = UButtonUi(base = Modifier.radius(999)),  // перевизначення слотів
+  )
+}</pre>
+        <table>
+          <tr><td>UColor</td><td>Primary, Secondary, Success, Info, Warning, Error, Neutral</td></tr>
+          <tr><td>UVariant</td><td>Solid, Outline, Soft, Subtle, Ghost, Link</td></tr>
+          <tr><td>USize</td><td>Xs, Sm, Md, Lg, Xl</td></tr>
+          <tr><td>стан</td><td>контрольований: <code>value</code> + <code>onValueChange</code>, <code>open</code> + <code>onOpenChange</code></td></tr>
+          <tr><td>порядок</td><td>тема → варіант → <code>config.ui</code> → <code>ui</code> екземпляра; пізніше перемагає</td></tr>
+          <tr><td>назва</td><td><code>accessibleLabel</code> обов'язковий там, де немає видимого тексту</td></tr>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+"use strict";
+const ICONS = {"check":"<path d=\"M20 6 9 17l-5-5\" />","plus":"<path d=\"M5 12h14\" /><path d=\"M12 5v14\" />","trash":"<path d=\"M10 11v6\" /><path d=\"M14 11v6\" /><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6\" /><path d=\"M3 6h18\" /><path d=\"M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\" />","arrow":"<path d=\"M5 12h14\" /><path d=\"m12 5 7 7-7 7\" />","down":"<path d=\"m6 9 6 6 6-6\" />","search":"<path d=\"m21 21-4.34-4.34\" /><circle cx=\"11\" cy=\"11\" r=\"8\" />","x":"<path d=\"M18 6 6 18\" /><path d=\"m6 6 12 12\" />","info":"<circle cx=\"12\" cy=\"12\" r=\"10\" /><path d=\"M12 16v-4\" /><path d=\"M12 8h.01\" />","warn":"<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\" /><path d=\"M12 9v4\" /><path d=\"M12 17h.01\" />","ok":"<circle cx=\"12\" cy=\"12\" r=\"10\" /><path d=\"m9 12 2 2 4-4\" />","fail":"<circle cx=\"12\" cy=\"12\" r=\"10\" /><path d=\"m15 9-6 6\" /><path d=\"m9 9 6 6\" />","loader":"<path d=\"M21 12a9 9 0 1 1-6.219-8.56\" />","minus":"<path d=\"M5 12h14\" />","user":"<path d=\"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2\" /><circle cx=\"12\" cy=\"7\" r=\"4\" />","mail":"<path d=\"m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7\" /><rect x=\"2\" y=\"4\" width=\"20\" height=\"16\" rx=\"2\" />","pencil":"<path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\" /><path d=\"m15 5 4 4\" />","copy":"<rect width=\"14\" height=\"14\" x=\"8\" y=\"8\" rx=\"2\" ry=\"2\" /><path d=\"M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2\" />","logout":"<path d=\"m16 17 5-5-5-5\" /><path d=\"M21 12H9\" /><path d=\"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4\" />"};
+const ic = (n, cls = "") => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n]}</svg>`;
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+
+/* ---------- порт ThemeScale ---------- */
+const PRESETS = { off:[0,1,.022,.055,.07], subtle:[.55,.85,.022,.03,.07], balanced:[1,1,.022,.055,.07], vivid:[1.55,1.35,.045,.09,.1] };
+function lin(l,c,h){ const r=h*Math.PI/180,a=c*Math.cos(r),b=c*Math.sin(r);
+  const L=(l+.3963377774*a+.2158037573*b)**3, M=(l-.1055613458*a-.0638541728*b)**3, S=(l-.0894841775*a-1.291485548*b)**3;
+  return [4.0767416621*L-3.3077115913*M+.2309699292*S, -1.2684380046*L+2.6097574011*M-.3413193965*S, -.0041960863*L-.7034186147*M+1.707614701*S]; }
+const inGamut=(l,c,h)=>lin(l,c,h).every(v=>v>=-1e-4&&v<=1.0001);
+function rgb(l,c,h){ l=Math.min(Math.max(l,0),1); if(c>0&&!inGamut(l,c,h)){let lo=0,hi=c; for(let i=0;i<20;i++){const m=(lo+hi)/2; if(inGamut(l,m,h))lo=m; else hi=m;} c=lo;}
+  return lin(l,c,h).map(v=>{const s=v<=.0031308?12.92*v:1.055*v**(1/2.4)-.055; return Math.floor(Math.min(Math.max(s,0),1)*255);}); }
+const lum=c=>{const f=v=>{v/=255; return v<=.04045?v/12.92:((v+.055)/1.055)**2.4}; return .2126*f(c[0])+.7152*f(c[1])+.0722*f(c[2]);};
+const contrast=(a,b)=>{const [x,y]=[lum(a),lum(b)].sort((p,q)=>q-p); return (x+.05)/(y+.05);};
+const delta=(a,b)=>((b-a)%360+540)%360-180;
+function nudged(wall,base){ const d=delta(wall,base), pull=Math.abs(d)>90?0:.35*d; return (base+Math.min(Math.max(pull,-12),12)+360)%360; }
+function theme(dark,hue,preset,fixed){
+  // Монохромні шпалери (типовий випадок): друга родина тонів збігається з головною.
+  const [tint,accent,lift,ncap,acap]=PRESETS[preset], fam=.09, chroma=.05, second=hue;
+  const neutral=Math.min(Math.max(fam*.9*tint,.015*tint),ncap), tn=Math.min(Math.max(fam*1.1*tint,neutral*1.5),acap);
+  const sec=Math.min(Math.max(fam*.9*1.25*tint,neutral*1.2),ncap*1.3), brand=Math.min(Math.max(chroma,fam*.8)*2.5*accent,.18);
+  const des=nudged(hue,25), t={}, a={};
+  if(dark){
+    Object.assign(t,{background:rgb(.145+lift,neutral,hue), card:rgb(.225+lift*.9,neutral,hue), foreground:rgb(.985,.004+neutral*.3,second),
+      primary:rgb(.705,brand,hue), secondary:rgb(.31+lift*1.1,sec,second), mutedForeground:rgb(.708,Math.min(tn,.05),second), accent:rgb(.371+lift*1.3,tn,hue),
+      destructive:rgb(.68,Math.min(Math.max(chroma*1.5,.15),.21),des), ring:rgb(.556,Math.min(tn*1.8,.13),second)});
+    t.destructiveForeground = fixed ? t.background : t.foreground;
+    t.primaryForeground=t.background; a.border=[...rgb(.62,neutral*1.4,hue),.22]; a.input=[...rgb(.68,neutral*1.6,hue),.28];
+  } else {
+    Object.assign(t,{background:rgb(.935-lift*.6,neutral*.8,hue), card:rgb(.998-lift*.25,neutral*.45,hue), foreground:rgb(.205,Math.max(neutral*.5,.004),hue),
+      primary:rgb(fixed?.48:.55,brand,hue), secondary:rgb(.905-lift*.9,Math.max(sec*1.05,.006),second), mutedForeground:rgb(.50,Math.min(tn,.05),second), accent:rgb(.865-lift*.5,tn*.95,hue),
+      destructive:rgb(fixed?.56:.577,Math.min(Math.max(chroma*1.6,.17),.245),des), destructiveForeground:rgb(.985,.004,hue), ring:rgb(.55,Math.min(tn*1.8,.13),second)});
+    t.primaryForeground=t.background; a.border=[...rgb(.84,Math.max(neutral,.006),hue),1]; a.input=a.border;
+  }
+  t.popover=t.card; t.cardForeground=t.popoverForeground=t.secondaryForeground=t.accentForeground=t.foreground; t.muted=t.secondary;
+  const spec=dark?{success:[.72,.15,150],warning:[.8,.14,80],info:[.72,.12,245]}:{success:[.52,.14,150],warning:[.75,.15,75],info:[.54,.15,250]};
+  for(const [n,[l,c,h]] of Object.entries(spec)){ const hh=nudged(hue,h); t[n]=rgb(l,c,hh);
+    const light=rgb(.985,.004,hue), ink=rgb(.18,.02,hh); t[n+"Foreground"]=contrast(light,t[n])>contrast(ink,t[n])?light:ink;
+    t[n+"Text"]=rgb(dark?.75:.43,c,hh); }
+  t.primaryText=rgb(dark?.75:.43,brand,hue); t.errorText=rgb(dark?.75:.43,Math.min(Math.max(chroma*1.6,.17),.21),des);
+  return {t,a};
+}
+
+const PAIRS=[["background","foreground"],["card","cardForeground"],["card","mutedForeground"],["primary","primaryForeground"],["secondary","secondaryForeground"],["accent","accentForeground"],["destructive","destructiveForeground"],["success","successForeground"],["warning","warningForeground"],["info","infoForeground"],["background","primaryText"],["background","errorText"],["background","successText"],["background","warningText"],["background","infoText"]];
+const NEW=new Set(["success","warning","info","primaryText","errorText","successText","warningText","infoText"]);
+
+const state={mode:null,preset:"balanced",hue:150,fix:"fixed"};
+const css=c=>c.length===4?`rgb(${c[0]} ${c[1]} ${c[2]} / ${c[3]})`:`rgb(${c[0]} ${c[1]} ${c[2]})`;
+const viewerDark=()=>{const a=document.documentElement.dataset.theme; return a?a==="dark":matchMedia("(prefers-color-scheme: dark)").matches;};
+function apply(){
+  const dark=state.mode?state.mode==="dark":viewerDark();
+  const {t,a}=theme(dark,state.hue,state.preset,state.fix==="fixed"), root=document.documentElement.style;
+  for(const [k,v] of Object.entries({...t,...a})) root.setProperty("--"+k,css(v));
+  root.colorScheme=dark?"dark":"light";
+  for(const [id,val] of [["mode",dark?"dark":"light"],["preset",state.preset],["fix",state.fix]])
+    for(const b of document.querySelectorAll(`#${id} button`)) b.setAttribute("aria-pressed",String(b.dataset.v===val));
+  document.getElementById("hueOut").textContent=state.hue+"°";
+  document.getElementById("swatches").innerHTML=PAIRS.map(([bg,fg])=>{const r=contrast(t[bg],t[fg]), name=NEW.has(bg)?bg:NEW.has(fg)?fg:null;
+    return `<div class="swatch" style="background:${css(t[bg])};color:${css(t[fg])}"><b>${bg}</b>${fg}${name?" · нове":""}<div class="ratio ${r>=4.5?"pass":""}">${r.toFixed(2)} : 1</div>${r<4.5?'<span class="flag">нижче 4.5</span>':""}</div>`;}).join("");
+}
+
+/* ---------- зразки ---------- */
+const COLORS=["primary","secondary","success","info","warning","error","neutral"], VARIANTS=["solid","outline","soft","subtle","ghost","link"], SIZES=["xs","sm","md","lg","xl"];
+const row=(cap,html)=>`<div class="row"><span class="cap">${cap}</span>${html}</div>`;
+const btn=(o={})=>{const {label="Зберегти",color="primary",variant="solid",size="md",icon,trail,st="",only}=o;
+  return `<span class="u btn c-${color} v-${variant} s-${size} ${st} ${only?"icon-only":""}">${st.includes("loading")?ic("loader","spin"):icon?ic(icon):""}${only?"":label}${trail?ic(trail):""}</span>`;};
+const badge=(t,color,variant="soft",size="md",icon)=>`<span class="u badge c-${color} v-${variant} s-${size}">${icon?ic(icon):""}${t}</span>`;
+const checkRow=(kind,on,label,extra="",color="primary")=>`<span class="u check c-${color} s-md ${extra}"><span class="box ${kind==="radio"?"radio":""} ${on?"on":""} ${extra.includes("focus")?"is-focus":""}">${on&&kind!=="radio"?ic(on==="mixed"?"minus":"check"):""}</span>${label}</span>`;
+const sw=(on,label,extra="",color="primary")=>`<span class="u check c-${color} s-md ${extra}"><span class="switch ${on?"on":""} ${extra.includes("focus")?"is-focus":""}"><i></i></span>${label}</span>`;
+const input=(content,cls="",size="md")=>`<div class="u input c-primary s-${size} ${cls}">${content}</div>`;
+const field=(label,body,foot,req)=>`<div class="field"><span class="lbl ${req?"req":""}">${label}</span>${body}${foot||""}</div>`;
+const slider=(p,color="primary",focus="")=>`<div class="u slider c-${color}"><span class="tr"></span><span class="fl" style="width:${p}%"></span><span class="th ${focus}" style="left:${p}%"></span></div>`;
+const alertBox=(color,variant,icon,title,text,close)=>`<div class="u alert c-${color} v-${variant} s-md">${ic(icon)}<div><b>${title}</b><span>${text}</span></div>${close?`<span class="x">${ic("x")}</span>`:""}</div>`;
+const ntf=({title,text,meta,leading,image,reply,actions,timed,paused,color="neutral"})=>`<div class="u toast c-${color} ${timed?"timed":""} ${paused?"paused":""}"><div class="body"><div class="top">${leading||""}<div><b>${title}</b><span>${text}</span></div>${meta?`<span class="meta">${meta}</span>`:""}<span class="x">${ic("x")}</span></div>${image?'<div class="pic" role="img" aria-label="Фото: гори на світанку"></div>':""}${reply?`<div class="reply">${input(reply.value?`<span>${reply.value}</span><span class="caret"></span>`:'<span class="ph">Відповісти…</span>',reply.value?"focus":"","sm")}${btn({label:"Надіслати",size:"sm",icon:"arrow"})}</div>`:""}${actions?`<div class="acts">${actions.map((a,i)=>btn({label:a,size:"sm",variant:i?"ghost":"soft",color:"neutral"})).join("")}</div>`:""}</div></div>`;
+const toast=(color,icon,title,text)=>`<div class="u toast c-${color} ${color==="error"?"":"timed"}">${ic(icon)}<div><b>${title}</b><span>${text}</span></div><span class="x">${ic("x")}</span></div>`;
+const item=(icon,label,end="",cls="")=>`<div class="item ${cls}">${icon?ic(icon):""}${label}<span class="end">${end}</span></div>`;
+const kbd=(k,size="md")=>`<span class="u kbd s-${size}">${k}</span>`;
+
+const C=[
+{cat:"element",name:"UButton",role:"button",about:"Дія. Посилання-варіант виглядає як текст, але поводиться як кнопка.",
+ demo:()=>VARIANTS.map(v=>row(v,COLORS.map(c=>btn({label:c,color:c,variant:v,size:"sm"})).join(""))).join("")+row("розміри",SIZES.map(s=>btn({label:s,size:s,icon:"check"})).join("")+btn({only:true,icon:"plus",size:"md"}))+row("стани",btn({label:"default"})+btn({label:"hover",st:"is-hover"})+btn({label:"focus",st:"is-focus"})+btn({label:"pressed",st:"is-pressed"})+btn({label:"disabled",st:"is-disabled"})+btn({label:"loading",st:"loading is-disabled"})+btn({label:"Далі",trail:"arrow",variant:"outline"})),
+ api:`UButton(\n  label: String? = null,\n  onClick: () -> Unit,\n  modifier: Modifier = Modifier,\n  color: UColor = UTheme.config.button.color,\n  variant: UVariant = …, size: USize = …,\n  leadingIcon: IconRef? = null, trailingIcon: IconRef? = null,\n  loading: Boolean = false, disabled: Boolean = false,\n  accessibleLabel: String? = null,\n  ui: UButtonUi = UButtonUi(),\n  content: (@Composable () -> Unit)? = null,\n)`,
+ keys:[["Enter, Space","натиснути"],["Tab","перейти далі; disabled не фокусується"],["loading","стан busy, клік ігнорується"]]},
+{cat:"element",name:"UBadge",role:"текст",about:"Коротка позначка статусу чи лічильник.",
+ demo:()=>["solid","outline","soft","subtle"].map(v=>row(v,COLORS.map(c=>badge(c,c,v)).join(""))).join("")+row("розміри",SIZES.map(s=>badge(s,"primary","soft",s,"check")).join("")),
+ api:`UBadge(\n  label: String, modifier: Modifier = Modifier,\n  color: UColor = Primary, variant: UVariant = Soft,\n  size: USize = Md, leadingIcon: IconRef? = null,\n  ui: UBadgeUi = UBadgeUi(),\n)`,
+ keys:[["—","не інтерактивний; назва = текст"]]},
+{cat:"element",name:"UCard",role:"group",about:"Піднята поверхня з необов'язковими шапкою й підвалом.",
+ demo:()=>`<div class="row">`+[["o","outline"],["so","soft"],["su","subtle"]].map(([c,n])=>`<div class="ucard ${c}"><div><b>Мережа</b></div><div><span class="help">Картка ${n}: підключено до «home-5G».</span></div><div class="row">${btn({label:"Налаштувати",size:"sm",variant:"soft",color:"neutral"})}</div></div>`).join("")+`</div>`,
+ api:`UCard(\n  modifier: Modifier = Modifier,\n  variant: UVariant = Outline,\n  header: (@Composable () -> Unit)? = null,\n  footer: (@Composable () -> Unit)? = null,\n  accessibleLabel: String? = null,\n  ui: UCardUi = UCardUi(),\n  content: @Composable () -> Unit,\n)`,
+ keys:[["—","не інтерактивна; з назвою стає іменованою групою"]]},
+{cat:"element",name:"USeparator",role:"separator",about:"Лінія між блоками, горизонтальна чи вертикальна, з необов'язковим підписом.",
+ demo:()=>`<div class="sep">або</div><div class="sep" style="gap:0"></div>`,
+ api:`USeparator(\n  modifier: Modifier = Modifier,\n  orientation: UOrientation = Horizontal,\n  label: String? = null,\n  color: UColor = Neutral,\n)`,
+ keys:[["—","повідомляє орієнтацію"]]},
+{cat:"element",name:"UKbd",role:"текст",about:"Клавіша або сполучення.",
+ demo:()=>row("розміри",SIZES.map(s=>kbd("Ctrl",s)+kbd("K",s)).join(" "))+row("приклад",`<span class="help">Пошук</span> ${kbd("Super")} ${kbd("Space")}`),
+ api:`UKbd(\n  keys: List<String>, modifier: Modifier = Modifier,\n  size: USize = Md, ui: UKbdUi = UKbdUi(),\n)`,
+ keys:[["—","назва = клавіші через «плюс»"]]},
+{cat:"element",name:"UAvatar",role:"img",about:"Зображення людини чи застосунку; без нього ініціали або іконка.",
+ demo:()=>row("розміри",SIZES.map(s=>`<span class="u avatar s-${s}">АБ</span>`).join(""))+row("іконка",`<span class="u avatar s-lg">${ic("user")}</span>`),
+ api:`UAvatar(\n  name: String,            // доступна назва й ініціали\n  modifier: Modifier = Modifier,\n  src: String? = null, icon: IconRef? = null,\n  size: USize = Md, ui: UAvatarUi = UAvatarUi(),\n)`,
+ keys:[["—","назва = name"]]},
+{cat:"feedback",name:"UProgress",role:"progressbar",about:"Визначений поступ або невизначене очікування.",
+ demo:()=>["primary","success","warning","error"].map((c,i)=>row(c,`<div class="u progress c-${c}"><i style="width:${[64,100,38,15][i]}%"></i></div>`)).join("")+row("невизн.",`<div class="u progress ind c-primary"><i></i></div>`),
+ api:`UProgress(\n  value: Float?,           // null = невизначений\n  accessibleLabel: String, modifier: Modifier = Modifier,\n  max: Float = 1f, color: UColor = Primary,\n  size: USize = Md, ui: UProgressUi = UProgressUi(),\n)`,
+ keys:[["—","повідомляє значення, мінімум і максимум"]]},
+{cat:"feedback",name:"USkeleton",role:"приховано",about:"Місце під вміст, який ще завантажується.",
+ demo:()=>`<div class="row"><div class="skel" style="width:40px;height:40px;border-radius:99px"></div><div class="col"><div class="skel" style="width:180px;height:12px"></div><div class="skel" style="width:120px;height:12px"></div></div></div>`,
+ api:`USkeleton(\n  modifier: Modifier = Modifier,\n  width: Int? = null, height: Int = 12,\n  radius: Int = UTheme.tokens.radius.md,\n)`,
+ keys:[["—","прихований від скрінрідера; busy ставить контейнер"]]},
+{cat:"feedback",name:"UAlert",role:"alert / status",about:"Повідомлення на місці. Error і Warning оголошуються одразу.",
+ demo:()=>alertBox("info","soft","info","Доступне оновлення","Версія 0.4 чекає на встановлення.",true)+alertBox("success","subtle","ok","Збережено","Налаштування застосовано.")+alertBox("warning","outline","warn","Мало місця","Лишилось 2 ГБ.")+alertBox("error","solid","fail","Немає мережі","Перевірте кабель або Wi-Fi.",true),
+ api:`UAlert(\n  title: String, modifier: Modifier = Modifier,\n  description: String? = null,\n  color: UColor = Info, variant: UVariant = Soft,\n  icon: IconRef? = null,\n  actions: List<UAction> = emptyList(),\n  onClose: (() -> Unit)? = null,\n  ui: UAlertUi = UAlertUi(),\n)`,
+ keys:[["Tab","до дій і кнопки закриття"],["Enter, Space","виконати дію"]]},
+{cat:"feedback",name:"UToast",role:"status / alert",about:"Тимчасове повідомлення у стосі; картку UToastCard можна брати окремо. Таймер стоїть під курсором, фокусом і поки є ненадісланий текст. Помилки не зникають самі.",
+ demo:()=>`<div class="uses"><div class="col"><h3>Стос UToaster</h3>${toast("success","ok","Скріншот збережено","~/Pictures/shot.png")}${toast("info","info","Збірка завершилась","Наведіть курсор: відлік стане.")}${toast("error","fail","Не вдалося підключитись","Спробуйте ще раз.")}</div><div class="col"><h3>Сповіщення в шелі: UToastCard</h3>${ntf({color:"primary",timed:true,paused:true,leading:'<span class="u avatar s-sm">ЧД</span>',title:"Чат · Дизайн",text:"Подивись на новий фон",meta:"14:02",image:true,reply:{value:"Гарно, беремо"}})}${ntf({color:"primary",timed:true,leading:'<span class="u avatar s-sm">ПШ</span>',title:"Пошта",text:"3 нові листи",meta:"13:48",actions:["Відкрити","Прочитано"]})}</div><div class="col"><h3>Центр сповіщень: без таймера</h3><div class="center"><div class="menu-lbl">Сьогодні</div>${ntf({leading:'<span class="u avatar s-sm">ЧД</span>',title:"Чат · Дизайн",text:"Подивись на новий фон",meta:"14:02",reply:{}})}${ntf({leading:'<span class="u avatar s-sm">ОН</span>',title:"Оновлення",text:"Версія 0.4 чекає на встановлення",meta:"09:15",actions:["Встановити"]})}</div></div></div>`,
+ api:`val toaster = rememberUToaster(duration = 6.seconds)\ntoaster.add(UToast(\n  title = "Скріншот збережено",\n  color = UColor.Success,\n  duration = null,   // null = стандарт, Duration.INFINITE = не зникає\n  actions = listOf(UAction("Відкрити") { open() }),\n))\nUToasterHost(toaster, position = UPosition.BottomEnd)\n\n// та сама картка без черги\nUToastCard(\n  title: String, modifier: Modifier = Modifier,\n  description: String? = null, color: UColor = Neutral,\n  icon: IconRef? = null,\n  leading: (@Composable () -> Unit)? = null,\n  meta: (@Composable () -> Unit)? = null,\n  image: UToastImage? = null,   // src, alt\n  reply: UToastReply? = null,   // placeholder, onSend\n  actions: List<UAction> = emptyList(),\n  progress: Float? = null,      // 0..1, null = без смуги\n  onClose: (() -> Unit)? = null,\n  ui: UToastUi = UToastUi(),\n  content: (@Composable () -> Unit)? = null,\n)`,
+ keys:[["F8","перенести фокус у стос"],["Tab","між картками, діями та полем відповіді"],["Enter у полі","надіслати відповідь"],["Escape","у полі: вийти з поля; на картці: закрити"],["картинка","alt обов'язковий"],["фокус і курсор","відлік стоїть"]]},
+{cat:"form",name:"UInput",role:"textbox",about:"Однорядкове поле.",
+ demo:()=>row("розміри",["xs","md","xl"].map(s=>input(`<span class="ph">${s}</span>`,"",s)).join(""))+row("стани",input(`${ic("search")}<span class="ph">Пошук…</span>`)+input(`<span>user</span><span class="caret"></span>`,"focus")+input(`<span>bad@</span>`,"invalid")+input(`<span class="ph">disabled</span>`,"is-disabled")),
+ api:`UInput(\n  value: String, onValueChange: (String) -> Unit,\n  modifier: Modifier = Modifier, placeholder: String = "",\n  type: UInputType = Text,  // Text | Password\n  color: UColor = Primary, size: USize = Md,\n  leadingIcon: IconRef? = null, trailingIcon: IconRef? = null,\n  disabled: Boolean = false, invalid: Boolean = false,\n  accessibleLabel: String? = null,\n  ui: UInputUi = UInputUi(),\n)`,
+ keys:[["Tab","фокус"],["Escape","не перехоплюється"],["invalid","стан aria-invalid"]]},
+{cat:"form",name:"UFormField",role:"зв'язки",about:"Назва, підказка й помилка, самі прив'язані до поля всередині.",
+ demo:()=>`<div class="row" style="align-items:flex-start">`+field("Ім'я хоста",input(`<span>workstation</span>`),`<span class="help">Лише латиниця й дефіс.</span>`,true)+field("Пошта",input(`${ic("mail")}<span>bad@</span>`,"invalid"),`<span class="err">Адреса неповна: допишіть домен.</span>`)+`</div>`,
+ api:`UFormField(\n  label: String, modifier: Modifier = Modifier,\n  description: String? = null, help: String? = null,\n  error: String? = null, required: Boolean = false,\n  ui: UFormFieldUi = UFormFieldUi(),\n  content: @Composable () -> Unit,\n)`,
+ keys:[["—","labelledBy, describedBy, invalid, required ставляться полю"],["клік по назві","фокус у поле"]]},
+{cat:"form",name:"UCheckbox",role:"checkbox",about:"Незалежний вибір так чи ні, з проміжним станом.",
+ demo:()=>row("стани",checkRow("check",false,"вимкнено")+checkRow("check",true,"увімкнено")+checkRow("check","mixed","частково")+checkRow("check",true,"focus","focus")+checkRow("check",false,"disabled","is-disabled"))+row("кольори",["success","info","warning","error"].map(c=>checkRow("check",true,c,"",c)).join("")),
+ api:`UCheckbox(\n  checked: UChecked,        // On | Off | Mixed\n  onCheckedChange: (Boolean) -> Unit,\n  modifier: Modifier = Modifier,\n  label: String? = null, description: String? = null,\n  color: UColor = Primary, size: USize = Md,\n  disabled: Boolean = false,\n  accessibleLabel: String? = null,\n  ui: UCheckboxUi = UCheckboxUi(),\n)`,
+ keys:[["Space","перемкнути; з Mixed вмикає"],["Tab","кожен прапорець окремо"]]},
+{cat:"form",name:"USwitch",role:"switch",about:"Негайне ввімкнення чи вимкнення.",
+ demo:()=>row("стани",sw(false,"Bluetooth")+sw(true,"Wi-Fi")+sw(true,"focus","focus")+sw(false,"disabled","is-disabled"))+row("кольори",["success","info","warning","error"].map(c=>sw(true,c,"",c)).join("")),
+ api:`USwitch(\n  checked: Boolean, onCheckedChange: (Boolean) -> Unit,\n  modifier: Modifier = Modifier,\n  label: String? = null, description: String? = null,\n  color: UColor = Primary, size: USize = Md,\n  loading: Boolean = false, disabled: Boolean = false,\n  accessibleLabel: String? = null,\n  ui: USwitchUi = USwitchUi(),\n)`,
+ keys:[["Space, Enter","перемкнути"]]},
+{cat:"form",name:"URadioGroup",role:"radiogroup",about:"Один вибір із кількох видимих варіантів.",
+ demo:()=>`<div class="row" style="align-items:flex-start;gap:40px"><div class="col"><span class="lbl">Положення бару</span>${checkRow("radio",true,"Згори","focus")}${checkRow("radio",false,"Знизу")}${checkRow("radio",false,"Приховано","is-disabled")}</div><div class="col"><span class="lbl">Горизонтально</span><div class="row">${checkRow("radio",false,"S")}${checkRow("radio",true,"M")}${checkRow("radio",false,"L")}</div></div></div>`,
+ api:`URadioGroup(\n  items: List<URadioItem<T>>,\n  value: T, onValueChange: (T) -> Unit,\n  legend: String, modifier: Modifier = Modifier,\n  orientation: UOrientation = Vertical,\n  color: UColor = Primary, size: USize = Md,\n  disabled: Boolean = false,\n  ui: URadioGroupUi = URadioGroupUi(),\n)`,
+ keys:[["Tab","одна зупинка: вибраний або перший"],["↓ →","наступний і вибрати, по колу"],["↑ ←","попередній і вибрати"],["Space","вибрати"]]},
+{cat:"form",name:"USlider",role:"slider",about:"Число з діапазону.",
+ demo:()=>row("0.3",slider(30))+row("focus",slider(65,"primary","is-focus"))+row("success",slider(85,"success")),
+ api:`USlider(\n  value: Float, onValueChange: (Float) -> Unit,\n  accessibleLabel: String, modifier: Modifier = Modifier,\n  range: ClosedFloatingPointRange<Float> = 0f..100f,\n  step: Float = 1f, color: UColor = Primary,\n  size: USize = Md, disabled: Boolean = false,\n  valueText: ((Float) -> String)? = null,\n  ui: USliderUi = USliderUi(),\n)`,
+ keys:[["→ ↑","+ крок"],["← ↓","− крок"],["PageUp, PageDown","± 10 % діапазону"],["Home, End","мінімум, максимум"]]},
+{cat:"form",name:"USelect",role:"combobox + listbox",about:"Вибір одного значення зі списку, що відкривається (select-only combobox).",
+ demo:()=>`<div class="row" style="align-items:flex-start;gap:24px"><div class="col">${input(`<span>JetBrains Mono</span><span style="margin-left:auto">${ic("down")}</span>`)}${input(`<span class="ph">Оберіть шрифт</span><span style="margin-left:auto">${ic("down")}</span>`)}</div><div class="col">${input(`<span>Adwaita Sans</span><span style="margin-left:auto">${ic("down")}</span>`,"focus")}<div class="pop" style="width:260px">${item("", "Adwaita Sans","✓","active")}${item("","JetBrains Mono")}${item("","Noto Sans")}</div></div></div>`,
+ api:`USelect(\n  items: List<T>, value: T?, onValueChange: (T) -> Unit,\n  label: (T) -> String, modifier: Modifier = Modifier,\n  placeholder: String = "", color: UColor = Primary,\n  size: USize = Md, disabled: Boolean = false,\n  invalid: Boolean = false,\n  accessibleLabel: String? = null,\n  ui: USelectUi = USelectUi(),\n)`,
+ keys:[["Enter, Space, ↓, ↑","відкрити"],["↓ ↑, Home, End","активний пункт"],["літери","перехід за початком назви"],["Enter, Space","вибрати й закрити"],["Tab","вибрати активний і піти далі"],["Escape","закрити без вибору"]]},
+{cat:"navigation",name:"UTabs",role:"tablist / tab / tabpanel",about:"Перемикання панелей на місці.",
+ demo:()=>row("pill",`<div class="u tabs c-primary"><span class="tab on is-focus">Огляд</span><span class="tab">Список</span><span class="tab">Налаштування</span><span class="tab is-disabled">Вимкнено</span></div>`)+row("line",`<div class="u tabs line c-primary"><span class="tab on">Звук</span><span class="tab">Мережа</span><span class="tab">Екран</span></div>`),
+ api:`UTabs(\n  items: List<UTabItem>,\n  selected: String, onSelect: (String) -> Unit,\n  modifier: Modifier = Modifier,\n  orientation: UOrientation = Horizontal,\n  activation: UActivation = Automatic,\n  color: UColor = Primary, variant: UTabsVariant = Pill,\n  ui: UTabsUi = UTabsUi(),\n  content: @Composable (UTabItem) -> Unit,\n)`,
+ keys:[["Tab","в активну вкладку, далі в панель"],["← →","попередня, наступна, по колу"],["Home, End","перша, остання"],["Enter, Space","вибрати при Manual"]]},
+{cat:"navigation",name:"UAccordion",role:"button + region",about:"Розділи, що розгортаються.",
+ demo:()=>`<div class="u acc"><div><div class="h open">Сповіщення ${ic("down")}</div><p>Показувати спливаючі повідомлення поверх вікон.</p></div><div><div class="h">Звук ${ic("down")}</div></div><div><div class="h is-disabled">Експериментальне ${ic("down")}</div></div></div>`,
+ api:`UAccordion(\n  items: List<UAccordionItem>,\n  expanded: Set<String>,\n  onExpandedChange: (Set<String>) -> Unit,\n  modifier: Modifier = Modifier,\n  type: UAccordionType = Single,  // Single | Multiple\n  ui: UAccordionUi = UAccordionUi(),\n  content: @Composable (UAccordionItem) -> Unit,\n)`,
+ keys:[["Enter, Space","розгорнути чи згорнути"],["↓ ↑, Home, End","між заголовками"],["Tab","у вміст відкритого розділу"]]},
+{cat:"overlays",name:"UTooltip",role:"tooltip",about:"Підказка при наведенні та фокусі.",
+ demo:()=>`<div class="col" style="align-items:center;width:240px"><span class="u tip">Копіювати ${kbd("Ctrl","sm")} ${kbd("C","sm")}</span>${btn({only:true,icon:"copy",variant:"outline",color:"neutral",st:"is-focus"})}</div>`,
+ api:`UTooltip(\n  text: String, modifier: Modifier = Modifier,\n  kbds: List<String> = emptyList(),\n  delayMs: Int = 500, side: USide = Top,\n  ui: UTooltipUi = UTooltipUi(),\n  trigger: @Composable () -> Unit,\n)`,
+ keys:[["фокус","показати; опис тригера (describedBy)"],["Escape","сховати без втрати фокуса"]]},
+{cat:"overlays",name:"UPopover",role:"dialog (немодальний)",about:"Довільний вміст біля тригера.",
+ demo:()=>`<div class="col" style="width:280px">${btn({label:"Гучність",variant:"outline",color:"neutral",trail:"down"})}<div class="pop" style="padding:12px;width:260px"><b>Вихід</b><div class="help">Навушники</div>${slider(55)}</div></div>`,
+ api:`UPopover(\n  open: Boolean, onOpenChange: (Boolean) -> Unit,\n  accessibleLabel: String, modifier: Modifier = Modifier,\n  side: USide = Bottom, align: UAlign = Start,\n  ui: UPopoverUi = UPopoverUi(),\n  content: @Composable () -> Unit,\n  trigger: @Composable () -> Unit,\n)`,
+ keys:[["Enter, Space","відкрити, фокус усередину"],["Escape","закрити, фокус на тригер"],["клік зовні","закрити"],["Tab","після останнього закрити й піти далі"]]},
+{cat:"overlays",name:"UDropdownMenu",role:"menu button + menu",about:"Список дій. Підменю в першій версії немає.",
+ demo:()=>`<div class="col" style="width:260px">${btn({label:"Профіль",variant:"outline",color:"neutral",trail:"down"})}<div class="pop"><div class="menu-lbl">Обліковий запис</div>${item("user","Мій профіль","","active")}${item("pencil","Редагувати","Ctrl E")}${item("copy","Копіювати ID","","is-disabled")}<div class="menu-sep"></div>${item("check","Не турбувати")}<div class="menu-sep"></div>${item("logout","Вийти","","err-i")}</div></div>`,
+ api:`UDropdownMenu(\n  items: List<List<UMenuItem>>,   // групи з роздільниками\n  modifier: Modifier = Modifier,\n  open: Boolean? = null,\n  onOpenChange: (Boolean) -> Unit = {},\n  side: USide = Bottom, size: USize = Md,\n  ui: UDropdownMenuUi = UDropdownMenuUi(),\n  trigger: @Composable () -> Unit,\n)\nUMenuItem(label, onSelect, icon, kbds, color,\n  checked: Boolean?, disabled)`,
+ keys:[["Enter, Space, ↓","відкрити на першому"],["↑ на тригері","відкрити на останньому"],["↓ ↑, Home, End","між пунктами, по колу"],["літери","перехід за назвою"],["Enter, Space","виконати й закрити"],["Escape, Tab","закрити"]]},
+{cat:"overlays",name:"UModal",role:"dialog (модальний)",about:"Діалог, що забирає увагу: фон недоступний, поки він відкритий.",
+ demo:()=>`<div class="window"><div class="behind"><b>Налаштування</b><div class="skel" style="width:70%;height:12px"></div><div class="skel" style="width:50%;height:12px"></div></div><div class="scrim"><div class="dialog"><div class="row" style="justify-content:space-between"><b>Видалити профіль?</b>${btn({only:true,icon:"x",variant:"ghost",color:"neutral",size:"sm"})}</div><div><span class="help">Налаштування бару цього профілю буде втрачено.</span></div><div class="row" style="justify-content:flex-end">${btn({label:"Скасувати",variant:"ghost",color:"neutral",st:"is-focus"})}${btn({label:"Видалити",color:"error",icon:"trash"})}</div></div></div></div>`,
+ api:`UModal(\n  open: Boolean, onOpenChange: (Boolean) -> Unit,\n  title: String, modifier: Modifier = Modifier,\n  description: String? = null,\n  footer: (@Composable () -> Unit)? = null,\n  dismissible: Boolean = true,\n  role: UModalRole = Dialog,  // Dialog | AlertDialog\n  ui: UModalUi = UModalUi(),\n  content: @Composable () -> Unit = {},\n)`,
+ keys:[["відкриття","фокус на перший елемент (AlertDialog: на безпечну дію)"],["Tab, Shift+Tab","по колу всередині"],["Escape","закрити, якщо dismissible"],["закриття","фокус повертається туди, звідки відкрили"]]},
+];
+
+const CATS={element:"element",feedback:"feedback",form:"form",navigation:"navigation",overlays:"overlays"};
+const main=document.getElementById("main"), nav=document.getElementById("nav");
+nav.innerHTML=`<a href="#tokens">Дизайн-система</a><a href="#api">Правила API</a>`+Object.keys(CATS).map(cat=>`<strong>${cat}/ · ${C.filter(c=>c.cat===cat).length}</strong>`+C.filter(c=>c.cat===cat).map(c=>`<a href="#${c.name}">${c.name}</a>`).join("")).join("");
+main.insertAdjacentHTML("beforeend",Object.keys(CATS).flatMap(cat=>C.filter(c=>c.cat===cat)).map(c=>`<section class="card" id="${c.name}"><div class="head"><h2>${c.name}</h2><span class="role">${c.role}</span><span class="role">components/${c.cat}</span></div><p>${c.about}</p><div class="stage">${c.demo()}</div><div class="spec"><div><h3>Kotlin API</h3><pre>${esc(c.api)}</pre></div><div><h3>ARIA і клавіатура</h3><table>${c.keys.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table></div></div></section>`).join(""));
+
+for(const id of ["mode","preset","fix"]) document.getElementById(id).addEventListener("click",e=>{const b=e.target.closest("button"); if(!b)return; state[id]=b.dataset.v; apply();});
+document.getElementById("hue").addEventListener("input",e=>{state.hue=Number(e.target.value); apply();});
+new MutationObserver(()=>{if(!state.mode)apply();}).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",()=>{if(!state.mode)apply();});
+apply();
+</script>
+</body>
+</html>
